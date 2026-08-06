@@ -53,11 +53,34 @@ const migrations = readdirSync(dir)
     };
   });
 
-const client = new pg.Client({
-  connectionString: dbUrl,
-  ssl: { rejectUnauthorized: false },
-});
-await client.connect();
+// Raw 5432 to the hosted pooler is a long-haul TCP connection and intermittently
+// times out where HTTPS to PostgREST does not. Retry rather than fail a
+// migration run for a reason unrelated to the migration.
+async function connect(attempts = 4) {
+  let lastError;
+  for (let i = 0; i < attempts; i++) {
+    const candidate = new pg.Client({
+      connectionString: dbUrl,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 20_000,
+    });
+    try {
+      await candidate.connect();
+      return candidate;
+    } catch (error) {
+      lastError = error;
+      await candidate.end().catch(() => {});
+      if (i < attempts - 1) {
+        console.log(`  connection attempt ${i + 1} failed, retrying...`);
+        await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
+      }
+    }
+  }
+  console.error(`Could not connect after ${attempts} attempts: ${lastError?.message}`);
+  process.exit(1);
+}
+
+const client = await connect();
 
 console.log(`Target: ${new URL(dbUrl).hostname}`);
 
