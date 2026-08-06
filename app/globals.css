@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* Dark, black-and-white, dense. Colour is reserved for status and alert states
+   so that a coloured cell in the grid always means something. Desktop only —
+   there are deliberately no responsive breakpoints anywhere in this app. */
+
+@theme {
+  /* Surfaces, darkest to lightest. */
+  --color-canvas: #08090a;
+  --color-surface: #0e1011;
+  --color-surface-2: #16191b;
+  --color-surface-3: #1e2225;
+
+  /* Text. */
+  --color-ink: #e8eaed;
+  --color-ink-2: #a8aeb4;
+  --color-ink-3: #6b7280;
+
+  /* Lines. Hairlines matter a lot in a dense grid. */
+  --color-line: #24282c;
+  --color-line-2: #32383d;
+  --color-line-strong: #4a5259;
+
+  /* The only chromatic tokens. Each maps to a meaning, never to decoration. */
+  --color-ok: #3fb950;
+  --color-warn: #d29922;
+  --color-danger: #f85149;
+  --color-info: #58a6ff;
+  --color-focus: #58a6ff;
+
+  /* Grid metrics. Row height is the load-bearing number for virtualization —
+     TanStack Virtual needs it to match the rendered height exactly or the
+     scrollbar drifts. Change it here and nowhere else. */
+  --row-height: 30px;
+  --header-height: 34px;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  /* The grid owns scrolling. The page itself must never scroll horizontally. */
+  overflow: hidden;
+}
+
+/* Visible focus everywhere: this app is driven from the keyboard. */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -1px;
+}
+
+/* Thin scrollbars so a dense grid doesn't lose 15px of a column to chrome. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Numeric columns (rating, reviews, counts) line up only with tabular figures. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
