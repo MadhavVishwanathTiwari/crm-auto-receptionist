@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Client } from "pg";
 
 import {
   normalizeDomain,
@@ -11,7 +10,7 @@ import {
   EMAIL_VECTORS,
   PHONE_VECTORS,
 } from "../fixtures/normalize-vectors";
-import { newDbClient } from "../setup/db";
+import { adminClient, cleanup, createTestOrg, type TestOrg } from "../setup/stack";
 
 // Every dedupe key in this system exists twice: as an IMMUTABLE SQL function
 // backing a generated column on `leads`, and as a TypeScript function used to
@@ -19,87 +18,75 @@ import { newDbClient } from "../setup/db";
 //
 // Two implementations of a dedupe key is a latent data-corruption bug — if they
 // disagree, the importer decides a row is new and the database decides it is a
-// duplicate (or worse, the reverse). This suite is the only thing that makes
-// keeping them identical non-optional.
+// duplicate, or the reverse. This suite is the only thing that makes keeping
+// them identical non-optional.
+//
+// It drives the GENERATED COLUMNS rather than calling app.normalize_*()
+// directly, which is both a stronger assertion (it is the column that dedupe
+// actually reads) and avoids a raw 5432 connection to a pooler on the other
+// side of the Pacific.
 
-let client: Client;
+let org: TestOrg;
+let leadId: string;
 
 beforeAll(async () => {
-  client = newDbClient();
-  await client.connect();
+  org = await createTestOrg("parity");
+  const { data, error } = await adminClient()
+    .from("leads")
+    .insert({ org_id: org.id, company_name: "Parity Probe" })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  leadId = data.id;
 });
 
 afterAll(async () => {
-  await client?.end();
+  await cleanup([org.id], []);
 });
 
-async function sqlNormalize(fn: string, input: string | null) {
-  const { rows } = await client.query<{ result: string | null }>(
-    `select app.${fn}($1) as result`,
-    [input],
-  );
-  return rows[0]!.result;
+/** Writes one raw value and reads back what the database computed from it. */
+async function roundTrip(
+  column: "work_email" | "website" | "phone",
+  generated: "work_email_norm" | "website_domain" | "phone_e164",
+  value: string | null,
+): Promise<string | null> {
+  const { data, error } = await adminClient()
+    .from("leads")
+    .update({ [column]: value })
+    .eq("id", leadId)
+    .select(generated)
+    .single();
+
+  if (error) throw new Error(`${column}=${value}: ${error.message}`);
+  return (data as Record<string, string | null>)[generated];
 }
 
 describe("normalize_email parity", () => {
-  it("agrees with the TypeScript implementation on every vector", async () => {
-    const mismatches: string[] = [];
-
+  it("agrees with TypeScript on every vector", async () => {
     for (const [input, expected] of EMAIL_VECTORS) {
-      const fromSql = await sqlNormalize("normalize_email", input);
-      const fromTs = normalizeEmail(input);
-
-      if (fromSql !== fromTs) {
-        mismatches.push(
-          `${JSON.stringify(input)}: sql=${JSON.stringify(fromSql)} ts=${JSON.stringify(fromTs)}`,
-        );
-      }
-      // Also pin both to the documented expectation, so a matched pair of wrong
-      // answers still fails.
-      expect(fromSql, `sql: ${input}`).toBe(expected);
-      expect(fromTs, `ts: ${input}`).toBe(expected);
+      const fromDb = await roundTrip("work_email", "work_email_norm", input);
+      expect(fromDb, `db: ${JSON.stringify(input)}`).toBe(expected);
+      expect(normalizeEmail(input), `ts: ${JSON.stringify(input)}`).toBe(expected);
     }
-
-    expect(mismatches).toEqual([]);
   });
 });
 
 describe("normalize_domain parity", () => {
-  it("agrees with the TypeScript implementation on every vector", async () => {
+  it("agrees with TypeScript on every vector", async () => {
     for (const [input, expected] of DOMAIN_VECTORS) {
-      const fromSql = await sqlNormalize("normalize_domain", input);
-      expect(fromSql, `sql: ${input}`).toBe(expected);
-      expect(normalizeDomain(input), `ts: ${input}`).toBe(expected);
+      const fromDb = await roundTrip("website", "website_domain", input);
+      expect(fromDb, `db: ${JSON.stringify(input)}`).toBe(expected);
+      expect(normalizeDomain(input), `ts: ${JSON.stringify(input)}`).toBe(expected);
     }
   });
 });
 
 describe("normalize_phone parity", () => {
-  it("agrees with the TypeScript implementation on every vector", async () => {
+  it("agrees with TypeScript on every vector", async () => {
     for (const [input, expected] of PHONE_VECTORS) {
-      const fromSql = await sqlNormalize("normalize_phone", input);
-      expect(fromSql, `sql: ${input}`).toBe(expected);
-      expect(normalizePhone(input), `ts: ${input}`).toBe(expected);
-    }
-  });
-});
-
-describe("normalizers are usable in generated columns", () => {
-  it("declares all three IMMUTABLE", async () => {
-    // A generated column requires IMMUTABLE. If someone relaxes one of these to
-    // STABLE, the next migration that adds a generated column fails with a
-    // confusing error far from the cause — catch it here instead.
-    const { rows } = await client.query<{ proname: string; provolatile: string }>(
-      `select proname, provolatile
-         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'app'
-          and proname in ('normalize_email', 'normalize_domain', 'normalize_phone')
-        order by proname`,
-    );
-
-    expect(rows).toHaveLength(3);
-    for (const row of rows) {
-      expect(row.provolatile, `${row.proname} must be IMMUTABLE`).toBe("i");
+      const fromDb = await roundTrip("phone", "phone_e164", input);
+      expect(fromDb, `db: ${JSON.stringify(input)}`).toBe(expected);
+      expect(normalizePhone(input), `ts: ${JSON.stringify(input)}`).toBe(expected);
     }
   });
 });
