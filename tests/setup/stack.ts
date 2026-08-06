@@ -1,88 +1,34 @@
 // Harness for RLS integration tests.
 //
-// These run against the LOCAL Supabase stack with real JWTs, not against
+// These run against a real Supabase instance with real JWTs, not against
 // `set local request.jwt.claims` in pgTAP. That choice is deliberate: pgTAP
 // exercises the policy predicates but not the layer where this app's secrets
 // actually leak — PostgREST role switching (anon vs authenticated vs
 // service_role), function GRANT EXECUTE, view security_invoker, and Realtime's
 // own RLS check. Those are the interesting failure modes, and only a real
 // client over HTTP touches them.
+//
+// See target.ts for how local vs cloud is chosen.
 
-import { execFileSync } from "node:child_process";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-interface StackKeys {
-  url: string;
-  anonKey: string;
-  serviceRoleKey: string;
-}
+import { testTarget } from "./target";
 
-let cached: StackKeys | null = null;
+const clientOptions = {
+  auth: { autoRefreshToken: false, persistSession: false },
+} as const;
 
-/**
- * Reads keys from the running local stack. Shelling out to the CLI rather than
- * hardcoding the well-known demo keys, because those have changed between CLI
- * major versions and a stale constant fails as a confusing 401.
- */
-export function stackKeys(): StackKeys {
-  if (cached) return cached;
-
-  if (process.env.TEST_SUPABASE_ANON_KEY && process.env.TEST_SUPABASE_SERVICE_KEY) {
-    cached = {
-      url: process.env.TEST_SUPABASE_URL!,
-      anonKey: process.env.TEST_SUPABASE_ANON_KEY,
-      serviceRoleKey: process.env.TEST_SUPABASE_SERVICE_KEY,
-    };
-    return cached;
-  }
-
-  let raw: string;
-  try {
-    raw = execFileSync("npx", ["supabase", "status", "-o", "json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: process.platform === "win32",
-    });
-  } catch {
-    throw new Error(
-      "Could not read local Supabase status. Start Docker Desktop, then run " +
-        "`npm run db:start` before the integration suite.",
-    );
-  }
-
-  const status = JSON.parse(raw) as Record<string, string>;
-  const anonKey = status.ANON_KEY ?? status.API_KEY;
-  const serviceRoleKey = status.SERVICE_ROLE_KEY;
-
-  if (!anonKey || !serviceRoleKey) {
-    throw new Error(
-      `Local stack returned no keys. Got: ${Object.keys(status).join(", ")}`,
-    );
-  }
-
-  cached = {
-    url: status.API_URL ?? process.env.TEST_SUPABASE_URL!,
-    anonKey,
-    serviceRoleKey,
-  };
-  return cached;
-}
-
-/** Service-role client. Bypasses RLS — used for fixtures and privileged re-reads. */
+/** Service-role client. Bypasses RLS — for fixtures and privileged re-reads. */
 export function adminClient(): SupabaseClient {
-  const { url, serviceRoleKey } = stackKeys();
-  return createClient(url, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const { apiUrl, serviceRoleKey } = testTarget();
+  return createClient(apiUrl, serviceRoleKey, clientOptions);
 }
 
 /** Unauthenticated client. Should be able to read nothing at all. */
 export function anonClient(): SupabaseClient {
-  const { url, anonKey } = stackKeys();
-  return createClient(url, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const { apiUrl, anonKey } = testTarget();
+  return createClient(apiUrl, anonKey, clientOptions);
 }
 
 export interface TestUser {
@@ -94,10 +40,13 @@ export interface TestUser {
 
 /**
  * Creates a confirmed auth user and returns a client authenticated as them.
- * Each call uses a unique email so tests never collide across files.
+ *
+ * The email is randomized per call so parallel runs and reruns never collide,
+ * and uses the reserved `.test` TLD so a stray outbound email can never reach
+ * a real inbox.
  */
 export async function createTestUser(label: string): Promise<TestUser> {
-  const { url, anonKey } = stackKeys();
+  const { apiUrl, anonKey } = testTarget();
   const admin = adminClient();
   const email = `${label}-${randomUUID().slice(0, 8)}@example.test`;
   const password = randomUUID();
@@ -112,9 +61,7 @@ export async function createTestUser(label: string): Promise<TestUser> {
     throw new Error(`Could not create test user: ${createError?.message}`);
   }
 
-  const client = createClient(url, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const client = createClient(apiUrl, anonKey, clientOptions);
   const { error: signInError } = await client.auth.signInWithPassword({
     email,
     password,
@@ -134,6 +81,7 @@ export interface TestOrg {
 export async function createTestOrg(label: string): Promise<TestOrg> {
   const admin = adminClient();
   const slug = `${label}-${randomUUID().slice(0, 8)}`;
+
   const { data, error } = await admin
     .from("orgs")
     .insert({ name: label, slug })
@@ -163,7 +111,11 @@ export async function addMember(
   if (error) throw new Error(`Could not add org member: ${error.message}`);
 }
 
-/** Deletes an org and everything cascading from it, plus its auth users. */
+/**
+ * Deletes only what this run created: the named orgs (everything else cascades)
+ * and the named auth users. Deliberately scoped by id rather than truncating,
+ * because these suites may be running against the shared cloud project.
+ */
 export async function cleanup(orgIds: string[], userIds: string[]) {
   const admin = adminClient();
   for (const id of orgIds) {

@@ -62,11 +62,34 @@ A template cannot be set `is_active` unless it lints clean.
 ## Commands
 
 ```bash
-npm run db:start     # local Supabase stack (required for integration tests)
-npm run db:reset     # re-apply every migration from scratch + seed
-npm run db:types     # regenerate types/db.ts
+npm run db:push      # apply pending migrations to the CLOUD project (additive)
+npm run db:start     # local Supabase stack (needs Docker)
+npm run db:reset     # DROPS AND RECREATES the local database, then re-seeds
+npm run db:types     # regenerate types/db.ts (needs Docker)
 npm run verify       # typecheck + lint + test
 ```
+
+## Where the tests run
+
+`tests/setup/target.ts` picks a target: **local** if the stack is up, **cloud**
+otherwise, forced by `TEST_TARGET=local|cloud`. It prints a warning whenever it
+lands on cloud, because a suite that silently changes which database it asserts
+against is worse than one that fails.
+
+Local is the preferred home. Not because RLS behaves differently — it doesn't —
+but because `db:reset` drops the database, and that command must never learn to
+point at the project holding real leads. It is deliberately left with no
+`--db-url`; only `db:push`, which is additive, targets cloud.
+
+Connection gotchas, both discovered the hard way:
+
+- **`SUPABASE_DIRECT_URL` (`db.<ref>.supabase.co`) does not resolve** on this
+  network. Newer projects make it IPv6-only. Use `SUPABASE_POOLER_URL`.
+- **Use the SESSION pooler on 5432, not the TRANSACTION pooler on 6543.** The
+  transaction pooler breaks prepared statements and session-scoped advisory
+  locks, and `claim_due_sends()` depends on the latter for cap accounting.
+- **`supabase gen types` and `db diff` shell out to Docker** even with a
+  `--db-url`. Only `db push` works without it.
 
 ## Related repos
 

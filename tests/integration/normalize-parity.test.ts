@@ -11,7 +11,7 @@ import {
   EMAIL_VECTORS,
   PHONE_VECTORS,
 } from "../fixtures/normalize-vectors";
-import { dbUrl } from "../setup/db";
+import { newDbClient } from "../setup/db";
 
 // Every dedupe key in this system exists twice: as an IMMUTABLE SQL function
 // backing a generated column on `leads`, and as a TypeScript function used to
@@ -25,8 +25,7 @@ import { dbUrl } from "../setup/db";
 let client: Client;
 
 beforeAll(async () => {
-  const { Client: PgClient } = await import("pg");
-  client = new PgClient({ connectionString: dbUrl() });
+  client = newDbClient();
   await client.connect();
 });
 
