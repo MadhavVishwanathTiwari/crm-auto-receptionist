@@ -41,8 +41,18 @@ export async function GET(request: Request) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    // The allowlist trigger surfaces here, on the very first sign-in by an
-    // address that is not listed. Its message is written to be read by a human.
+    // The allowlist trigger fires here, on the first sign-in by an address that
+    // is not listed. GoTrue swallows the Postgres message and reports a generic
+    // "Database error creating new user", so the trigger's own wording never
+    // reaches anyone — translate it back into something true and actionable.
+    // Verified against the live project: both a Workspace address that is not
+    // on the list and an outside address produce exactly this string.
+    if (/database error/i.test(error.message)) {
+      return fail(
+        "That account is not on the allowlist for this app. " +
+          "Sign in with your Auto Receptionist address, or ask an admin to add you.",
+      );
+    }
     return fail(error.message);
   }
 
