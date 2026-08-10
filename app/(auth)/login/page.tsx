@@ -2,8 +2,10 @@ import { Suspense } from "react";
 
 import { LoginForm } from "./LoginForm";
 
-// Two users, both provisioned by an admin. There is deliberately no signup
-// route: an open signup on an internal tool is an attack surface with no user.
+// Google only, and no signup route. Accounts are not requested and approved,
+// they are listed: app.login_allowlist in migration 0008 names the two addresses
+// that may exist, and a trigger on auth.users enforces it. Provisioning happens
+// on first sign-in, so there is no invite to send and no password to reset.
 export default function LoginPage() {
   return (
     <main className="flex h-full flex-col items-center justify-center gap-6">

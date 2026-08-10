@@ -54,9 +54,27 @@ export async function getOrgContext(): Promise<OrgContext | null> {
   };
 }
 
-/** Page-side variant: bounces to /login instead of returning null. */
+/**
+ * Page-side variant.
+ *
+ * The two failure modes go to different places on purpose. No session at all is
+ * /login. A valid session with no org membership is /no-access, NOT /login:
+ * middleware sends a signed-in user away from /login, so bouncing them there
+ * would put the browser in an infinite redirect and make a provisioning problem
+ * look like a broken app.
+ *
+ * Since migration 0008 that second state should be unreachable — membership is
+ * created by a trigger when the auth user is — but "should be unreachable" is
+ * not a reason to loop if it happens.
+ */
 export async function requireOrgContext(): Promise<OrgContext> {
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const context = await getOrgContext();
-  if (!context) redirect("/login");
+  if (!context) redirect("/no-access");
   return context;
 }
