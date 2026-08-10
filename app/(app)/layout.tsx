@@ -5,10 +5,13 @@ import { createServerSupabase } from "@/lib/supabase/server";
 
 import { SignOutButton } from "./SignOutButton";
 
+// Ordered by the pipeline, not alphabetically: import -> claim on the grid ->
+// audit -> queue. Review sits next to Import because it is that step's overflow.
 const NAV = [
   { href: "/leads", label: "Leads" },
   { href: "/import", label: "Import" },
   { href: "/review", label: "Review" },
+  { href: "/audit", label: "Audit" },
   { href: "/queue", label: "Queue" },
 ] as const;
 

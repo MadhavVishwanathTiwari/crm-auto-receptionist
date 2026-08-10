@@ -19,6 +19,7 @@
     "db:diff": "supabase db diff",
     "db:types": "supabase gen types typescript --local > types/db.ts",
     "check:bundle": "node scripts/check-no-service-key-in-bundle.mjs",
+    "db:purge-fixtures": "node scripts/purge-test-fixtures.mjs",
     "verify": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
