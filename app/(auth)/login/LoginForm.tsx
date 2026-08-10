@@ -1,9 +1,28 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
+import { describeAuthError } from "@/lib/authErrors";
 import { createBrowserSupabase } from "@/lib/supabase/client";
+
+// Supabase also reports failures in the URL fragment, which never reaches the
+// server, so a redirect landing anywhere other than the callback loses it
+// unless the browser reads it.
+//
+// Read through useSyncExternalStore rather than an effect: the fragment is
+// fixed for the life of the page, and setting state from an effect to surface
+// it costs a second render pass for a value that was available all along.
+const FRAGMENT_STORE = {
+  // Nothing mutates it, so there is nothing to subscribe to.
+  subscribe: () => () => {},
+  getSnapshot: () => {
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    return hash.get("error_description") ?? hash.get("error");
+  },
+  // No fragment exists during SSR. Returning null keeps hydration honest.
+  getServerSnapshot: () => null,
+};
 
 export function LoginForm() {
   const params = useSearchParams();
@@ -12,7 +31,15 @@ export function LoginForm() {
 
   // The callback route reports failures by redirecting back here, which is the
   // only way an allowlist rejection can reach a human.
-  const reported = params.get("error");
+  const queryError = params.get("error_description") ?? params.get("error");
+
+  const fragmentError = useSyncExternalStore(
+    FRAGMENT_STORE.subscribe,
+    FRAGMENT_STORE.getSnapshot,
+    FRAGMENT_STORE.getServerSnapshot,
+  );
+
+  const reported = queryError ?? fragmentError;
 
   async function signIn() {
     setBusy(true);
@@ -62,7 +89,7 @@ export function LoginForm() {
 
       {(error ?? reported) && (
         <p role="alert" className="text-[var(--color-danger)]">
-          {error ?? reported}
+          {describeAuthError(error ?? reported ?? "")}
         </p>
       )}
 
