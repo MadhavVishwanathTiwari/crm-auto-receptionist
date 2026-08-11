@@ -7,13 +7,24 @@
 //
 // Usage: npm run db:purge-fixtures [-- --dry-run]
 //
-// Two things this deliberately will NOT touch:
+// Three things this deliberately will NOT touch:
 //
 //   1. Any auth user whose email is not on the reserved `.test` TLD. That is
 //      the only kind the harness creates, so anything else is a real person.
-//   2. Any org named in app.login_allowlist, and PROTECTED_SLUGS below.
-//      login_allowlist.org_id is ON DELETE CASCADE, so deleting the real org
-//      would silently take the allowlist with it and lock everybody out.
+//   2. Any org that has a real person as a member. This is the primary guard
+//      and it is self-maintaining: onboard a third operator and their org is
+//      protected without anyone editing this file.
+//   3. PROTECTED_SLUGS below, plus any org named in app.login_allowlist when
+//      that table is reachable. login_allowlist.org_id is ON DELETE CASCADE, so
+//      deleting the real org would take the allowlist with it and lock
+//      everybody out.
+//
+// The allowlist lives in the `app` schema, which PostgREST does not expose, so
+// reading it needs a direct Postgres connection on 5432 — and that port is
+// intermittently blocked on some networks. An earlier version treated that as
+// fatal, which meant the script could never run from exactly the machine that
+// needed it. Guard 2 covers the same ground over HTTPS, so an unreachable
+// allowlist is now a warning rather than a stop.
 
 import { config } from "dotenv";
 import pg from "pg";
@@ -44,26 +55,26 @@ const admin = createClient(apiUrl, serviceKey, { auth: { persistSession: false }
 // the failure this script exists to avoid.
 const protectedOrgIds = new Set();
 
-if (!dbUrl) {
-  console.error("SUPABASE_POOLER_URL is not set; cannot read app.login_allowlist.");
-  process.exit(1);
-}
-
-const client = new pg.Client({
-  connectionString: dbUrl,
-  ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 20_000,
-});
-
-try {
-  await client.connect();
-  const { rows } = await client.query("select distinct org_id from app.login_allowlist");
-  for (const row of rows) protectedOrgIds.add(row.org_id);
-} catch (error) {
-  console.error(`Could not read the allowlist, so nothing was deleted: ${error.message}`);
-  process.exit(1);
-} finally {
-  await client.end().catch(() => {});
+if (dbUrl) {
+  const client = new pg.Client({
+    connectionString: dbUrl,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 15_000,
+  });
+  try {
+    await client.connect();
+    const { rows } = await client.query(
+      "select distinct org_id from app.login_allowlist",
+    );
+    for (const row of rows) protectedOrgIds.add(row.org_id);
+  } catch (error) {
+    console.warn(
+      `  note: could not read app.login_allowlist (${error.message}).\n` +
+        "  Falling back to real-membership and slug protection, which cover the same orgs.",
+    );
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 // --- users -------------------------------------------------------------------
@@ -76,7 +87,25 @@ if (listError) {
 }
 
 const testUsers = page.users.filter((u) => u.email?.endsWith(TEST_EMAIL_SUFFIX));
+const realUserIds = new Set(
+  page.users.filter((u) => !u.email?.endsWith(TEST_EMAIL_SUFFIX)).map((u) => u.id),
+);
 const keptUsers = page.users.length - testUsers.length;
+
+// The primary guard, and the one that works without a Postgres connection: any
+// org a real person belongs to is off limits, whatever it is called.
+const { data: memberships, error: memberError } = await admin
+  .from("org_members")
+  .select("org_id, user_id");
+
+if (memberError) {
+  console.error("Could not read memberships, so nothing was deleted:", memberError.message);
+  process.exit(1);
+}
+
+for (const row of memberships ?? []) {
+  if (realUserIds.has(row.user_id)) protectedOrgIds.add(row.org_id);
+}
 
 // --- orgs --------------------------------------------------------------------
 const { data: orgs, error: orgError } = await admin.from("orgs").select("id, name, slug");
