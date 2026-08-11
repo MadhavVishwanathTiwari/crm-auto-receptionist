@@ -67,3 +67,101 @@ export async function claimFromPool(limit: number): Promise<ActionResult> {
   revalidatePath("/leads");
   return { ok: true, count: Array.isArray(data) ? data.length : 0 };
 }
+
+/** Rejects anything the runtime does not recognise as an IANA zone. */
+function isValidTimezone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Assigns or clears a lead's timezone.
+ *
+ * A plain UPDATE: the guard trigger stamps `timezone_source` for us, 'manual'
+ * on assignment and null on a clear, so an automated resolution pass cannot
+ * later overwrite a human correction. Writing the source here would fight it.
+ *
+ * Clearing only became possible in migration 0010 — before that the guard set
+ * 'manual' unconditionally, which violated the constraint tying a zone and its
+ * source together.
+ */
+export async function setLeadTimezone(
+  leadId: string,
+  timezone: string | null,
+): Promise<ActionResult> {
+  const context = await getOrgContext();
+  if (!context) return { ok: false, error: "Not signed in." };
+
+  const zone = timezone?.trim() || null;
+  if (zone !== null && !isValidTimezone(zone)) {
+    return { ok: false, error: `"${zone}" is not an IANA timezone name.` };
+  }
+
+  const { data, error } = await context.supabase
+    .from("leads")
+    .update({ timezone: zone })
+    .eq("id", leadId)
+    .select("id, timezone, timezone_source");
+
+  if (error) return { ok: false, error: error.message };
+  // A write refused by RLS is 204 with zero rows and no error. The update
+  // policy rejects a lead claimed by the other operator.
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: "That change was refused. The lead is probably claimed by someone else.",
+    };
+  }
+
+  revalidatePath("/leads");
+  revalidatePath("/queue");
+  revalidatePath("/audit");
+  return { ok: true };
+}
+
+export type TerminalOutcome = "closed_won" | "closed_lost" | "do_not_contact";
+
+/**
+ * Records a terminal outcome.
+ *
+ * The one path by which a human sets status directly, and even it goes through
+ * the event log: close_lead() writes terminal_outcome under the guard bypass
+ * and then inserts a `closed` event, so the timeline stays complete.
+ *
+ * There is no inverse. A terminal outcome beats every later event in
+ * app.lead_status_from_events, and the guard blocks clearing the column, so
+ * reopening a lead would need a new RPC. The UI confirms before calling this.
+ */
+export async function closeLead(
+  leadId: string,
+  outcome: TerminalOutcome,
+  note: string,
+): Promise<ActionResult> {
+  const context = await getOrgContext();
+  if (!context) return { ok: false, error: "Not signed in." };
+
+  const { error } = await context.supabase.rpc("close_lead", {
+    p_lead_id: leadId,
+    p_outcome: outcome,
+    p_note: note.trim() || null,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error:
+        error.code === "42501"
+          ? "That lead belongs to someone else."
+          : error.message,
+    };
+  }
+
+  revalidatePath("/leads");
+  revalidatePath("/queue");
+  revalidatePath("/audit");
+  return { ok: true };
+}

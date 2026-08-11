@@ -2,8 +2,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 
+import { createBrowserSupabase } from "@/lib/supabase/client";
+
 import { BUTTON, INPUT, PANEL } from "../ui";
 import { recordAudit, type AngleType } from "./actions";
+
+const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
 
 export interface AuditLead {
   id: string;
@@ -77,18 +81,57 @@ function ProspectClock({ timezone }: { timezone: string }) {
   );
 }
 
-function AuditRow({ lead }: { lead: AuditLead }) {
+function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
   const [angle, setAngle] = useState<AngleType>("soft_text_audit");
   const [responded, setResponded] = useState(false);
   const [delayMinutes, setDelayMinutes] = useState("");
   const [outcome, setOutcome] = useState("no response");
   const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  /**
+   * Uploads to the private bucket and returns the stored path.
+   *
+   * The first path segment is the org, which is exactly what the storage
+   * policies compare against app.current_org_id() — so a path built any other
+   * way is rejected rather than silently written somewhere unreadable.
+   */
+  async function uploadScreenshot(): Promise<string | null> {
+    if (!file) return null;
+
+    if (!file.type.startsWith("image/")) {
+      throw new Error("That file is not an image.");
+    }
+    if (file.size > MAX_SCREENSHOT_BYTES) {
+      throw new Error("Screenshots are capped at 5 MB.");
+    }
+
+    const extension = file.name.split(".").pop()?.toLowerCase() || "png";
+    const path = `${orgId}/${lead.id}/${crypto.randomUUID()}.${extension}`;
+
+    const { error: uploadError } = await createBrowserSupabase()
+      .storage.from("lead-evidence")
+      .upload(path, file, { contentType: file.type, upsert: false });
+
+    if (uploadError) throw new Error(`Screenshot upload failed: ${uploadError.message}`);
+    return path;
+  }
 
   function submit() {
     setError(null);
     startTransition(async () => {
+      let screenshotPath: string | null = null;
+      try {
+        // Uploaded before the action so a storage failure cannot leave an
+        // evidence row pointing at an object that was never written.
+        screenshotPath = await uploadScreenshot();
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        return;
+      }
+
       const result = await recordAudit({
         leadId: lead.id,
         angleType: angle,
@@ -97,6 +140,7 @@ function AuditRow({ lead }: { lead: AuditLead }) {
           : null,
         outcome,
         notes,
+        screenshotPath,
       });
       if (!result.ok) setError(result.error ?? "That did not save.");
     });
@@ -201,6 +245,19 @@ function AuditRow({ lead }: { lead: AuditLead }) {
           />
         </label>
 
+        <label className="flex flex-col gap-1">
+          <span className="text-[var(--color-ink-3)]">Screenshot</span>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className={
+              INPUT +
+              " w-56 file:mr-2 file:border-0 file:bg-transparent file:text-[var(--color-ink-2)]"
+            }
+          />
+        </label>
+
         <button
           type="button"
           onClick={submit}
@@ -220,7 +277,13 @@ function AuditRow({ lead }: { lead: AuditLead }) {
   );
 }
 
-export function AuditList({ leads }: { leads: AuditLead[] }) {
+export function AuditList({
+  leads,
+  orgId,
+}: {
+  leads: AuditLead[];
+  orgId: string;
+}) {
   if (leads.length === 0) {
     return (
       <p className="px-4 py-6 text-[var(--color-ink-3)]">
@@ -233,7 +296,7 @@ export function AuditList({ leads }: { leads: AuditLead[] }) {
   return (
     <div className="space-y-4 p-4">
       {leads.map((lead) => (
-        <AuditRow key={lead.id} lead={lead} />
+        <AuditRow key={lead.id} lead={lead} orgId={orgId} />
       ))}
     </div>
   );

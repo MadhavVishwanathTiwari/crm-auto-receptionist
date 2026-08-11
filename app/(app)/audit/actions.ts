@@ -16,6 +16,12 @@ export interface AuditInput {
   responseDelaySeconds: number | null;
   outcome: string;
   notes: string;
+  /**
+   * Object path in the private `lead-evidence` bucket, uploaded by the browser
+   * before this runs. Not a URL — the bucket is private, so viewing it later
+   * needs a signed URL.
+   */
+  screenshotPath?: string | null;
 }
 
 export interface ActionResult {
@@ -103,6 +109,7 @@ export async function recordAudit(input: AuditInput): Promise<ActionResult> {
       response_delay_seconds: input.responseDelaySeconds,
       outcome,
       notes: input.notes.trim() || null,
+      screenshot_path: input.screenshotPath ?? null,
       created_by: userId,
     })
     .select("id");

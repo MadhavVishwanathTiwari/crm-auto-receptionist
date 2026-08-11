@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requireOrgContext } from "@/lib/org";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
@@ -205,16 +207,23 @@ export default async function QueuePage() {
 
                 <ul className="space-y-0.5">
                   {bucket.slice(0, 50).map((lead) => (
-                    <li key={lead.id} className="flex gap-3">
-                      <span className="w-64 truncate">
-                        {lead.company_name ?? "—"}
-                      </span>
-                      <span className="w-64 truncate text-[var(--color-ink-2)]">
-                        {lead.work_email ?? "—"}
-                      </span>
-                      <span className="text-[var(--color-ink-3)]">
-                        {lead.status.replace(/_/g, " ")}
-                      </span>
+                    <li key={lead.id}>
+                      {/* Straight into the drawer, which is where every one of
+                          these blockers is actually resolved. */}
+                      <Link
+                        href={`/leads?lead=${lead.id}`}
+                        className="flex gap-3 hover:bg-[var(--color-surface-2)]"
+                      >
+                        <span className="w-64 truncate">
+                          {lead.company_name ?? "—"}
+                        </span>
+                        <span className="w-64 truncate text-[var(--color-ink-2)]">
+                          {lead.work_email ?? "—"}
+                        </span>
+                        <span className="text-[var(--color-ink-3)]">
+                          {lead.status.replace(/_/g, " ")}
+                        </span>
+                      </Link>
                     </li>
                   ))}
                 </ul>

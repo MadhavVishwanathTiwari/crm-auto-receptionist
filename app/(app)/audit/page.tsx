@@ -6,7 +6,7 @@ import { AuditList, type AuditLead } from "./AuditList";
 export const dynamic = "force-dynamic";
 
 export default async function AuditPage() {
-  const { supabase, userId } = await requireOrgContext();
+  const { supabase, userId, orgId } = await requireOrgContext();
 
   // The work queue for a human: mine, worth contacting, and placeable on a
   // clock. Leads already past `claimed` have been audited (or further), so
@@ -44,7 +44,7 @@ export default async function AuditPage() {
             Could not load the audit queue: {error.message}
           </p>
         ) : (
-          <AuditList leads={leads} />
+          <AuditList leads={leads} orgId={orgId} />
         )}
       </div>
     </div>

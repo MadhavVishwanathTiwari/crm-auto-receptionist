@@ -10,7 +10,10 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+
+import { createBrowserSupabase } from "@/lib/supabase/client";
 
 import { BUTTON, BUTTON_QUIET, INPUT, STATUS_TONE } from "../ui";
 import { claimFromPool, claimLead, releaseLead } from "./actions";
@@ -43,10 +46,27 @@ type Ownership = "all" | "mine" | "unclaimed";
 export function LeadsGrid({
   leads,
   currentUserId,
+  selectedLeadId = null,
 }: {
   leads: LeadRow[];
   currentUserId: string;
+  /** From `?lead=`. The drawer itself is rendered by the page, server-side. */
+  selectedLeadId?: string | null;
 }) {
+  const router = useRouter();
+  // The server prop is the seed; Realtime patches this copy in place.
+  const [liveLeads, setLiveLeads] = useState(leads);
+  const [prevLeads, setPrevLeads] = useState(leads);
+
+  // Adjusting state during render, not in an effect. A fresh prop arrives on
+  // every router.refresh() after an action, and reconciling it from an effect
+  // both renders stale rows for a frame and trips the lint rule against
+  // synchronous setState in effects.
+  if (prevLeads !== leads) {
+    setPrevLeads(leads);
+    setLiveLeads(leads);
+  }
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [ownership, setOwnership] = useState<Ownership>("all");
@@ -219,9 +239,50 @@ export function LeadsGrid({
     [currentUserId, pending],
   );
 
+  // Realtime. RLS is enforced per subscriber, so no org filter is needed on the
+  // channel: a row the user cannot select is a row they are never pushed.
+  //
+  // Only INSERT and UPDATE are handled. Leads are never deleted — there is no
+  // DELETE policy, they are archived — which is also why leads.replica_identity
+  // is left at its default rather than paying FULL on every write.
+  useEffect(() => {
+    const supabase = createBrowserSupabase();
+
+    const channel = supabase
+      .channel("leads-grid")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "leads" },
+        (payload) => {
+          const row = payload.new as LeadRow | null;
+          if (!row?.id) return;
+
+          setLiveLeads((current) => {
+            const index = current.findIndex((lead) => lead.id === row.id);
+            // An archived lead leaves the grid the same way the server query
+            // would have excluded it.
+            if ((row as { archived_at?: string | null }).archived_at) {
+              return index === -1
+                ? current
+                : current.filter((lead) => lead.id !== row.id);
+            }
+            if (index === -1) return [row, ...current];
+            const next = [...current];
+            next[index] = { ...next[index], ...row };
+            return next;
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return leads.filter((lead) => {
+    return liveLeads.filter((lead) => {
       if (status !== "all" && lead.status !== status) return false;
       if (ownership === "mine" && lead.claimed_by !== currentUserId) return false;
       if (ownership === "unclaimed" && lead.claimed_by !== null) return false;
@@ -235,7 +296,7 @@ export function LeadsGrid({
         lead.state,
       ].some((field) => field?.toLowerCase().includes(needle));
     });
-  }, [leads, search, status, ownership, currentUserId]);
+  }, [liveLeads, search, status, ownership, currentUserId]);
 
   const table = useReactTable({
     data: filtered,
@@ -258,8 +319,8 @@ export function LeadsGrid({
   });
 
   const statuses = useMemo(
-    () => [...new Set(leads.map((lead) => lead.status))].sort(),
-    [leads],
+    () => [...new Set(liveLeads.map((lead) => lead.status))].sort(),
+    [liveLeads],
   );
 
   const templateColumns = table
@@ -268,7 +329,7 @@ export function LeadsGrid({
     .join(" ");
 
   return (
-    <>
+    <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-4 py-2">
         <input
           type="search"
@@ -309,7 +370,7 @@ export function LeadsGrid({
         </button>
 
         <span className="tabular ml-auto text-[var(--color-ink-3)]">
-          {rows.length} of {leads.length}
+          {rows.length} of {liveLeads.length}
         </span>
       </div>
 
@@ -352,7 +413,7 @@ export function LeadsGrid({
 
           {rows.length === 0 ? (
             <p className="px-4 py-6 text-[var(--color-ink-3)]">
-              {leads.length === 0
+              {liveLeads.length === 0
                 ? "No leads yet. Import a CSV to get started."
                 : "No leads match those filters."}
             </p>
@@ -364,10 +425,15 @@ export function LeadsGrid({
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const row = rows[virtualRow.index];
                 if (!row) return null;
+                const selected = row.original.id === selectedLeadId;
                 return (
                   <div
                     key={row.id}
-                    className="absolute top-0 left-0 grid w-full items-center border-b border-[var(--color-line)] hover:bg-[var(--color-surface-2)]"
+                    onClick={() => router.push(`/leads?lead=${row.original.id}`)}
+                    className={
+                      "absolute top-0 left-0 grid w-full cursor-pointer items-center border-b border-[var(--color-line)] hover:bg-[var(--color-surface-2)] " +
+                      (selected ? "bg-[var(--color-surface-3)]" : "")
+                    }
                     style={{
                       gridTemplateColumns: templateColumns,
                       height: ROW_HEIGHT,
@@ -375,7 +441,17 @@ export function LeadsGrid({
                     }}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <div key={cell.id} className="truncate px-2">
+                      <div
+                        key={cell.id}
+                        className="truncate px-2"
+                        // The claim/release buttons live in a cell. Without
+                        // this, clicking one also opens the drawer behind it.
+                        onClick={
+                          cell.column.id === "actions"
+                            ? (event) => event.stopPropagation()
+                            : undefined
+                        }
+                      >
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),
@@ -389,6 +465,6 @@ export function LeadsGrid({
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { requireOrgContext } from "@/lib/org";
 
 import { PAGE, PAGE_HEADER } from "../ui";
+import { LeadDrawerData } from "./LeadDrawerData";
 import { LeadsGrid, type LeadRow } from "./LeadsGrid";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +12,13 @@ export const dynamic = "force-dynamic";
 // filters move into the query and this cap becomes the page size.
 const MAX_ROWS = 5000;
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lead?: string }>;
+}) {
   const { supabase, userId } = await requireOrgContext();
+  const { lead: selectedLeadId } = await searchParams;
 
   const { data, error } = await supabase
     .from("leads")
@@ -37,7 +43,18 @@ export default async function LeadsPage() {
           Could not load leads: {error.message}
         </p>
       ) : (
-        <LeadsGrid leads={(data ?? []) as LeadRow[]} currentUserId={userId} />
+        <div className="flex min-h-0 flex-1">
+          <LeadsGrid
+            leads={(data ?? []) as LeadRow[]}
+            currentUserId={userId}
+            selectedLeadId={selectedLeadId ?? null}
+          />
+          {selectedLeadId && (
+            // Keyed so switching rows remounts the panel rather than carrying
+            // one lead's half-filled form over to the next.
+            <LeadDrawerData key={selectedLeadId} leadId={selectedLeadId} />
+          )}
+        </div>
       )}
     </div>
   );
