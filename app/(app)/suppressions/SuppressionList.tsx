@@ -3,12 +3,10 @@
 import { useState, useTransition } from "react";
 
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
-import {
-  addSuppression,
-  removeSuppression,
-  SUPPRESSION_REASONS,
-  type SuppressionReason,
-} from "./actions";
+import { addSuppression, removeSuppression } from "./actions";
+// The array and its type come from a plain module, never through the "use
+// server" actions file — see reasons.ts.
+import { SUPPRESSION_REASONS, type SuppressionReason } from "./reasons";
 
 export interface SuppressionRow {
   id: string;

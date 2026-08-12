@@ -5,22 +5,11 @@ import { revalidatePath } from "next/cache";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/normalize";
 import { getOrgContext } from "@/lib/org";
 
-export type SuppressionReason =
-  | "unsubscribed"
-  | "bounced_hard"
-  | "complaint"
-  | "manual_dnc"
-  | "competitor"
-  | "customer";
-
-export const SUPPRESSION_REASONS: Array<{ value: SuppressionReason; label: string }> = [
-  { value: "manual_dnc", label: "Asked not to be contacted" },
-  { value: "unsubscribed", label: "Unsubscribed" },
-  { value: "bounced_hard", label: "Hard bounce" },
-  { value: "complaint", label: "Spam complaint" },
-  { value: "competitor", label: "Competitor" },
-  { value: "customer", label: "Already a customer" },
-];
+// Only the TYPE is imported here. The SUPPRESSION_REASONS array must not pass
+// through this "use server" module on its way to a client component — that is
+// the whole bug reasons.ts exists to avoid — so client components import it from
+// reasons.ts directly.
+import type { SuppressionReason } from "./reasons";
 
 export interface ActionResult {
   ok: boolean;

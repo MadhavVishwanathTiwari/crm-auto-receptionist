@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
-import {
-  suppressLead,
-  SUPPRESSION_REASONS,
-  type SuppressionReason,
-} from "../suppressions/actions";
+import { suppressLead } from "../suppressions/actions";
+// The reasons array and its type come from a plain module, not the "use server"
+// actions file — importing the array through a server module hands a client a
+// proxy whose .map throws at hydration. See suppressions/reasons.ts.
+import { SUPPRESSION_REASONS, type SuppressionReason } from "../suppressions/reasons";
 import { BUTTON, BUTTON_QUIET, INPUT, STATUS_TONE } from "../ui";
 import { closeLead, setLeadTimezone, type TerminalOutcome } from "./actions";
 
