@@ -19,6 +19,12 @@ import { DateTime } from "luxon";
 import { requireBearer } from "@/lib/cronAuth";
 import { serverEnv } from "@/lib/env";
 import {
+  buildCapacity,
+  pickMailbox,
+  reserve,
+  type Capacity,
+} from "@/lib/scheduler/book";
+import {
   CADENCE_BUSINESS_DAYS,
   MAX_STEP,
   nextSlot,
@@ -93,6 +99,12 @@ interface Send {
   scheduled_at: string;
   sent_at: string | null;
   plan_attempt: number;
+  /**
+   * Set when an operator wrote this touch by hand. The planner never composes
+   * one, but it does re-time one whose slot passed, and it must not put a
+   * template back over the words while doing it.
+   */
+  composed_body: string | null;
 }
 
 export interface PlanReport {
@@ -202,7 +214,7 @@ async function planOrg(
   const { data: sendRows } = await supabase
     .from("scheduled_sends")
     .select(
-      "id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at, plan_attempt",
+      "id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at, plan_attempt, composed_body",
     )
     .eq("org_id", orgId)
     .in("status", LIVE_STATUSES);
@@ -216,43 +228,11 @@ async function planOrg(
     else byLead.set(send.lead_id, [send]);
   }
 
-  // usage[mailboxId][mailbox-local ISO date] = sends already booked that day.
-  // Only future days matter: capacity that has already been spent cannot be
-  // planned into anyway.
-  const usage = new Map<string, Map<string, number>>();
-  const mailboxById = new Map(mailboxes.map((m) => [m.id, m]));
-  for (const mailbox of mailboxes) usage.set(mailbox.id, new Map());
-
-  for (const send of sends) {
-    if (!send.mailbox_id) continue;
-    const mailbox = mailboxById.get(send.mailbox_id);
-    if (!mailbox) continue;
-    const at = DateTime.fromISO(send.scheduled_at).setZone(mailbox.timezone);
-    if (!at.isValid || at < now.startOf("day")) continue;
-    const key = at.toISODate()!;
-    const days = usage.get(mailbox.id)!;
-    days.set(key, (days.get(key) ?? 0) + 1);
-  }
-
-  function reserve(mailboxId: string, isoDate: string) {
-    const days = usage.get(mailboxId);
-    if (!days) return;
-    days.set(isoDate, (days.get(isoDate) ?? 0) + 1);
-  }
-
-  /** The emptiest mailbox with room on the mailbox-local day this slot falls in. */
-  function pickMailbox(at: DateTime): { mailbox: Mailbox; capDate: string } | null {
-    let best: { mailbox: Mailbox; capDate: string; used: number } | null = null;
-
-    for (const mailbox of mailboxes) {
-      const capDate = at.setZone(mailbox.timezone).toISODate()!;
-      const used = usage.get(mailbox.id)?.get(capDate) ?? 0;
-      if (used >= mailbox.daily_cap) continue;
-      if (!best || used < best.used) best = { mailbox, capDate, used };
-    }
-
-    return best ? { mailbox: best.mailbox, capDate: best.capDate } : null;
-  }
+  // How much of each mailbox's day is already spoken for. Shared with the
+  // composer, which asks the same question about one lead at a time: two copies
+  // of cap arithmetic would eventually disagree about whether there is room,
+  // and the disagreement would show up as over-sending.
+  const capacity: Capacity = buildCapacity(mailboxes, sends, now);
 
   // --- candidate leads ------------------------------------------------------
 
@@ -385,8 +365,18 @@ async function planOrg(
 
     if (step > MAX_STEP) continue;
 
-    const template = templateFor(templates, step, lead.angle_type);
-    if (!template) {
+    // A written email that missed its slot. It already has its words, so
+    // neither the template lookup nor the demo gate applies to it: this pass is
+    // only choosing a new instant. Requiring a template here would strand a
+    // hand-written send forever the moment its step had no active template,
+    // which is precisely the situation composing exists to work around.
+    const written = rollingForward?.composed_body != null;
+
+    const template = written
+      ? null
+      : templateFor(templates, step, lead.angle_type);
+
+    if (!written && !template) {
       report.skipped_no_template += 1;
       await raiseAlert(supabase, {
         org_id: orgId,
@@ -400,7 +390,7 @@ async function planOrg(
 
     // demo_ready deliberately does not advance status (see the rank table in
     // 0004), so this is the only thing that can hold a step back for it.
-    if (template.requires_demo && !lead.demo_ready_at) {
+    if (template && template.requires_demo && !lead.demo_ready_at) {
       report.skipped_no_demo += 1;
       await raiseAlert(supabase, {
         org_id: orgId,
@@ -449,7 +439,7 @@ async function planOrg(
 
       if (!slot.ok) break;
 
-      const chosen = pickMailbox(slot.at);
+      const chosen = pickMailbox(capacity, mailboxes, slot.at);
       if (chosen) {
         placed = { at: slot.at, mailbox: chosen.mailbox, capDate: chosen.capDate };
         break;
@@ -478,7 +468,9 @@ async function planOrg(
         await supabase.from("scheduled_sends").insert({
           org_id: orgId,
           lead_id: lead.id,
-          template_id: template.id,
+          // Not composed: `written` requires a row to roll forward, and this
+          // branch is the one where there is none.
+          template_id: template!.id,
           step_number: step,
           touch_kind: step === 1 ? "first" : "followup",
           prospect_timezone: zone,
@@ -503,7 +495,10 @@ async function planOrg(
 
     const row = {
       mailbox_id: placed.mailbox.id,
-      template_id: template.id,
+      // A written send keeps whatever template it was started from, if any.
+      // Overwriting it would misreport where the words came from, and the
+      // dispatcher prefers composed_body regardless.
+      ...(written ? {} : { template_id: template!.id }),
       status: "planned" as const,
       scheduled_at: placed.at.toUTC().toISO(),
       // The prospect-local wall clock, stored so the queue screen never has to
@@ -523,7 +518,7 @@ async function planOrg(
         .select("id");
       if (updated && updated.length > 0) {
         report.rolled_forward += 1;
-        reserve(placed.mailbox.id, placed.capDate);
+        reserve(capacity, placed.mailbox.id, placed.capDate);
       }
     } else {
       const { data: inserted, error } = await supabase
@@ -541,7 +536,7 @@ async function planOrg(
       // step between our read and our write. That is the index doing its job.
       if (!error && inserted && inserted.length > 0) {
         report.planned += 1;
-        reserve(placed.mailbox.id, placed.capDate);
+        reserve(capacity, placed.mailbox.id, placed.capDate);
       }
     }
   }

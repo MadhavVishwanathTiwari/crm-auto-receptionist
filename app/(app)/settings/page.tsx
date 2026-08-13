@@ -136,12 +136,12 @@ export default async function SettingsPage() {
     },
     {
       ok: activeSteps.has(1),
-      label: "An active first-touch template",
+      label: "An active first-touch template, for the automated touches",
       detail: activeSteps.has(1)
         ? missingSteps.length === 0
           ? "All four touches are live."
           : `T1 is live. Still drafts: ${missingSteps.map((s) => `T${s}`).join(", ")}. The planner skips a step with no active template, and T2 is the one carrying the demo link.`
-        : "None. Every lead is skipped as skipped_no_template until one is active.",
+        : "None, so the planner skips every lead as skipped_no_template. This does not block the Write screen: an email you type yourself carries its own words and needs no template at all.",
       href: "/templates",
       linkLabel: "write one",
     },
@@ -151,7 +151,7 @@ export default async function SettingsPage() {
       detail:
         ready > 0
           ? `${ready} claimed, qualified, zoned, not suppressed, and either audited or queued without one.${noTimezone > 0 ? ` ${noTimezone} more are waiting on a timezone.` : ""}`
-          : `Nothing is sendable yet. A lead needs claiming, a resolvable timezone, and then either an audit or an explicit "send without an audit".${noTimezone > 0 ? ` ${noTimezone} have no zone.` : ""}`,
+          : `Nothing the planner can pick up. It wants a lead that is claimed, zoned, and either audited or explicitly queued without one. The Write screen is looser: anything claimed, qualified and zoned can be written to by hand, and writing it is what queues it.${noTimezone > 0 ? ` ${noTimezone} have no zone.` : ""}`,
       href: "/queue",
       linkLabel: "see why",
     },

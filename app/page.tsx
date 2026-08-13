@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// The grid is the app. Everything else is a detour from it.
+// The composer is the app. The grid is where leads are claimed for it.
 //
 // Except when Supabase lands here carrying a failure. It redirects to the
 // project's Site URL whenever the requested redirect is not on the allowlist,
@@ -23,5 +23,5 @@ export default async function Home({
     redirect(`/login?error=${encodeURIComponent(description)}`);
   }
 
-  redirect("/leads");
+  redirect("/write");
 }

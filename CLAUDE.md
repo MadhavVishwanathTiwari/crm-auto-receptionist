@@ -1,8 +1,14 @@
 # Outreach Ops — working notes
 
 Internal two-user app that owns AutoReceptionist's cold outbound pipeline:
-CSV ingest → dedupe → claim → audit → schedule → send → reply. Replaces an
-`outreach_management` Google Sheet. Two operators, ~40 sends/day.
+CSV ingest → dedupe → claim → audit → **write** → schedule → send → reply.
+Replaces an `outreach_management` Google Sheet. Two operators, ~40 sends/day.
+
+**What this app is for, in one line:** an operator writes each email by hand,
+and the app decides the instant it leaves. That is the difference from Instantly
+(one piece of copy to a thousand people) and from a mail client (you write it
+*and* you pick send o'clock). `/write` is that screen and it is the front door;
+the template sequencer underneath it is the automated fallback, not the product.
 
 Full build plan, capacity analysis, and phasing:
 `C:\Users\madha\.claude\plans\build-brief-v2-indexed-lerdorf.md`
@@ -56,7 +62,10 @@ Full build plan, capacity analysis, and phasing:
 
 ## The send path (Phase 2)
 
+Two things write into `scheduled_sends`, and only the first line differs:
+
 ```
+/write → queue_composed_send() → 'planned'   a person's words, a chosen slot
 plan-sends  → scheduled_sends('planned')   prospect-local slot, mailbox assigned
 claim_due_sends()                          caps in the MAILBOX zone, dry_run gate
 dispatch-sends → Gmail → 'sent'            suppressions re-checked here, not at plan time
@@ -81,6 +90,49 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   header and `{{sender_name}}`; a template using that variable refuses to send
   rather than putting an email address where a human name belongs.
 
+## Writing the email yourself (`/write`)
+
+The screen the app exists for. Three panes: the leads you have claimed, a
+composer, and everything about that business worth writing about. You type an
+email, press Ctrl+Enter, and the next lead loads. You never pick a time.
+
+A composed send is **not a second pipeline**. It is a `scheduled_sends` row like
+any other, so suppression, mailbox caps, threading, stall reaping, the reply
+halt and the `dry_run` kill switch are all written once and apply to it
+unchanged. The only difference is where the words came from.
+
+- **`composed_body` beats `template_id` in the dispatcher, and skips rendering
+  entirely.** No substitution pass means no missing-variable skip, which is what
+  makes hand-writing the safe path for a lead whose import is thin. The cost is
+  that a leftover `{{company_name}}` would go out with the braces showing, so
+  both `WriteClient` and `queueWrittenEmail()` refuse a body containing one.
+- **The slot is computed in TypeScript and passed into the RPC**, because
+  `lib/scheduler/slots.ts` owns the holiday table, the DST-correct wall clock
+  and the business-day walk, and none of that is worth a second implementation
+  in plpgsql. `queue_composed_send()` enforces what must hold regardless of who
+  did the arithmetic: the org, the claim, the timezone, the suppression list,
+  the step, and that the slot is in the future.
+- **`lib/scheduler/book.ts` is the single copy of the capacity arithmetic.**
+  The planner and the composer both use `buildCapacity`/`pickMailbox`/`reserve`.
+  Two copies would eventually disagree about whether a mailbox had room, and the
+  disagreement shows up as over-sending rather than as an error.
+- **The worklist previews a slot per lead, reserving as it walks.** So the
+  twentieth lead does not claim the same seat as the first, and what you see is
+  what would happen if you wrote to all of them in order. The action re-books
+  authoritatively and returns the real slot, which is what the confirmation
+  line shows.
+- **Composing REPLACES a `planned`/`blocked` row at the same step** rather than
+  erroring on `scheduled_sends_lead_step_live`; it refuses a `claimed`,
+  `sending` or `sent` one, because by then the dispatcher may be inside the
+  Gmail call.
+- **`revise_composed_send()` never re-times.** Fixing a typo three minutes
+  before the slot must not silently rebook it to tomorrow morning, which is
+  exactly what "cancel and re-queue" would do.
+- **The planner re-times a written send whose slot passed and keeps the words.**
+  `plan-sends` skips the template lookup and the demo gate for a row carrying
+  `composed_body`; requiring a template there would strand a hand-written email
+  forever the moment its step had no active one.
+
 ## An audit is a choice, not a precondition
 
 Two template sets exist per step, and `templateFor()` picks between them on
@@ -93,11 +145,19 @@ Two template sets exist per step, and `templateFor()` picks between them on
   `demo_url` and `sender_name`. It is the fallback, so a lead nobody audited
   gets it.
 
-What makes an unaudited lead sendable is a **`queued` event**, written per lead
-by "Send without an audit" on the lead drawer. `queued` outranks `audited` in
-`app.lead_status_from_events` and the planner has accepted both since `0015`, so
-no gate was widened: a merely *claimed* lead is still not sendable, because
-"this one is not worth an audit" is a decision somebody has to make.
+What makes an unaudited lead sendable **to the planner** is a `queued` event,
+written per lead by "Send without an audit" on the lead drawer. `queued`
+outranks `audited` in `app.lead_status_from_events` and the planner has accepted
+both since `0015`, so no gate was widened: a merely *claimed* lead is still not
+sendable by the planner, because "this one is not worth an audit" is a decision
+somebody has to make.
+
+`/write` is the third way through, and it is looser on purpose: any claimed,
+qualified, zoned lead can be written to, because **writing the email is that
+decision**. Requiring the operator to press "send without an audit" first would
+be asking them to declare that they are about to do the thing they are doing.
+`queue_composed_send()` writes the `queued` event itself, which is what lets the
+planner pick the follow-ups up afterwards.
 
 Adding a variable to the generic set is how you break it. `renderTemplate()`
 treats a null variable as missing and the dispatcher skips the send, so `city`,
@@ -110,6 +170,11 @@ No em dashes. Loss-framed CTA. Binary-choice close. One ask per email. Only
 variables that exist. A template cannot be set `is_active` unless it lints
 clean — enforced by `app.template_lint()` behind a trigger, with the TypeScript
 copy kept honest by `tests/integration/template-lint-parity.test.ts`.
+
+**These bind templates, not hand-written email.** A person writing to one
+business can see things a regex cannot, and a linter that refused to send it
+would make the composer worse than a Gmail tab. The rules are printed on the
+`/write` context panel as guidance instead.
 
 ## Commands
 
@@ -146,12 +211,15 @@ you and the first email. In the order they block:
 1. **A mailbox, with a display name.** `mailboxes.display_name` is the From
    header and `{{sender_name}}`; a template using that variable refuses to send
    rather than putting an email address where a human name belongs.
-2. **An active T1 template.** `0019` seeds the audit set, `0022` the generic
-   set, both as drafts. T2 and T3 carry `requires_demo`, so they wait for the
-   demo ingest; T1 and T4 do not.
-3. **A lead that is ready**: claimed, qualified, zoned, not suppressed, and
-   either audited or explicitly queued without one. `/queue` groups every lead
-   by which of those it is missing.
+2. **An active T1 template** — for the *automated* touches only. `0019` seeds
+   the audit set, `0022` the generic set, both as drafts. T2 and T3 carry
+   `requires_demo`, so they wait for the demo ingest; T1 and T4 do not. `/write`
+   needs none of this: an email you type carries its own words, and the
+   templates show up there as starters you can fill in and rewrite.
+3. **A lead that is ready.** For the planner: claimed, qualified, zoned, not
+   suppressed, and either audited or explicitly queued without one. `/queue`
+   groups every lead by which of those it is missing. For `/write`: claimed by
+   you, qualified, zoned, with a work email, and not suppressed.
 4. **Dry run off.** `org_settings.dry_run` is enforced inside
    `claim_due_sends()`, so while it is true the app is structurally incapable of
    sending. This is the last switch, not the first.

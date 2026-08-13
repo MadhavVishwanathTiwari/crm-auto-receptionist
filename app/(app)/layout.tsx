@@ -6,14 +6,20 @@ import { createServerSupabase } from "@/lib/supabase/server";
 
 import { SignOutButton } from "./SignOutButton";
 
-// Ordered by the pipeline, not alphabetically: import -> claim on the grid ->
-// audit -> queue -> send -> what came back. Review sits next to Import because
-// it is that step's overflow, and Templates and Mailboxes sit after Queue
-// because they are what the queue turns into an email.
+// Write is first because it is the job. Everything after it is either what
+// feeds the composer or what happens to an email after it leaves, and an
+// operator who opens this app to send today's forty should land on the screen
+// that sends them rather than on a grid.
+//
+// The rest is ordered by the pipeline, not alphabetically: import -> claim on
+// the grid -> audit -> queue -> send -> what came back. Review sits next to
+// Import because it is that step's overflow, and Templates and Mailboxes sit
+// after Queue because they are what the queue turns into an email.
 // Annotated rather than `as const`: with typed routes, a bare union of ten
 // literal hrefs makes Link infer its generic from the wrong member and reject
 // every other one.
 const NAV: { href: Route; label: string }[] = [
+  { href: "/write", label: "Write" },
   { href: "/leads", label: "Leads" },
   { href: "/import", label: "Import" },
   { href: "/review", label: "Review" },

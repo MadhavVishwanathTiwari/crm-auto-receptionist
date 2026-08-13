@@ -14,6 +14,13 @@
 //   sent       one transaction: the row, the event carrying Gmail's message id
 //              as its dedupe token, and the mailbox stamp
 //
+// A row carrying `composed_body` is an email a human wrote, and it skips the
+// render step entirely: the words are already final, there are no variables in
+// them, and therefore there is nothing that can be missing. Every other step
+// above still applies to it, unchanged. That is the point of composed sends
+// being rows in this table rather than a second pipeline; suppression, caps,
+// threading, stall reaping and the dry-run switch are written once.
+//
 // work_email is the only send target. email_1/2/3 and likely_email are imported
 // for reference and are not read anywhere in this file.
 //
@@ -52,12 +59,17 @@ interface ClaimedSend {
   template_id: string | null;
   step_number: number;
   claim_token: string;
+  /** Set when an operator wrote this one by hand. Sent verbatim. */
+  composed_subject: string | null;
+  composed_body: string | null;
 }
 
 interface DispatchReport {
   org_id: string;
   claimed: number;
   sent: number;
+  /** Of `sent`, how many were written by a person rather than a template. */
+  composed: number;
   skipped: number;
   failed: number;
   reaped: number;
@@ -130,6 +142,7 @@ async function dispatchOrg(
     org_id: orgId,
     claimed: 0,
     sent: 0,
+    composed: 0,
     skipped: 0,
     failed: 0,
     reaped: 0,
@@ -235,7 +248,12 @@ async function dispatchOrg(
     const mailbox = send.mailbox_id ? mailboxes.get(send.mailbox_id) : undefined;
     const template = send.template_id ? templates.get(send.template_id) : undefined;
 
-    if (!lead || !mailbox || !template) {
+    // A hand-written email carries its own words and needs no template, even
+    // though it may still name the one it was started from.
+    const written =
+      send.composed_body !== null && send.composed_subject !== null;
+
+    if (!lead || !mailbox || (!written && !template)) {
       await supabase.rpc("mark_send_skipped", {
         p_send_id: send.id,
         p_reason: "the lead, mailbox or template went away after this was claimed",
@@ -281,30 +299,47 @@ async function dispatchOrg(
       continue;
     }
 
-    const values = buildTemplateValues({
-      lead: lead as unknown as LeadForRender,
-      evidence: evidence.get(send.lead_id) ?? null,
-      senderName: (mailbox.display_name as string | null) ?? null,
-    });
+    // The words. Either a person's, verbatim, or a template's, rendered.
+    let subjectText: string;
+    let bodyText: string;
 
-    const subject = renderTemplate(template.subject as string, values);
-    const body = renderTemplate(template.body as string, values);
-    const missing = [...new Set([...subject.missing, ...body.missing])];
+    if (written) {
+      // No substitution pass at all. The composer resolved every variable
+      // against the real lead before the operator ever saw the draft, so what
+      // is stored here is finished prose. Running it through renderTemplate
+      // would only give a prospect who wrote "{{" in their company name a way
+      // to break their own email.
+      subjectText = send.composed_subject as string;
+      bodyText = send.composed_body as string;
+    } else {
+      const values = buildTemplateValues({
+        lead: lead as unknown as LeadForRender,
+        evidence: evidence.get(send.lead_id) ?? null,
+        senderName: (mailbox.display_name as string | null) ?? null,
+      });
 
-    if (missing.length > 0) {
-      await supabase.rpc("mark_send_skipped", {
-        p_send_id: send.id,
-        p_reason: `nothing to put in ${missing.join(", ")}`,
-      });
-      await raiseAlert(supabase, {
-        org_id: orgId,
-        kind: "pre_send_review",
-        lead_id: send.lead_id,
-        message: `A send was skipped: no value for ${missing.join(", ")}.`,
-        dedupe_token: `missing-vars:${missing.sort().join(",")}`,
-      });
-      report.skipped += 1;
-      continue;
+      const subject = renderTemplate(template!.subject as string, values);
+      const body = renderTemplate(template!.body as string, values);
+      const missing = [...new Set([...subject.missing, ...body.missing])];
+
+      if (missing.length > 0) {
+        await supabase.rpc("mark_send_skipped", {
+          p_send_id: send.id,
+          p_reason: `nothing to put in ${missing.join(", ")}`,
+        });
+        await raiseAlert(supabase, {
+          org_id: orgId,
+          kind: "pre_send_review",
+          lead_id: send.lead_id,
+          message: `A send was skipped: no value for ${missing.join(", ")}.`,
+          dedupe_token: `missing-vars:${missing.sort().join(",")}`,
+        });
+        report.skipped += 1;
+        continue;
+      }
+
+      subjectText = subject.text;
+      bodyText = body.text;
     }
 
     let accessToken = tokens.get(mailbox.id as string);
@@ -363,8 +398,8 @@ async function dispatchOrg(
               [lead.first_name, lead.last_name].filter(Boolean).join(" ") || null,
             email: lead.work_email as string,
           },
-          subject: subject.text,
-          body: body.text,
+          subject: subjectText,
+          body: bodyText,
           messageId,
           inReplyTo: prior?.messageIds.at(-1) ?? null,
           references: prior?.messageIds ?? [],
@@ -379,11 +414,12 @@ async function dispatchOrg(
         p_message_id: result.providerMessageId,
         p_thread_id: result.providerThreadId,
         p_rfc822_id: result.rfc822MessageId,
-        p_subject: subject.text,
-        p_body: body.text,
+        p_subject: subjectText,
+        p_body: bodyText,
       });
 
       report.sent += 1;
+      if (written) report.composed += 1;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await supabase.rpc("mark_send_failed", {

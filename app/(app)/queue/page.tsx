@@ -1,4 +1,3 @@
-import { DateTime } from "luxon";
 import Link from "next/link";
 
 import { requireOrgContext } from "@/lib/org";
@@ -12,6 +11,7 @@ import {
 } from "@/lib/queue/blockers";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
+import { QueuedSends, type QueuedSend } from "./QueuedSends";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,7 @@ const BLOCKER_COPY: Record<Blocker, { label: string; hint: string; tone: string 
   },
   not_audited: {
     label: "Waiting on a decision",
-    hint: "Either audit it, so the first touch can quote the callback, or open it and send without an audit for the generic copy. Both are fine; leaving it here is what stops it.",
+    hint: "Three ways out, all fine: audit it so the first touch can quote the callback, open it and send without an audit for the generic copy, or write it yourself on the Write screen. Leaving it here is the only thing that stops it.",
     tone: "text-[var(--color-info)]",
   },
 };
@@ -57,18 +57,6 @@ interface QueueLead extends BlockerLead {
   id: string;
   company_name: string | null;
   work_email: string | null;
-}
-
-interface ScheduledSend {
-  id: string;
-  step_number: number;
-  status: string;
-  scheduled_at: string;
-  /** Prospect-local wall clock, frozen at plan time. No offset. */
-  scheduled_local: string;
-  prospect_timezone: string;
-  outcome_reason: string | null;
-  lead: { company_name: string | null; work_email: string | null } | null;
 }
 
 export default async function QueuePage() {
@@ -98,7 +86,7 @@ export default async function QueuePage() {
       supabase
         .from("scheduled_sends")
         .select(
-          "id, step_number, status, scheduled_at, scheduled_local, prospect_timezone, outcome_reason, leads(company_name, work_email)",
+          "id, step_number, status, scheduled_at, scheduled_local, prospect_timezone, outcome_reason, composed_subject, leads(company_name, work_email)",
         )
         .in("status", ["planned", "blocked"])
         .order("scheduled_at", { ascending: true })
@@ -110,7 +98,7 @@ export default async function QueuePage() {
   // PostgREST returns an embedded to-one relation as an object, but returns an
   // array when it cannot prove the relationship is to-one. Normalising here
   // rather than at the call site keeps that ambiguity out of the markup.
-  const scheduled: ScheduledSend[] = (scheduledRows ?? []).map((row) => {
+  const scheduled: QueuedSend[] = (scheduledRows ?? []).map((row) => {
     const embedded = (row as { leads?: unknown }).leads;
     const lead = (Array.isArray(embedded) ? embedded[0] : embedded) as
       | { company_name: string | null; work_email: string | null }
@@ -124,7 +112,8 @@ export default async function QueuePage() {
       scheduled_local: row.scheduled_local as string,
       prospect_timezone: row.prospect_timezone as string,
       outcome_reason: row.outcome_reason as string | null,
-      lead: lead ?? null,
+      composed_subject: (row.composed_subject as string | null) ?? null,
+      company: lead?.company_name ?? null,
     };
   });
 
@@ -163,58 +152,15 @@ export default async function QueuePage() {
               </div>
               <p className="mb-3 text-[var(--color-ink-3)]">
                 Your local time first, the prospect&rsquo;s alongside. Nobody
-                here reads UTC.
+                here reads UTC. Emails marked <em>written</em> are the ones
+                somebody typed on the{" "}
+                <Link href="/write" className="underline">
+                  Write
+                </Link>{" "}
+                screen; the rest were built from a template by the planner.
               </p>
 
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="text-left text-[var(--color-ink-3)]">
-                    <th className="py-1 font-normal">Company</th>
-                    <th className="py-1 font-normal">Step</th>
-                    <th className="py-1 font-normal">Your time</th>
-                    <th className="py-1 font-normal">Their time</th>
-                    <th className="py-1 font-normal">State</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scheduled.map((send) => {
-                    const at = DateTime.fromISO(send.scheduled_at);
-                    const local = DateTime.fromISO(send.scheduled_local);
-                    return (
-                      <tr
-                        key={send.id}
-                        className="border-t border-[var(--color-line)]"
-                      >
-                        <td className="max-w-[280px] truncate py-1">
-                          {send.lead?.company_name ?? "—"}
-                        </td>
-                        <td className="tabular py-1">T{send.step_number}</td>
-                        <td className="tabular py-1 text-[var(--color-ink-2)]">
-                          {send.status === "blocked"
-                            ? "—"
-                            : at.toFormat("ccc d LLL, HH:mm")}
-                        </td>
-                        <td className="tabular py-1 text-[var(--color-ink-2)]">
-                          {send.status === "blocked"
-                            ? "—"
-                            : `${local.toFormat("HH:mm")} ${send.prospect_timezone}`}
-                        </td>
-                        <td className="py-1">
-                          {send.status === "blocked" ? (
-                            <span className="text-[var(--color-warn)]">
-                              blocked: {send.outcome_reason ?? "no capacity"}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--color-ink-3)]">
-                              planned
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <QueuedSends sends={scheduled} />
             </div>
           )}
 
