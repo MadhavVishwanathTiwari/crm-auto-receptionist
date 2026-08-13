@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -6,15 +7,22 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { SignOutButton } from "./SignOutButton";
 
 // Ordered by the pipeline, not alphabetically: import -> claim on the grid ->
-// audit -> queue. Review sits next to Import because it is that step's overflow.
-const NAV = [
+// audit -> queue -> send. Review sits next to Import because it is that step's
+// overflow, and Templates and Mailboxes sit after Queue because they are what
+// the queue turns into an email.
+// Annotated rather than `as const`: with typed routes, a bare union of eight
+// literal hrefs makes Link infer its generic from the wrong member and reject
+// every other one.
+const NAV: { href: Route; label: string }[] = [
   { href: "/leads", label: "Leads" },
   { href: "/import", label: "Import" },
   { href: "/review", label: "Review" },
   { href: "/audit", label: "Audit" },
   { href: "/queue", label: "Queue" },
+  { href: "/templates", label: "Templates" },
+  { href: "/mailboxes", label: "Mailboxes" },
   { href: "/suppressions", label: "Suppressions" },
-] as const;
+];
 
 export default async function AppLayout({
   children,

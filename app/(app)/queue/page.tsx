@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import Link from "next/link";
 
 import { requireOrgContext } from "@/lib/org";
@@ -91,11 +92,27 @@ interface QueueLead {
   terminal_outcome: string | null;
 }
 
+interface ScheduledSend {
+  id: string;
+  step_number: number;
+  status: string;
+  scheduled_at: string;
+  /** Prospect-local wall clock, frozen at plan time. No offset. */
+  scheduled_local: string;
+  prospect_timezone: string;
+  outcome_reason: string | null;
+  lead: { company_name: string | null; work_email: string | null } | null;
+}
+
 export default async function QueuePage() {
   const { supabase } = await requireOrgContext();
 
-  const [{ data: leadRows, error }, { data: suppressionRows }, { data: settings }] =
-    await Promise.all([
+  const [
+    { data: leadRows, error },
+    { data: suppressionRows },
+    { data: settings },
+    { data: scheduledRows },
+  ] = await Promise.all([
       supabase
         .from("leads")
         // One string literal on purpose; see the note in leads/page.tsx.
@@ -111,9 +128,38 @@ export default async function QueuePage() {
           "dry_run, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour",
         )
         .maybeSingle(),
+      supabase
+        .from("scheduled_sends")
+        .select(
+          "id, step_number, status, scheduled_at, scheduled_local, prospect_timezone, outcome_reason, leads(company_name, work_email)",
+        )
+        .in("status", ["planned", "blocked"])
+        .order("scheduled_at", { ascending: true })
+        .limit(200),
     ]);
 
   const leads = (leadRows ?? []) as QueueLead[];
+
+  // PostgREST returns an embedded to-one relation as an object, but returns an
+  // array when it cannot prove the relationship is to-one. Normalising here
+  // rather than at the call site keeps that ambiguity out of the markup.
+  const scheduled: ScheduledSend[] = (scheduledRows ?? []).map((row) => {
+    const embedded = (row as { leads?: unknown }).leads;
+    const lead = (Array.isArray(embedded) ? embedded[0] : embedded) as
+      | { company_name: string | null; work_email: string | null }
+      | undefined;
+
+    return {
+      id: row.id as string,
+      step_number: row.step_number as number,
+      status: row.status as string,
+      scheduled_at: row.scheduled_at as string,
+      scheduled_local: row.scheduled_local as string,
+      prospect_timezone: row.prospect_timezone as string,
+      outcome_reason: row.outcome_reason as string | null,
+      lead: lead ?? null,
+    };
+  });
 
   const suppressedEmails = new Set(
     (suppressionRows ?? []).map((s) => s.email_norm).filter(Boolean) as string[],
@@ -162,11 +208,77 @@ export default async function QueuePage() {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="max-w-[1100px] space-y-4">
+          {scheduled.length > 0 && (
+            <div className={PANEL}>
+              <div className="mb-1 flex items-baseline gap-3">
+                <h2 className="text-[var(--color-ink)]">Booked</h2>
+                <span className="tabular text-[var(--color-ink-2)]">
+                  {scheduled.length}
+                </span>
+              </div>
+              <p className="mb-3 text-[var(--color-ink-3)]">
+                Your local time first, the prospect&rsquo;s alongside. Nobody
+                here reads UTC.
+              </p>
+
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="text-left text-[var(--color-ink-3)]">
+                    <th className="py-1 font-normal">Company</th>
+                    <th className="py-1 font-normal">Step</th>
+                    <th className="py-1 font-normal">Your time</th>
+                    <th className="py-1 font-normal">Their time</th>
+                    <th className="py-1 font-normal">State</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scheduled.map((send) => {
+                    const at = DateTime.fromISO(send.scheduled_at);
+                    const local = DateTime.fromISO(send.scheduled_local);
+                    return (
+                      <tr
+                        key={send.id}
+                        className="border-t border-[var(--color-line)]"
+                      >
+                        <td className="max-w-[280px] truncate py-1">
+                          {send.lead?.company_name ?? "—"}
+                        </td>
+                        <td className="tabular py-1">T{send.step_number}</td>
+                        <td className="tabular py-1 text-[var(--color-ink-2)]">
+                          {send.status === "blocked"
+                            ? "—"
+                            : at.toFormat("ccc d LLL, HH:mm")}
+                        </td>
+                        <td className="tabular py-1 text-[var(--color-ink-2)]">
+                          {send.status === "blocked"
+                            ? "—"
+                            : `${local.toFormat("HH:mm")} ${send.prospect_timezone}`}
+                        </td>
+                        <td className="py-1">
+                          {send.status === "blocked" ? (
+                            <span className="text-[var(--color-warn)]">
+                              blocked: {send.outcome_reason ?? "no capacity"}
+                            </span>
+                          ) : (
+                            <span className="text-[var(--color-ink-3)]">
+                              planned
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className={PANEL}>
             <p className="text-[var(--color-ink-2)]">
-              There is no scheduler yet. This page shows what the planner would
-              have to work with: which leads are eligible for a first touch and
-              what is holding the rest back. Sending itself is Phase 2.
+              What the planner has to work with: which leads are eligible for a
+              first touch and what is holding the rest back. A lead only becomes
+              ready once it is claimed, audited, qualified, has a resolvable
+              timezone and is not suppressed.
             </p>
             {settings && (
               <p className="mt-2 text-[var(--color-ink-3)]">

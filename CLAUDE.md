@@ -54,10 +54,39 @@ Full build plan, capacity analysis, and phasing:
   `gmail.modify`, so the app is structurally incapable of archiving, labelling
   or marking it read. Instantly needs those messages sitting in the inbox.
 
+## The send path (Phase 2)
+
+```
+plan-sends  → scheduled_sends('planned')   prospect-local slot, mailbox assigned
+claim_due_sends()                          caps in the MAILBOX zone, dry_run gate
+dispatch-sends → Gmail → 'sent'            suppressions re-checked here, not at plan time
+poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_events
+```
+
+- **The dispatcher marks `sending` BEFORE calling Gmail.** A function killed
+  mid-request then leaves a visibly stuck row rather than a claimable one.
+  `reap_stalled_sends()` fails those; it never retries them, because we cannot
+  know whether Gmail accepted the message and a wrong guess is a second email.
+- **`mark_send_sent()` is one transaction**: the row, the `sent` event carrying
+  Gmail's message id as its `dedupe_token`, and the mailbox stamp.
+- **`claim_due_sends()` takes a TRANSACTION-scoped advisory lock per mailbox**
+  (`pg_advisory_xact_lock`), not a session-scoped one. It is reached over
+  PostgREST, which runs each RPC in its own transaction on a pooled connection
+  it then hands to the next request: a session lock would outlive the request
+  and leak permanently on any error path between lock and unlock.
+- **A lead with no timezone is refused by a trigger**, not only by the planner's
+  WHERE clause. That guard binds the service role too, because every writer of
+  `scheduled_sends` is a machine.
+- **`mailboxes.display_name` is null until an operator sets it.** It is the From
+  header and `{{sender_name}}`; a template using that variable refuses to send
+  rather than putting an email address where a human name belongs.
+
 ## Copy constraints (enforced by `lib/templates/lint.ts`)
 
-No em dashes. Loss-framed CTA. Binary-choice close. One ask per email.
-A template cannot be set `is_active` unless it lints clean.
+No em dashes. Loss-framed CTA. Binary-choice close. One ask per email. Only
+variables that exist. A template cannot be set `is_active` unless it lints
+clean — enforced by `app.template_lint()` behind a trigger, with the TypeScript
+copy kept honest by `tests/integration/template-lint-parity.test.ts`.
 
 ## Commands
 
@@ -67,6 +96,15 @@ npm run db:start     # local Supabase stack (needs Docker)
 npm run db:reset     # DROPS AND RECREATES the local database, then re-seeds
 npm run db:types     # regenerate types/db.ts (needs Docker)
 npm run verify       # typecheck + lint + test
+```
+
+The three cron routes take `POST` with `Authorization: Bearer $CRON_SECRET`,
+and each accepts an optional `?org=<uuid>` to scope a run to one org. Suggested
+cadence: `plan-sends` every 15 minutes, `dispatch-sends` every 5 (it takes 20
+per run by default, `?limit=` to change), `poll-replies` every 10.
+
+```bash
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" $SITE/api/cron/plan-sends
 ```
 
 ## Where the tests run
@@ -86,8 +124,10 @@ Connection gotchas, both discovered the hard way:
 - **`SUPABASE_DIRECT_URL` (`db.<ref>.supabase.co`) does not resolve** on this
   network. Newer projects make it IPv6-only. Use `SUPABASE_POOLER_URL`.
 - **Use the SESSION pooler on 5432, not the TRANSACTION pooler on 6543.** The
-  transaction pooler breaks prepared statements and session-scoped advisory
-  locks, and `claim_due_sends()` depends on the latter for cap accounting.
+  transaction pooler breaks prepared statements, which is what `db:push` and
+  the reconcile job speak. (`claim_due_sends()` no longer depends on this: it
+  holds a transaction-scoped advisory lock, which is correct over PostgREST
+  either way. See the send-path notes above.)
 - **`supabase gen types` and `db diff` shell out to Docker** even with a
   `--db-url`. Only `db push` works without it.
 
