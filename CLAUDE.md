@@ -197,6 +197,56 @@ lie about who worked the lead.
 - **Handing a lead to somebody else needs admin**, matching `reassign_lead()`.
   Claiming for yourself does not, so a member can still import their own sheet.
 
+## What the sheet already sent (`0027`)
+
+333 leads came out of `outreach_management` with their touch history stranded in
+`leads.raw`. `public.backfill_sheet_touch_history()` moves it across. Admin only,
+**dry run by default**, and re-runnable.
+
+- **It writes a `sent` scheduled_send AND a backdated `sent` event per touch,
+  and never one without the other.** The event is what makes
+  `app.lead_status_from_events` derive `sent`; but neither the planner nor
+  `/write` asks the event log which touch is next. Both count from
+  `scheduled_sends` rows whose status is `sent`. Events alone would produce
+  status `sent` (which opens the planner's gate) over a step count of zero
+  (which restarts at T1) - strictly worse than doing nothing. Each lead is
+  therefore processed in its own subtransaction.
+- **A lead with no timezone gets neither.** `scheduled_sends` refuses it by a
+  trigger that binds the service role, so the sends cannot exist, so the events
+  must not either. `resolve-timezones` runs hourly and the pass is re-runnable.
+- **The step comes from the timestamps, never from the sheet's `status`
+  column.** They disagree on 26 rows: 21 say `first_touch` while carrying three
+  timestamps, three say `second_touch` while carrying three. Trusting `status`
+  would send those 24 businesses a second T2 and a second T3.
+- **`p_zone` defaults to `Asia/Kolkata` and is the one inferred number here.**
+  The timestamps carry no offset. All 262 cluster at 18:00-23:00 and 01:00-04:00
+  with nothing between 05:00 and 12:00, which is US business hours read as IST
+  and an implausible sending pattern read as anything else.
+- **Day-first, and proved rather than assumed**: 121 values have a first
+  component above 12 and none has a second above 12. Six distinct string shapes
+  exist, three of them dirty (`31/ 07/26 13:47`, `11/08/26/ 21:40`, stray
+  seconds). A parser that only handled the common one would drop a touch and
+  restart that lead a step early.
+- **`removed` becomes `do_not_contact` plus a suppression on the work email.**
+  Both, because the terminal outcome settles this lead while the suppression
+  survives a re-import as a new one, and the dispatcher re-checks suppressions
+  at send time. Email rather than domain by default: `removed` may have meant
+  "wrong contact" as easily as "this company said no". `p_suppress_domain`
+  opts in.
+- **0027 widens `scheduled_sends_require_content`** so a row arriving already
+  `sent`, with a `sent_at`, may carry neither a template nor a body. The sheet
+  recorded that an email went out and never what it said, and a fabricated
+  `composed_body` would be dispatched verbatim. Anything still dispatchable is
+  bound exactly as before; `claim_due_sends()` only ever takes `planned`.
+
+**Recording history is not only bookkeeping.** `sent` outranks `queued`, so a
+backfilled lead becomes plannable without anyone pressing "send without an
+audit", and its cadence is counted from a `sent_at` months old, so the next
+touch is due immediately. That is the point - T4 is overdue - but read the
+`next_step` column on a dry run before turning it off. Two things still stand in
+the way regardless: every sheet lead is `is_qualified = false` (the sheet
+carries no rating column), and `org_settings.dry_run` gates `claim_due_sends()`.
+
 ## Copy constraints (enforced by `lib/templates/lint.ts`)
 
 No em dashes. Loss-framed CTA. Binary-choice close. One ask per email. Only
