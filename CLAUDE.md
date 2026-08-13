@@ -98,14 +98,81 @@ npm run db:types     # regenerate types/db.ts (needs Docker)
 npm run verify       # typecheck + lint + test
 ```
 
-The three cron routes take `POST` with `Authorization: Bearer $CRON_SECRET`,
-and each accepts an optional `?org=<uuid>` to scope a run to one org. Suggested
-cadence: `plan-sends` every 15 minutes, `dispatch-sends` every 5 (it takes 20
-per run by default, `?limit=` to change), `poll-replies` every 10.
+The four cron routes take `POST` with `Authorization: Bearer $CRON_SECRET`, and
+each accepts an optional `?org=<uuid>` to scope a run to one org. Cadence, as
+scheduled by `0020`: `resolve-timezones` hourly, `plan-sends` every 15 minutes,
+`dispatch-sends` every 5 (it takes 20 per run by default, `?limit=` to change),
+`poll-replies` every 10.
 
 ```bash
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" $SITE/api/cron/plan-sends
 ```
+
+**pg_cron drives them, not Vercel cron** — Hobby permits one invocation a day,
+and the dispatcher needs twelve an hour. `app.call_job()` reads the URL and the
+bearer out of Vault at call time, so rotating `CRON_SECRET` is one update rather
+than four reschedules, and `cron.job.command` never holds a secret. Nothing is
+scheduled until both Vault secrets exist; until then the buttons on `/settings`
+are the scheduler, and they call the same routes with the same check.
+
+## Going live
+
+The state of these is on `/settings`, which lists exactly what is still between
+you and the first email. In the order they block:
+
+1. **A mailbox, with a display name.** `mailboxes.display_name` is the From
+   header and `{{sender_name}}`; a template using that variable refuses to send
+   rather than putting an email address where a human name belongs.
+2. **An active T1 template.** `0019` seeds all four as INACTIVE drafts. They
+   lint clean, so activating is one toggle, but the copy goes out in your name
+   and nobody but you gets to decide it is ready. T2 and T3 carry
+   `requires_demo`, so they wait for the demo ingest; T1 and T4 do not.
+3. **A lead that is ready**: claimed, audited, qualified, zoned, not suppressed.
+   `/queue` groups every lead by which of those it is missing.
+4. **Dry run off.** `org_settings.dry_run` is enforced inside
+   `claim_due_sends()`, so while it is true the app is structurally incapable of
+   sending. This is the last switch, not the first.
+
+Then, to stop pressing buttons:
+
+```sql
+select vault.create_secret('https://your-deployment', 'app_base_url');
+select vault.create_secret('<CRON_SECRET>', 'cron_secret');
+select app.enable_background_jobs();
+```
+
+`public.background_jobs_status()` is what `/settings` reads back, and
+`app.disable_background_jobs()` stops everything without touching a schedule by
+hand.
+
+## The demo contract
+
+`GET /api/v1/demos/pending` and `POST /api/v1/demos`, both bearing
+`AR_INGEST_SECRET`. Together they replace the `outreach_management` sheet as the
+Auto-Receptionist repo's work queue and write-back target.
+
+- **`/pending` returns qualified leads with a website and no demo yet**, oldest
+  first, and drops suppressed domains. It does NOT require the first touch to
+  have gone out: demos are built at qualification so T1's copy is true and T2 is
+  not racing a build.
+- **`POST` joins on normalized domain**, `place_id` first when present and
+  `lead_id` first when the caller echoes one back. A payload matching no lead
+  raises an `orphan_demo` alert rather than being dropped, because somebody paid
+  a model to build it.
+- **The `timezone` that repo reports is accepted and never applied.** It derives
+  zones from state and city, which is the mapping non-negotiable 6 forbids. It
+  is kept in the `demo_ready` event payload for comparison only.
+- **`record_demo()` is the only writer of the demo columns.** The guard in
+  `0004` binds the service role too, so the route cannot UPDATE the row itself.
+
+## Reply alerts
+
+`poll-replies` writes `alerts` rows; `/alerts` reads them live over Realtime
+(`0018` publishes the table, with `replica identity full` for the reason `0012`
+records). Set `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_IDS`, or `NTFY_TOPIC`, and
+each newly inserted alert also goes to a phone. Unconfigured is a no-op, and a
+push failure never fails the poll: only a genuinely new row notifies, which is
+what stops an overlapping history page buzzing twice for one reply.
 
 ## Where the tests run
 
@@ -139,6 +206,7 @@ Connection gotchas, both discovered the hard way:
 - `D:\Portfolio\Auto-Receptionist-Website\Auto-Receptionist` — builds sandbox
   demos. Has **no** `place_id`; its slugs derive from the website hostname, and
   nine legacy demos use hand-picked slugs that don't match their domain. Join on
-  normalized domain. It currently reads `status == 'first_touch'` from the
-  Google Sheet, so `GET /api/v1/demos/pending` must ship before that sheet is
-  retired.
+  normalized domain. It reads `status == 'first_touch'` from the Google Sheet in
+  `build-from-sheet.mjs`; `GET /api/v1/demos/pending` is the replacement and is
+  live, so that script can be repointed and the sheet retired. Its write-back of
+  `demo_txt` becomes a `POST /api/v1/demos` per built slug.

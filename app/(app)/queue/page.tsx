@@ -2,33 +2,18 @@ import { DateTime } from "luxon";
 import Link from "next/link";
 
 import { requireOrgContext } from "@/lib/org";
+import {
+  type Blocker,
+  type BlockerLead,
+  BLOCKER_ORDER,
+  classifyLead,
+  IN_FLIGHT,
+  suppressionIndex,
+} from "@/lib/queue/blockers";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
 
 export const dynamic = "force-dynamic";
-
-// Statuses that mean the first touch has already gone out. Those leads are not
-// waiting on anything, so they are counted but not listed as work.
-const IN_FLIGHT = new Set([
-  "sent",
-  "delivered",
-  "opened",
-  "replied",
-  "bounced",
-  "unsubscribed",
-  "closed_won",
-  "closed_lost",
-  "do_not_contact",
-]);
-
-type Blocker =
-  | "ready"
-  | "halted"
-  | "suppressed"
-  | "no_timezone"
-  | "not_qualified"
-  | "not_claimed"
-  | "not_audited";
 
 const BLOCKER_COPY: Record<Blocker, { label: string; hint: string; tone: string }> = {
   ready: {
@@ -68,28 +53,10 @@ const BLOCKER_COPY: Record<Blocker, { label: string; hint: string; tone: string 
   },
 };
 
-const ORDER: Blocker[] = [
-  "ready",
-  "not_audited",
-  "not_claimed",
-  "no_timezone",
-  "not_qualified",
-  "suppressed",
-  "halted",
-];
-
-interface QueueLead {
+interface QueueLead extends BlockerLead {
   id: string;
   company_name: string | null;
   work_email: string | null;
-  work_email_norm: string | null;
-  website_domain: string | null;
-  status: string;
-  claimed_by: string | null;
-  timezone: string | null;
-  is_qualified: boolean;
-  halted_at: string | null;
-  terminal_outcome: string | null;
 }
 
 interface ScheduledSend {
@@ -161,36 +128,14 @@ export default async function QueuePage() {
     };
   });
 
-  const suppressedEmails = new Set(
-    (suppressionRows ?? []).map((s) => s.email_norm).filter(Boolean) as string[],
-  );
-  const suppressedDomains = new Set(
-    (suppressionRows ?? []).map((s) => s.domain).filter(Boolean) as string[],
-  );
-
-  function classify(lead: QueueLead): Blocker {
-    // Most severe first: a halted or suppressed lead must never read as "ready"
-    // just because it also happens to be claimed and audited.
-    if (lead.halted_at || lead.terminal_outcome) return "halted";
-    if (
-      (lead.work_email_norm && suppressedEmails.has(lead.work_email_norm)) ||
-      (lead.website_domain && suppressedDomains.has(lead.website_domain))
-    ) {
-      return "suppressed";
-    }
-    if (!lead.timezone) return "no_timezone";
-    if (!lead.is_qualified) return "not_qualified";
-    if (!lead.claimed_by) return "not_claimed";
-    if (lead.status !== "audited" && lead.status !== "queued") return "not_audited";
-    return "ready";
-  }
+  const suppressions = suppressionIndex(suppressionRows);
 
   const inFlight = leads.filter((lead) => IN_FLIGHT.has(lead.status));
   const pending = leads.filter((lead) => !IN_FLIGHT.has(lead.status));
 
   const buckets = new Map<Blocker, QueueLead[]>();
   for (const lead of pending) {
-    const blocker = classify(lead);
+    const blocker = classifyLead(lead, suppressions);
     const bucket = buckets.get(blocker);
     if (bucket) bucket.push(lead);
     else buckets.set(blocker, [lead]);
@@ -302,7 +247,7 @@ export default async function QueuePage() {
             </p>
           )}
 
-          {ORDER.map((blocker) => {
+          {BLOCKER_ORDER.map((blocker) => {
             const bucket = buckets.get(blocker);
             if (!bucket || bucket.length === 0) return null;
             const copy = BLOCKER_COPY[blocker];

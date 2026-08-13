@@ -27,6 +27,7 @@ import {
 import { fetchProfile } from "@/lib/gmail/oauth";
 import { getMailboxAccessToken, MailboxDisconnectedError } from "@/lib/gmail/token";
 import { normalizeEmail } from "@/lib/normalize";
+import { pushAlert } from "@/lib/notify/push";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -305,22 +306,44 @@ async function pollMailbox(
       }
     }
 
-    await supabase.from("alerts").upsert(
-      {
-        org_id: mailbox.org_id,
-        lead_id: leadId,
-        mailbox_id: mailbox.id,
-        kind:
-          classification.kind === "reply"
-            ? "reply"
-            : classification.kind === "bounce"
-              ? "bounce"
-              : "unsubscribe",
-        message: `${message.headers["from"] ?? "someone"}: ${message.snippet.slice(0, 160)}`,
-        dedupe_token: message.id,
-      },
-      { onConflict: "org_id,kind,dedupe_token", ignoreDuplicates: true },
-    );
+    const kind =
+      classification.kind === "reply"
+        ? "reply"
+        : classification.kind === "bounce"
+          ? "bounce"
+          : "unsubscribe";
+
+    const { data: inserted } = await supabase
+      .from("alerts")
+      .upsert(
+        {
+          org_id: mailbox.org_id,
+          lead_id: leadId,
+          mailbox_id: mailbox.id,
+          kind,
+          message: `${message.headers["from"] ?? "someone"}: ${message.snippet.slice(0, 160)}`,
+          dedupe_token: message.id,
+        },
+        { onConflict: "org_id,kind,dedupe_token", ignoreDuplicates: true },
+      )
+      .select("id");
+
+    // Only a genuinely new alert buzzes a phone. With ignoreDuplicates the
+    // select returns nothing on conflict, which is exactly the signal needed:
+    // overlapping history pages and re-runs after a crash re-see the same
+    // message, and a second notification for one reply teaches people to
+    // ignore the first.
+    if (inserted && inserted.length > 0) {
+      const site = serverEnv().siteUrl;
+      await pushAlert({
+        title:
+          kind === "reply"
+            ? `Reply from ${message.headers["from"] ?? "a prospect"}`
+            : `${kind} on ${mailbox.email}`,
+        body: message.snippet.slice(0, 300) || "(no preview)",
+        url: site ? `${site}/leads?lead=${leadId}` : null,
+      });
+    }
   }
 
   await supabase
