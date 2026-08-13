@@ -12,6 +12,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import pg from "pg";
 
 import { testTarget } from "./target";
 
@@ -29,6 +30,35 @@ export function adminClient(): SupabaseClient {
 export function anonClient(): SupabaseClient {
   const { apiUrl, anonKey } = testTarget();
   return createClient(apiUrl, anonKey, clientOptions);
+}
+
+/**
+ * A direct SQL connection, for fixtures PostgREST cannot reach.
+ *
+ * Only the `public` and `graphql_public` schemas are exposed over the API, on
+ * purpose — `app` holds the login allowlist and the operator alias table, and
+ * having no API path to them is the point. A test that needs to seed one has
+ * to come in through the door the migrations use.
+ *
+ * Not a general-purpose escape hatch: anything reachable over PostgREST should
+ * use adminClient(), so that the test exercises the same layer the app does.
+ */
+export async function runSql<T = Record<string, unknown>>(
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  const client = new pg.Client({
+    connectionString: testTarget().dbUrl,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 20_000,
+  });
+  await client.connect();
+  try {
+    const { rows } = await client.query(sql, params);
+    return rows as T[];
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 export interface TestUser {

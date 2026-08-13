@@ -2,6 +2,7 @@ import { requireOrgContext } from "@/lib/org";
 
 import { OUTCOME_TONE, PAGE, PAGE_HEADER, PANEL } from "../ui";
 import { ImportClient } from "./ImportClient";
+import { OwnershipBackfill } from "./OwnershipBackfill";
 
 // The import history has to reflect the upload that just finished.
 export const dynamic = "force-dynamic";
@@ -37,6 +38,8 @@ export default async function ImportPage() {
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="max-w-[1100px] space-y-4">
           <ImportClient />
+
+          <OwnershipBackfill />
 
           <div className={PANEL}>
             <h2 className="mb-3 text-[var(--color-ink)]">Recent imports</h2>

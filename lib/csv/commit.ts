@@ -18,6 +18,8 @@ import { parseCsv } from "./parse";
 /** PostgREST puts `in` lists in the URL, so they cannot be unbounded. */
 const LOOKUP_CHUNK = 200;
 const WRITE_CHUNK = 500;
+/** Matches the bound assign_lead_owners() enforces on its own input. */
+const OWNER_CHUNK = 2000;
 
 export class ImportError extends Error {}
 
@@ -109,6 +111,9 @@ const SOURCE_BY_SHAPE: Record<ReturnType<typeof detectShape>, string> = {
   custom: "csv",
 };
 
+/** Per-lead outcomes from assign_lead_owners(), tallied. */
+export type OwnershipCounts = Partial<Record<string, number>>;
+
 export interface CommitResult {
   importId: string;
   totalRows: number;
@@ -118,6 +123,42 @@ export interface CommitResult {
     flagged_review: number;
     failed_validation: number;
   };
+  /** Absent when the file named no owners. */
+  ownership?: OwnershipCounts;
+  /**
+   * Set when ownership could not be applied at all. Deliberately not thrown:
+   * the leads are in, which is the part that is expensive to redo, and
+   * backfill_lead_owners() can reapply ownership afterwards from `raw`.
+   */
+  ownershipError?: string;
+}
+
+/**
+ * Claims the freshly inserted leads for whoever the sheet says owns them.
+ *
+ * Only inserted rows: a skipped duplicate has no new lead to claim, and
+ * quietly reassigning the lead it matched would make a routine re-upload move
+ * ownership around. Re-applying ownership to leads that already exist is
+ * backfill_lead_owners(), which is an explicit act.
+ */
+async function assignOwners(
+  supabase: OrgContext["supabase"],
+  assignments: Array<{ lead_id: string; owner_email: string }>,
+): Promise<OwnershipCounts> {
+  const counts: OwnershipCounts = {};
+
+  for (let i = 0; i < assignments.length; i += OWNER_CHUNK) {
+    const { data, error } = await supabase.rpc("assign_lead_owners", {
+      p_assignments: assignments.slice(i, i + OWNER_CHUNK),
+    });
+    if (error) throw new ImportError(error.message);
+
+    for (const row of (data ?? []) as Array<{ outcome: string }>) {
+      counts[row.outcome] = (counts[row.outcome] ?? 0) + 1;
+    }
+  }
+
+  return counts;
 }
 
 export async function commitImport(
@@ -201,6 +242,30 @@ export async function commitImport(
       if (id) leadIdByIndex.set(rowIndex, id);
     });
 
+    // --- ownership -----------------------------------------------------------
+    // The legacy sheet carries `lead_owner`, and a lead somebody has already
+    // worked has to come across still belonging to them. It cannot ride along
+    // in the insert: claimed_by is guarded and status is derived, so this is an
+    // RPC that claims on the named operator's behalf and writes their event.
+    const assignments = [...leadIdByIndex]
+      .flatMap(([rowIndex, leadId]) => {
+        const owner = mapped[rowIndex]?.ownerEmail;
+        return owner ? [{ lead_id: leadId, owner_email: owner }] : [];
+      });
+
+    let ownership: OwnershipCounts | undefined;
+    let ownershipError: string | undefined;
+    if (assignments.length > 0) {
+      try {
+        ownership = await assignOwners(supabase, assignments);
+      } catch (cause) {
+        // Not fatal. The leads are the expensive part and they are in; ownership
+        // is recoverable from `raw` with backfill_lead_owners() afterwards.
+        // Rolling the import back over this would be strictly worse.
+        ownershipError = cause instanceof Error ? cause.message : String(cause);
+      }
+    }
+
     // --- the per-row report --------------------------------------------------
     const importRowPayloads = decisions.map((decision, index) => {
       const base = {
@@ -275,7 +340,7 @@ export async function commitImport(
       .update({ status: "completed", counts, completed_at: new Date().toISOString() })
       .eq("id", importId);
 
-    return { importId, totalRows: parsed.totalRows, counts };
+    return { importId, totalRows: parsed.totalRows, counts, ownership, ownershipError };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Best effort: if this update is itself what failed, the import is left in

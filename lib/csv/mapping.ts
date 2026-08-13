@@ -25,7 +25,8 @@ export type CanonicalField =
   | "industry" | "rating" | "reviews_count" | "employee_count"
   | "company_linkedin" | "company_instagram" | "company_facebook" | "company_twitter"
   | "personal_linkedin" | "personal_instagram" | "personal_facebook" | "personal_twitter"
-  | "lead_score" | "angle_type" | "notes";
+  | "lead_score" | "angle_type" | "notes"
+  | "lead_owner";
 
 interface FieldSpec {
   field: CanonicalField;
@@ -104,6 +105,14 @@ export const FIELD_SPECS: FieldSpec[] = [
   { field: "lead_score", label: "Lead score", synonyms: ["lead_score", "leadscore", "score"] },
   { field: "angle_type", label: "Angle", synonyms: ["angle_type", "angle"] },
   { field: "notes", label: "Notes", synonyms: ["notes", "note", "comments"] },
+
+  // Not a column on `leads`. It is an operator's address, and ownership lives
+  // in claimed_by, which is guarded — so mapRow returns it alongside the values
+  // rather than in them, and commitImport hands it to assign_lead_owners()
+  // after the insert. Listed here so it appears in the mapping UI like any
+  // other column and can be pointed at a differently-named header.
+  { field: "lead_owner", label: "Lead owner (claims the lead)",
+    synonyms: ["lead_owner", "leadowner", "owner", "assigned_to", "assignee"] },
 ];
 
 /** Lowercase, strip everything that is not alphanumeric. */
@@ -175,6 +184,15 @@ export interface MappedLead {
   cleanedFields: string[];
   /** Blocking problems. A row with any of these cannot be inserted. */
   errors: string[];
+  /**
+   * The operator this row already belongs to, if the file names one.
+   *
+   * Kept out of `values` on purpose: there is no such column on `leads`, and
+   * ownership is guarded — assign_lead_owners() writes it after the insert.
+   * Never a blocking error, because an address nobody recognises should still
+   * produce the lead.
+   */
+  ownerEmail: string | null;
 }
 
 /**
@@ -270,5 +288,5 @@ export function mapRow(
     errors.push("no company_name");
   }
 
-  return { values, cleanedFields, errors };
+  return { values, cleanedFields, errors, ownerEmail: cleanEmail(raw("lead_owner")) };
 }

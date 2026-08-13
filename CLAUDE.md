@@ -164,6 +164,39 @@ treats a null variable as missing and the dispatcher skips the send, so `city`,
 `industry` and `first_name` stay out until the import fills them reliably.
 `tests/integration/unaudited-sends.test.ts` asserts the selection both ways.
 
+## Ownership comes across from the sheet
+
+The sheet names an operator per row in `lead_owner`, and a lead somebody has
+already worked has to arrive still belonging to them. It cannot ride along in
+the insert — `claimed_by` is guarded and status is derived — so `0025` adds the
+bulk sibling of `claim_lead()`: it moves the same three columns under the same
+bypass and writes a `claimed` event **whose actor is the named operator, not
+whoever ran the import**. A timeline crediting the migration runner would be a
+lie about who worked the lead.
+
+- **`backfill_lead_owners()` is how already-imported leads are repaired.** A
+  re-upload cannot do it: every row is a duplicate by `work_email` by then, and
+  a skipped row has no new lead to claim. `commitImport` stores the original CSV
+  row as `leads.raw`, so the owner is already in the database — the backfill
+  reads it back out. It defaults to a dry run, and the button is on `/import`.
+- **It only ever touches unclaimed leads.** The sheet is a snapshot of what was
+  true at export; the database is what is true now. A migration that silently
+  overrode live ownership would be the worst of both.
+- **An address resolves to an account, or to nothing.** `unknown_owner` leaves
+  the lead in the pool and never costs us the lead itself. Since an auth user
+  only exists once that person has signed in at least once, an operator who has
+  never logged in cannot be assigned to — their rows wait for their first login
+  and a second run of the backfill.
+- **Exact address beats the alias group** (`0026`). `app.operator_aliases` says
+  which addresses are the same human, which is 0009's mess made into data. But
+  both of madhav's addresses are real accounts in the org, so group-only
+  resolution was ambiguous for every one of his rows. An account at exactly the
+  address the sheet names is the strongest evidence there is; the group is the
+  fallback for when that address has no account. Two candidates in the fallback
+  still raises rather than guessing.
+- **Handing a lead to somebody else needs admin**, matching `reassign_lead()`.
+  Claiming for yourself does not, so a member can still import their own sheet.
+
 ## Copy constraints (enforced by `lib/templates/lint.ts`)
 
 No em dashes. Loss-framed CTA. Binary-choice close. One ask per email. Only

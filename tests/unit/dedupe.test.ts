@@ -4,7 +4,7 @@ import { collectLookupKeys, partitionRows, type ExistingKeys } from "@/lib/csv/d
 import type { MappedLead } from "@/lib/csv/mapping";
 
 function row(values: Record<string, unknown>, errors: string[] = []): MappedLead {
-  return { values, cleanedFields: [], errors };
+  return { values, cleanedFields: [], errors, ownerEmail: null };
 }
 
 const NO_EXISTING: ExistingKeys[] = [];

@@ -23,6 +23,8 @@ interface Result {
   importId: string;
   totalRows: number;
   counts: Record<string, number>;
+  ownership?: Record<string, number>;
+  ownershipError?: string;
 }
 
 const SHAPE_LABEL = {
@@ -180,6 +182,21 @@ export function ImportClient() {
               <a href="/review" className="underline">
                 {result.counts.flagged_review} near-duplicates need a decision
               </a>
+            </p>
+          )}
+
+          {result.ownership && (
+            <p className="mt-3 text-[var(--color-ink-2)]">
+              Ownership:{" "}
+              {Object.entries(result.ownership)
+                .map(([outcome, count]) => `${count} ${outcome.replace(/_/g, " ")}`)
+                .join(", ")}
+            </p>
+          )}
+          {result.ownershipError && (
+            <p className="mt-2 text-[var(--color-warn)]">
+              The leads imported, but ownership did not apply:{" "}
+              {result.ownershipError} You can re-apply it below.
             </p>
           )}
         </div>
