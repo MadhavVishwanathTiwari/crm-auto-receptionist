@@ -151,6 +151,29 @@ export async function recordAudit(input: AuditInput): Promise<ActionResult> {
     };
   }
 
+  // Stamp the angle on the LEAD, not just on the evidence.
+  //
+  // This is what picks the audit-quoting template over the generic one in
+  // templateFor(): a lead carrying 'soft_text_audit' matches the template
+  // pinned to that angle, and a lead with no angle falls back to the copy that
+  // quotes nothing. Without this write, auditing a lead would change its status
+  // but still send it the generic email, which is the one outcome nobody wants
+  // after doing the work.
+  //
+  // Last, and deliberately not fatal. The audit and its event are already
+  // committed; a failure here means the lead gets generic copy, which is worse
+  // than the audit copy but far better than reporting a saved audit as failed
+  // and having it recorded twice.
+  const { error: angleError } = await supabase
+    .from("leads")
+    .update({ angle_type: input.angleType })
+    .eq("id", lead.id)
+    .select("id");
+
+  if (angleError) {
+    console.error(`could not stamp angle_type on lead ${lead.id}: ${angleError.message}`);
+  }
+
   revalidatePath("/audit");
   revalidatePath("/leads");
   revalidatePath("/queue");

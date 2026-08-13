@@ -47,8 +47,8 @@ const BLOCKER_COPY: Record<Blocker, { label: string; hint: string; tone: string 
     tone: "text-[var(--color-ink-2)]",
   },
   not_audited: {
-    label: "Not audited",
-    hint: "The first touch quotes the audit back, so it cannot be written yet.",
+    label: "Waiting on a decision",
+    hint: "Either audit it, so the first touch can quote the callback, or open it and send without an audit for the generic copy. Both are fine; leaving it here is what stops it.",
     tone: "text-[var(--color-info)]",
   },
 };

@@ -81,6 +81,29 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   header and `{{sender_name}}`; a template using that variable refuses to send
   rather than putting an email address where a human name belongs.
 
+## An audit is a choice, not a precondition
+
+Two template sets exist per step, and `templateFor()` picks between them on
+`leads.angle_type`:
+
+- **`soft_text_audit`** (`0019`) quotes the callback back. Every variable in it
+  comes from `lead_evidence`, so it can only go to a lead somebody audited. The
+  audit screen stamps the angle on the lead, which is what selects it.
+- **`null`** (`0022`) quotes nothing and asks only for `company_name`,
+  `demo_url` and `sender_name`. It is the fallback, so a lead nobody audited
+  gets it.
+
+What makes an unaudited lead sendable is a **`queued` event**, written per lead
+by "Send without an audit" on the lead drawer. `queued` outranks `audited` in
+`app.lead_status_from_events` and the planner has accepted both since `0015`, so
+no gate was widened: a merely *claimed* lead is still not sendable, because
+"this one is not worth an audit" is a decision somebody has to make.
+
+Adding a variable to the generic set is how you break it. `renderTemplate()`
+treats a null variable as missing and the dispatcher skips the send, so `city`,
+`industry` and `first_name` stay out until the import fills them reliably.
+`tests/integration/unaudited-sends.test.ts` asserts the selection both ways.
+
 ## Copy constraints (enforced by `lib/templates/lint.ts`)
 
 No em dashes. Loss-framed CTA. Binary-choice close. One ask per email. Only
@@ -123,12 +146,12 @@ you and the first email. In the order they block:
 1. **A mailbox, with a display name.** `mailboxes.display_name` is the From
    header and `{{sender_name}}`; a template using that variable refuses to send
    rather than putting an email address where a human name belongs.
-2. **An active T1 template.** `0019` seeds all four as INACTIVE drafts. They
-   lint clean, so activating is one toggle, but the copy goes out in your name
-   and nobody but you gets to decide it is ready. T2 and T3 carry
-   `requires_demo`, so they wait for the demo ingest; T1 and T4 do not.
-3. **A lead that is ready**: claimed, audited, qualified, zoned, not suppressed.
-   `/queue` groups every lead by which of those it is missing.
+2. **An active T1 template.** `0019` seeds the audit set, `0022` the generic
+   set, both as drafts. T2 and T3 carry `requires_demo`, so they wait for the
+   demo ingest; T1 and T4 do not.
+3. **A lead that is ready**: claimed, qualified, zoned, not suppressed, and
+   either audited or explicitly queued without one. `/queue` groups every lead
+   by which of those it is missing.
 4. **Dry run off.** `org_settings.dry_run` is enforced inside
    `claim_due_sends()`, so while it is true the app is structurally incapable of
    sending. This is the last switch, not the first.

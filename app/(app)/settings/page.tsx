@@ -150,8 +150,8 @@ export default async function SettingsPage() {
       label: "At least one lead ready",
       detail:
         ready > 0
-          ? `${ready} claimed, audited, qualified, zoned and not suppressed.${noTimezone > 0 ? ` ${noTimezone} more are waiting on a timezone.` : ""}`
-          : `Nothing is sendable yet. A lead needs claiming, auditing and a resolvable timezone.${noTimezone > 0 ? ` ${noTimezone} have no zone.` : ""}`,
+          ? `${ready} claimed, qualified, zoned, not suppressed, and either audited or queued without one.${noTimezone > 0 ? ` ${noTimezone} more are waiting on a timezone.` : ""}`
+          : `Nothing is sendable yet. A lead needs claiming, a resolvable timezone, and then either an audit or an explicit "send without an audit".${noTimezone > 0 ? ` ${noTimezone} have no zone.` : ""}`,
       href: "/queue",
       linkLabel: "see why",
     },

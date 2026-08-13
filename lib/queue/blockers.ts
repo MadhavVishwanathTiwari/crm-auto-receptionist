@@ -92,6 +92,10 @@ export function classifyLead(
   if (!lead.timezone) return "no_timezone";
   if (!lead.is_qualified) return "not_qualified";
   if (!lead.claimed_by) return "not_claimed";
+  // `queued` is the escape hatch, and it outranks `audited` in
+  // app.lead_status_from_events. A lead nobody wants to spend an audit on is
+  // queued explicitly and gets the generic copy; this is not a lead that is
+  // missing something, it is one an operator decided about.
   if (lead.status !== "audited" && lead.status !== "queued") return "not_audited";
   return "ready";
 }

@@ -8,8 +8,15 @@ import { suppressLead } from "../suppressions/actions";
 // actions file — importing the array through a server module hands a client a
 // proxy whose .map throws at hydration. See suppressions/reasons.ts.
 import { SUPPRESSION_REASONS, type SuppressionReason } from "../suppressions/reasons";
+import { IN_FLIGHT } from "@/lib/queue/blockers";
+
 import { BUTTON, BUTTON_QUIET, INPUT, STATUS_TONE } from "../ui";
-import { closeLead, setLeadTimezone, type TerminalOutcome } from "./actions";
+import {
+  closeLead,
+  queueWithoutAudit,
+  setLeadTimezone,
+  type TerminalOutcome,
+} from "./actions";
 
 export interface LeadDetail {
   id: string;
@@ -276,7 +283,38 @@ export function LeadDrawer({
             Audits <span className="tabular">{evidence.length}</span>
           </h3>
           {evidence.length === 0 ? (
-            <p className="text-[var(--color-ink-3)]">Not audited yet.</p>
+            <div className="space-y-2">
+              <p className="text-[var(--color-ink-3)]">Not audited yet.</p>
+
+              {/* An audit is the default, not a requirement. Auditing a lead
+                  costs a text message and a stopwatch, which is worth it for a
+                  business worth winning and not worth it for the long tail of
+                  a scraped import. Queueing without one sends the generic copy,
+                  which quotes no audit and therefore cannot contradict itself. */}
+              {lead.status === "queued" ? (
+                <p className="text-[var(--color-ink-2)]">
+                  Queued without an audit, so it gets the generic first touch
+                  rather than the one that quotes a callback.
+                </p>
+              ) : (
+                !IN_FLIGHT.has(lead.status) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!editable || pending}
+                      onClick={() => run(() => queueWithoutAudit(lead.id))}
+                      className={BUTTON}
+                    >
+                      Send without an audit
+                    </button>
+                    <span className="text-[var(--color-ink-3)]">
+                      Generic copy, no callback quoted. Use it on leads not worth
+                      auditing.
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
           ) : (
             <div className="space-y-2">
               {evidence.map((row) => (

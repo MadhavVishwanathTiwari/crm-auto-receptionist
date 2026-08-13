@@ -40,6 +40,53 @@ export async function claimLead(leadId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Sends this lead without auditing it first.
+ *
+ * The pipeline's default is that a first touch quotes an audit back, because
+ * that is what makes the copy worth reading. It is also what makes a first
+ * touch expensive: somebody has to text the business and time the reply. On a
+ * thousand scraped rows most leads are not worth that, and the choice is
+ * between generic copy and no copy at all.
+ *
+ * So this is per lead and explicit, rather than a setting. The operator is
+ * asserting "this one is not worth an audit", which is a judgement about that
+ * business and nothing else in the system can make it.
+ *
+ * Mechanically it inserts a `queued` event. Status is derived, never typed, so
+ * there is no UPDATE here to be refused by leads_guard_protected_columns: the
+ * event ranks above `audited` in app.lead_status_from_events, the trigger
+ * recomputes leads.status, and the planner has accepted `queued` since 0015.
+ * The lead keeps angle_type null, which is what selects the generic template.
+ */
+export async function queueWithoutAudit(leadId: string): Promise<ActionResult> {
+  const context = await getOrgContext();
+  if (!context) return { ok: false, error: "Not signed in." };
+
+  const { data, error } = await context.supabase
+    .from("lead_events")
+    .insert({
+      org_id: context.orgId,
+      lead_id: leadId,
+      type: "queued",
+      actor_id: context.userId,
+      payload: { reason: "queued without an audit" },
+    })
+    .select("id");
+
+  if (error) return { ok: false, error: error.message };
+  // A write refused by RLS is 204 and zero rows, not an error. Here that means
+  // the lead belongs to the other operator.
+  if (!data || data.length === 0) {
+    return { ok: false, error: "That lead is not yours to queue." };
+  }
+
+  revalidatePath("/leads");
+  revalidatePath("/queue");
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 export async function releaseLead(leadId: string): Promise<ActionResult> {
   const context = await getOrgContext();
   if (!context) return { ok: false, error: "Not signed in." };
