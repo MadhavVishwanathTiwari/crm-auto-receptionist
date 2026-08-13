@@ -33,9 +33,7 @@ describe("the OAuth grant", () => {
     expect(GMAIL_SCOPES.join(" ")).not.toContain("gmail.modify");
   });
 
-  it("asks offline and forces the consent screen", () => {
-    // Without both, Google hands back a refresh token exactly once per account
-    // and silently omits it on every reconnect after that.
+  it("asks offline, forces consent, and always offers the account chooser", () => {
     const url = new URL(
       buildAuthUrl({
         clientId: "client-123",
@@ -43,8 +41,18 @@ describe("the OAuth grant", () => {
         state: "abc",
       }),
     );
+
+    // Without the first two, Google hands back a refresh token exactly once per
+    // account and silently omits it on every reconnect after that.
     expect(url.searchParams.get("access_type")).toBe("offline");
-    expect(url.searchParams.get("prompt")).toBe("consent");
+    const prompt = (url.searchParams.get("prompt") ?? "").split(" ");
+    expect(prompt).toContain("consent");
+
+    // And without this one, Google silently uses whichever account the browser
+    // is already signed into. Connecting the wrong mailbox picks the address
+    // every subsequent cold email goes out from.
+    expect(prompt).toContain("select_account");
+
     expect(url.searchParams.get("include_granted_scopes")).toBe("false");
     expect(url.searchParams.get("state")).toBe("abc");
   });

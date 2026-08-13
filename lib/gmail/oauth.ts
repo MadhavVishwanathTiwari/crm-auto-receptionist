@@ -67,14 +67,23 @@ export function buildAuthUrl(input: {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", GMAIL_SCOPES.join(" "));
 
-  // Both are required, and together. access_type=offline asks for a refresh
-  // token; prompt=consent forces the consent screen even for an account that
-  // has already granted these scopes. Without the second, Google returns a
-  // refresh token exactly once per account and silently omits it on every
-  // reconnect after that — which looks like a working flow right up until the
-  // access token expires an hour later.
+  // access_type=offline asks for a refresh token; prompt=consent forces the
+  // consent screen even for an account that has already granted these scopes.
+  // Without the second, Google returns a refresh token exactly once per account
+  // and silently omits it on every reconnect after that — which looks like a
+  // working flow right up until the access token expires an hour later.
+  //
+  // select_account is the third, and it is not cosmetic. Without it Google
+  // uses whichever account the browser already has a session for and never
+  // offers a choice. An operator signed into a personal Gmail in the same
+  // browser gets sent down the flow as that account with no way to say
+  // otherwise. login_hint below is only a hint, and Google ignores it when the
+  // hinted account is not the active session.
+  //
+  // Connecting the wrong mailbox is not a cosmetic failure either: it is the
+  // account every subsequent cold email would be sent from.
   url.searchParams.set("access_type", "offline");
-  url.searchParams.set("prompt", "consent");
+  url.searchParams.set("prompt", "consent select_account");
 
   // Do not widen the grant with whatever the user happened to approve
   // elsewhere. The two scopes above are the whole surface.
