@@ -14,34 +14,27 @@ import {
   googleRedirectUri,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_COOKIE_PATH,
-  siteUrlProblem,
 } from "@/lib/gmail/redirect";
 import { getOrgContext } from "@/lib/org";
+import { requestOrigin } from "@/lib/requestOrigin";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  // Everything this route emits is anchored to the origin the browser is
+  // actually on, never to a configured one. Sending an operator back to a
+  // different host than the one they clicked from is the failure this whole
+  // flow is built to avoid.
+  const origin = requestOrigin(request);
+
   const context = await getOrgContext();
   if (!context) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(`${origin}/login`);
   }
 
   const env = serverEnv();
   if (!env.googleOAuthClientId || !env.googleOAuthClientSecret) {
-    return NextResponse.redirect(
-      new URL("/mailboxes?error=google_not_configured", request.url),
-    );
-  }
-  const siteProblem = siteUrlProblem();
-  if (siteProblem) {
-    return NextResponse.redirect(
-      new URL(
-        siteProblem === "missing"
-          ? "/mailboxes?error=site_url_not_configured"
-          : "/mailboxes?error=site_url_has_no_scheme",
-        request.url,
-      ),
-    );
+    return NextResponse.redirect(`${origin}/mailboxes?error=google_not_configured`);
   }
 
   // CSRF for the round trip. Google echoes `state` back verbatim, and the
@@ -51,7 +44,7 @@ export async function GET(request: Request) {
 
   const url = buildAuthUrl({
     clientId: env.googleOAuthClientId,
-    redirectUri: googleRedirectUri(),
+    redirectUri: googleRedirectUri(request),
     state,
     // The address they signed in with is nearly always the one they want to
     // connect. Still only a hint: the chooser can override it, which is why the
@@ -65,9 +58,14 @@ export async function GET(request: Request) {
   response.cookies.set(OAUTH_STATE_COOKIE, state, {
     httpOnly: true,
     sameSite: "lax", // must survive the redirect back from accounts.google.com
-    secure: env.siteUrl.startsWith("https://"),
+    // From the real scheme, not from configuration. A Secure cookie set over
+    // plain http is dropped silently, which would surface as state_mismatch.
+    secure: origin.startsWith("https://"),
     path: OAUTH_STATE_COOKIE_PATH,
-    maxAge: 600,
+    // Ten minutes was too tight: the consent screen involves choosing an
+    // account and reading a scope list, and an expired cookie is
+    // indistinguishable from a forged one.
+    maxAge: 1800,
   });
 
   return response;

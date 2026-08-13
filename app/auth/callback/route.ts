@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { describeAuthError } from "@/lib/authErrors";
+import { requestOrigin } from "@/lib/requestOrigin";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -17,12 +18,9 @@ export async function GET(request: Request) {
 
   // Behind Vercel the request URL is the internal origin, so the forwarded
   // headers are what the browser actually asked for. Getting this wrong sends
-  // people to a hostname the session cookie was not set on.
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
-  const origin = forwardedHost
-    ? `${forwardedProto}://${forwardedHost}`
-    : url.origin;
+  // people to a hostname the session cookie was not set on. Extracted to
+  // lib/requestOrigin.ts once the Google OAuth routes needed the same answer.
+  const origin = requestOrigin(request);
 
   const fail = (message: string) =>
     NextResponse.redirect(

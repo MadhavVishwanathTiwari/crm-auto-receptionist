@@ -17,13 +17,11 @@ const ERRORS: Record<string, string> = {
   access_denied: "You declined at the Google consent screen, so nothing changed.",
   google_not_configured:
     "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are not set on this deployment.",
-  site_url_not_configured:
-    "NEXT_PUBLIC_SITE_URL is not set, so the redirect back from Google cannot be built.",
-  site_url_has_no_scheme:
-    "NEXT_PUBLIC_SITE_URL has no http:// or https:// on the front. Google would " +
-    "reject the redirect several steps into the flow, on its own error page.",
   state_mismatch:
-    "That sign-in did not come back the way it left. Start the connection again from this page.",
+    "That sign-in did not come back the way it left, so it was refused. This " +
+    "happens if you started the connection on a different address than the one " +
+    "you landed on, or left the consent screen open for more than half an hour. " +
+    "Start it again from this page.",
   no_code: "Google sent us back without an authorization code. Try again.",
   no_refresh_token:
     "Google returned no refresh token, so this mailbox could send for an hour and then stop. " +

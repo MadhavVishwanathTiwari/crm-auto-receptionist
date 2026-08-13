@@ -26,12 +26,16 @@ import {
 } from "@/lib/gmail/redirect";
 import { normalizeEmail } from "@/lib/normalize";
 import { getOrgContext } from "@/lib/org";
+import { requestOrigin } from "@/lib/requestOrigin";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
 function back(request: NextRequest, params: Record<string, string>) {
-  const url = new URL("/mailboxes", request.url);
+  // The forwarded origin, not request.url: behind a proxy the latter is the
+  // internal one, and a redirect built from it lands the operator on a host
+  // where their session does not exist.
+  const url = new URL("/mailboxes", requestOrigin(request));
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -62,7 +66,9 @@ export async function GET(request: NextRequest) {
   }
 
   const context = await getOrgContext();
-  if (!context) return NextResponse.redirect(new URL("/login", request.url));
+  if (!context) {
+    return NextResponse.redirect(new URL("/login", requestOrigin(request)));
+  }
 
   const env = serverEnv();
   if (!env.googleOAuthClientId || !env.googleOAuthClientSecret) {
@@ -74,7 +80,10 @@ export async function GET(request: NextRequest) {
       code,
       clientId: env.googleOAuthClientId,
       clientSecret: env.googleOAuthClientSecret,
-      redirectUri: googleRedirectUri(),
+      // Derived exactly as the start route derived it, from the same origin.
+      // Google requires the token exchange to present the same redirect_uri as
+      // the authorization request.
+      redirectUri: googleRedirectUri(request),
     });
 
     // Without a refresh token this mailbox can send for one hour and then stop,

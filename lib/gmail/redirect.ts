@@ -5,7 +5,7 @@
 // route may export HTTP verbs and a handful of config keys, and anything else
 // fails the build.
 
-import { serverEnv } from "@/lib/env";
+import { requestOrigin } from "@/lib/requestOrigin";
 
 export const OAUTH_STATE_COOKIE = "ar_google_oauth_state";
 
@@ -13,38 +13,25 @@ export const OAUTH_STATE_COOKIE = "ar_google_oauth_state";
 export const OAUTH_STATE_COOKIE_PATH = "/api/auth/google";
 
 /**
- * The registered redirect URI.
+ * The redirect URI, derived from the origin the operator is standing on.
  *
- * Built from configuration rather than from the incoming request: Google
- * compares it character for character against the value in the Cloud console,
- * and a proxy, a preview deployment or a trailing slash would each break it in
- * a way that only shows up at the end of the flow.
- */
-export function googleRedirectUri(): string {
-  return `${serverEnv().siteUrl}/api/auth/google/callback`;
-}
-
-/**
- * Why NEXT_PUBLIC_SITE_URL cannot be used, or null if it is fine.
+ * This used to be built from NEXT_PUBLIC_SITE_URL, on the reasoning that Google
+ * compares it character for character and a configured value cannot drift. The
+ * reasoning was backwards. A configured value can point at a DIFFERENT HOST
+ * than the one the request came from, and when production was deployed with a
+ * local site URL the flow did exactly that: an operator clicked Connect on
+ * crm.autoreceptionist.io, consented, and Google delivered the code to
+ * 127.0.0.1:3000 on their own laptop. The state cookie was on the production
+ * host, so the local server rejected it and dead-ended them on a login page.
  *
- * Checked before the flow starts rather than after. A value with no scheme
- * (`crm.autoreceptionist.io` instead of `https://crm.autoreceptionist.io`) is
- * the failure worth naming: it concatenates into something that looks like a
- * URL, Google rejects it as redirect_uri_mismatch several redirects later, and
- * the error surfaces on Google's own error page rather than in this app.
+ * Deriving from the request makes that unrepresentable: you come back to the
+ * host you left from. Both halves of the round trip derive it the same way, so
+ * the authorization request and the token exchange always agree, which is the
+ * one thing Google actually requires.
+ *
+ * The cost is that every origin must be registered in the Cloud console, which
+ * was already true.
  */
-export function siteUrlProblem(): "missing" | "no_scheme" | null {
-  const raw = serverEnv().siteUrl;
-  if (!raw) return "missing";
-
-  try {
-    const parsed = new URL(raw);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return "no_scheme";
-    }
-  } catch {
-    return "no_scheme";
-  }
-
-  return null;
+export function googleRedirectUri(request: Request): string {
+  return `${requestOrigin(request)}/api/auth/google/callback`;
 }

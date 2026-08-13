@@ -50,10 +50,14 @@ export function serverEnv() {
     // Direct connection, used by migrations and the nightly reconcile job.
     supabaseDirectUrl: process.env.SUPABASE_DIRECT_URL ?? "",
 
-    // Where this deployment lives. Used to build the Google OAuth redirect,
-    // which must match the value registered in the Cloud console CHARACTER FOR
-    // CHARACTER — so it is read from config rather than inferred from the
-    // request, where a proxy or a preview URL would silently change it.
+    // Where this deployment lives, for anything that has to name itself with no
+    // request in hand.
+    //
+    // Deliberately NOT used to build the Google OAuth redirect any more. That
+    // is derived from the incoming request (lib/requestOrigin.ts), because a
+    // configured origin can disagree with the one the operator is standing on,
+    // and when it does the flow hands the authorization code to a different
+    // host entirely.
     siteUrl: (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, ""),
 
     // Shared secret pg_cron presents when calling /api/cron/*.
