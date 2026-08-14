@@ -300,9 +300,10 @@ lie about who worked the lead.
 backfilled lead becomes plannable without anyone pressing "send without an
 audit", and its cadence is counted from a `sent_at` months old, so the next
 touch is due immediately. That is the point - T4 is overdue - but read the
-`next_step` column on a dry run before turning it off. Two things still stand in
-the way regardless: every sheet lead is `is_qualified = false` (the sheet
-carries no rating column), and `org_settings.dry_run` gates `claim_due_sends()`.
+`next_step` column on a dry run before turning it off. One thing still stands in
+the way regardless: `org_settings.dry_run` gates `claim_due_sends()`. The sheet
+leads used to be blocked by `is_qualified = false` as well — the sheet carries
+no rating column — which is a large part of why `0031` removed the rating floor.
 
 ## Copy constraints (enforced by `lib/templates/lint.ts`)
 

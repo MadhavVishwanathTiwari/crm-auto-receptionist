@@ -191,7 +191,7 @@ export function LeadDrawer({
                 "yes"
               ) : (
                 <span className="text-[var(--color-ink-3)]">
-                  no — needs rating 3.5+ and a work email
+                  no — needs a work email
                 </span>
               )
             }

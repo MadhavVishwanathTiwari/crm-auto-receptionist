@@ -38,7 +38,7 @@ const BLOCKER_COPY: Record<Blocker, { label: string; hint: string; tone: string 
   },
   not_qualified: {
     label: "Not qualified",
-    hint: "Needs a rating of 3.5 or better and a work email.",
+    hint: "Needs a work email. That is the whole gate.",
     tone: "text-[var(--color-ink-3)]",
   },
   not_claimed: {

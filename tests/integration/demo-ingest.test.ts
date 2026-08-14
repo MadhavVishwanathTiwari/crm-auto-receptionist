@@ -257,8 +257,9 @@ describe("GET /api/v1/demos/pending", () => {
   });
 
   it("does not offer an unqualified lead, or one with no website", async () => {
-    // rating below 3.5 fails the generated is_qualified gate.
-    const unqualified = await makeLead({ rating: 2.1 });
+    // No work email fails the generated is_qualified gate. Since 0031 that is
+    // the whole gate: a low rating, or none at all, no longer disqualifies.
+    const unqualified = await makeLead({ work_email: null });
     const noSite = await makeLead({ website: null });
 
     const response = await pendingDemos(get(`?org=${orgId}&limit=100`));
