@@ -39,8 +39,8 @@ export interface WriteSend {
   step_number: number;
   status: string;
   scheduled_at: string;
-  scheduled_local: string;
   sent_at: string | null;
+  /** Only ever populated on a `planned` or `blocked` row. See below. */
   composed_body: string | null;
   composed_subject: string | null;
 }
@@ -60,6 +60,17 @@ export interface WriteContext {
 /** Booked, in flight, or already out: everything that consumes a step. */
 const LIVE_STATUSES = ["planned", "blocked", "claimed", "sending", "sent"];
 
+/**
+ * The only statuses whose words are still worth loading.
+ *
+ * nextStepFor() can only ever return a `planned` or `blocked` row as
+ * `replaces`, and `replaces` is the only place the composer reads a body from.
+ * A `sent` row's body is history: nothing on this screen renders it, and once
+ * the sheet backfill's touches and every send since are in the table it is by
+ * far the largest thing on the page, growing forever.
+ */
+const REPLACEABLE_STATUSES = ["planned", "blocked"];
+
 export async function loadWriteContext(
   supabase: SupabaseClient,
 ): Promise<WriteContext | null> {
@@ -69,6 +80,7 @@ export async function loadWriteContext(
     { data: settingsRow },
     { data: mailboxRows },
     { data: sendRows },
+    { data: bodyRows },
     { data: suppressionRows },
   ] = await Promise.all([
     supabase
@@ -84,20 +96,52 @@ export async function loadWriteContext(
       .select("id, email, display_name, timezone, daily_cap")
       .eq("is_sendable", true)
       .order("id"),
+    // Every live send, for the step arithmetic and the capacity index. No
+    // bodies: at ~40 sends a day these rows are tiny and the bodies are not.
+    // `scheduled_local` is not here either — /queue reads that column from its
+    // own query, and nothing on this screen ever did.
     supabase
       .from("scheduled_sends")
-      .select(
-        "id, lead_id, mailbox_id, step_number, status, scheduled_at, scheduled_local, sent_at, composed_body, composed_subject",
-      )
+      .select("id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at")
       .in("status", LIVE_STATUSES)
       .limit(5000),
+    // The words, only for the rows a composer could replace.
+    supabase
+      .from("scheduled_sends")
+      .select("id, composed_subject, composed_body")
+      .in("status", REPLACEABLE_STATUSES)
+      .limit(2000),
     supabase.from("suppressions").select("email_norm, domain"),
   ]);
 
   if (!settingsRow) return null;
 
   const mailboxes = (mailboxRows ?? []) as WriteMailbox[];
-  const sends = (sendRows ?? []) as (WriteSend & { mailbox_id: string | null })[];
+
+  const bodies = new Map(
+    (bodyRows ?? []).map((row) => [
+      row.id as string,
+      {
+        composed_subject: (row.composed_subject as string | null) ?? null,
+        composed_body: (row.composed_body as string | null) ?? null,
+      },
+    ]),
+  );
+
+  // The two queries ran concurrently against a table the dispatcher is also
+  // writing to, so a row can be in the first and not the second — it was
+  // `planned` when one query read it and `claimed` by the time the other did.
+  // Falling back to nulls is the right answer for exactly that case: a row the
+  // dispatcher has taken is one nextStepFor() refuses to replace anyway.
+  const sends = (sendRows ?? []).map((row) => ({
+    ...(row as Omit<WriteSend, "composed_subject" | "composed_body"> & {
+      mailbox_id: string | null;
+    }),
+    ...(bodies.get(row.id as string) ?? {
+      composed_subject: null,
+      composed_body: null,
+    }),
+  })) as (WriteSend & { mailbox_id: string | null })[];
 
   const sendsByLead = new Map<string, WriteSend[]>();
   for (const send of sends) {

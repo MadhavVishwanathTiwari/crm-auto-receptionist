@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { requireOrgContext } from "@/lib/org";
 
 import { PAGE, PAGE_HEADER } from "../ui";
@@ -11,6 +13,20 @@ export const dynamic = "force-dynamic";
 // what makes rendering that many rows free; when the pool outgrows this, the
 // filters move into the query and this cap becomes the page size.
 const MAX_ROWS = 5000;
+
+/** Matches the real drawer's width and chrome so nothing shifts on arrival. */
+function DrawerSkeleton() {
+  return (
+    <aside
+      aria-busy="true"
+      className="flex h-full w-[520px] shrink-0 flex-col border-l border-[var(--color-line)] bg-[var(--color-surface)]"
+    >
+      <header className="flex shrink-0 items-center gap-3 border-b border-[var(--color-line)] px-4 py-2">
+        <span className="text-[var(--color-ink-3)]">Loading lead</span>
+      </header>
+    </aside>
+  );
+}
 
 export default async function LeadsPage({
   searchParams,
@@ -50,9 +66,18 @@ export default async function LeadsPage({
             selectedLeadId={selectedLeadId ?? null}
           />
           {selectedLeadId && (
+            // Streamed, so the grid paints as soon as it is ready instead of
+            // waiting on four more queries and a signed-URL call for a panel
+            // beside it. The fallback is the same width as the real drawer, so
+            // the grid does not reflow when it arrives.
+            //
             // Keyed so switching rows remounts the panel rather than carrying
-            // one lead's half-filled form over to the next.
-            <LeadDrawerData key={selectedLeadId} leadId={selectedLeadId} />
+            // one lead's half-filled form over to the next. The key is on the
+            // boundary as well, or React reuses the pending Suspense state and
+            // the previous lead's drawer stays up while the next one loads.
+            <Suspense key={selectedLeadId} fallback={<DrawerSkeleton />}>
+              <LeadDrawerData key={selectedLeadId} leadId={selectedLeadId} />
+            </Suspense>
           )}
         </div>
       )}

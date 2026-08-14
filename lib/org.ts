@@ -1,10 +1,43 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export type OrgRole = "admin" | "member";
+
+export interface AuthUser {
+  id: string;
+  email: string | null;
+}
+
+/**
+ * Who is signed in, verified, once per request.
+ *
+ * getClaims() rather than getUser(). getUser() is an HTTP call to the auth
+ * server on every invocation, and the note this replaces was right that
+ * getSession() is the wrong way to make it cheap: getSession() trusts the
+ * cookie as-is. getClaims() is the third option and it is the correct one. It
+ * still calls getSession() first, so the session is refreshed and the cookie
+ * rotated exactly as before, and then it VERIFIES the JWT signature locally
+ * against the project's JWKS (cached in the client) whenever the project signs
+ * asymmetrically. On a project still using the legacy shared HS256 secret there
+ * is no key to verify against, so it falls back to getUser() — same behaviour
+ * and same cost as before, never worse.
+ *
+ * Wrapped in cache() so the layout, the page and any server component below
+ * them share one answer instead of asking the network each.
+ */
+export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
+  const supabase = await createServerSupabase();
+
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (!claims) return null;
+
+  return { id: claims.sub, email: claims.email ?? null };
+});
 
 export interface OrgContext {
   supabase: Awaited<ReturnType<typeof createServerSupabase>>;
@@ -24,13 +57,15 @@ export interface OrgContext {
  *
  * Returns null rather than throwing so route handlers can answer 401 instead of
  * rendering an error page.
+ *
+ * Cached per request for the same reason getAuthUser() is: the layout wants the
+ * role, the page wants the org id and the drawer wants the user id, and asking
+ * org_members three times for one row is three trips across the Pacific.
  */
-export async function getOrgContext(): Promise<OrgContext | null> {
+export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
   const supabase = await createServerSupabase();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return null;
 
   const { data: membership } = await supabase
@@ -48,11 +83,11 @@ export async function getOrgContext(): Promise<OrgContext | null> {
   return {
     supabase,
     userId: user.id,
-    email: user.email ?? null,
+    email: user.email,
     orgId: membership.org_id as string,
     role: membership.role as OrgRole,
   };
-}
+});
 
 /**
  * Page-side variant.
@@ -68,11 +103,10 @@ export async function getOrgContext(): Promise<OrgContext | null> {
  * not a reason to loop if it happens.
  */
 export async function requireOrgContext(): Promise<OrgContext> {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // Both reads are memoized, so distinguishing the two failure modes costs
+  // nothing beyond what getOrgContext() was going to do anyway. It used to cost
+  // a second full authentication round trip.
+  if (!(await getAuthUser())) redirect("/login");
 
   const context = await getOrgContext();
   if (!context) redirect("/no-access");

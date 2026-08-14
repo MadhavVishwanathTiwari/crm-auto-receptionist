@@ -29,12 +29,23 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  // getUser(), not getSession(): getSession() trusts the cookie as-is, while
-  // getUser() revalidates the JWT with the auth server. In middleware, which is
-  // the gate for every protected page, the cheaper call is the wrong one.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims(), not getSession() and no longer getUser().
+  //
+  // getSession() is still the wrong call: it trusts the cookie as-is, and this
+  // is the gate for every protected page. getUser() was the safe answer but it
+  // is an HTTP round trip to the auth server on every single request, and
+  // middleware runs at the edge PoP nearest the operator rather than in the
+  // function region, so it is the one call colocating the functions cannot
+  // help.
+  //
+  // getClaims() is safe AND cheap. It calls getSession() first, so the session
+  // is still refreshed and the cookie still rotated here exactly as before,
+  // then verifies the JWT signature locally against the project's JWKS, which
+  // the client caches. A project still signing with the legacy shared HS256
+  // secret has no public key to verify against, so it falls back to getUser()
+  // on its own: identical behaviour to what this replaced, never worse.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some(

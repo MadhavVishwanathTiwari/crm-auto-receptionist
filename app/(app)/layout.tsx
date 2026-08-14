@@ -1,8 +1,7 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
-import { createServerSupabase } from "@/lib/supabase/server";
+import { requireOrgContext } from "@/lib/org";
 
 import { SignOutButton } from "./SignOutButton";
 
@@ -37,25 +36,29 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   // Middleware already gates this, but a layout that renders without a user
   // would leak an empty grid rather than redirect, so check again here.
-  if (!user) redirect("/login");
+  //
+  // requireOrgContext() rather than a session check plus a membership query of
+  // its own: it already returns the email and the role this header needs, it is
+  // memoized per request, and the page rendering underneath is about to call it
+  // anyway. Asking separately meant the header and the page each authenticated
+  // and each read org_members.
+  //
+  // It also keeps the two failure modes apart, which a bare `if (!context)
+  // redirect("/login")` here would not: a signed-in user with no membership has
+  // to go to /no-access, because middleware bounces a signed-in user away from
+  // /login and the pair would spin. /no-access sits outside this route group,
+  // so it does not re-enter this layout.
+  const { supabase, email, role } = await requireOrgContext();
 
-  const [{ data: membership }, { count: openAlerts }] = await Promise.all([
-    supabase.from("org_members").select("role").eq("user_id", user.id).maybeSingle(),
-    // head:true asks PostgREST for the count and no rows. The badge is the only
-    // reason a reply is worth surfacing outside the alerts screen, so it is the
-    // only thing loaded here.
-    supabase
-      .from("alerts")
-      .select("id", { count: "exact", head: true })
-      .is("acknowledged_at", null),
-  ]);
+  // head:true asks PostgREST for the count and no rows. The badge is the only
+  // reason a reply is worth surfacing outside the alerts screen, so it is the
+  // only thing loaded here.
+  const { count: openAlerts } = await supabase
+    .from("alerts")
+    .select("id", { count: "exact", head: true })
+    .is("acknowledged_at", null);
 
   return (
     <div className="flex h-full flex-col">
@@ -78,8 +81,8 @@ export default async function AppLayout({
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-3 text-[var(--color-ink-3)]">
-          <span>{user.email}</span>
-          {membership?.role === "admin" && <span>admin</span>}
+          <span>{email}</span>
+          {role === "admin" && <span>admin</span>}
           <SignOutButton />
         </div>
       </header>

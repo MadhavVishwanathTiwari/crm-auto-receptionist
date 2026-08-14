@@ -71,6 +71,52 @@ Full build plan, capacity analysis, and phasing:
   `gmail.modify`, so the app is structurally incapable of archiving, labelling
   or marking it read. Instantly needs those messages sitting in the inbox.
 
+## What makes this app fast, and what made it slow
+
+Nothing here does heavy work: two operators, a few thousand leads, one
+`bookSlot()` pass over a worklist. Every second this app has ever lost was a
+**network round trip**, and the fixes are all about deleting round trips or
+shortening them. If a page gets slow again, count the round trips first.
+
+- **The functions must live in the same region as the database.** Supabase is in
+  `ap-northeast-1` (Tokyo); `vercel.json` pins the functions to `hnd1`. Vercel
+  defaults to `iad1` (Washington), and with that default every server→DB call
+  crossed the Pacific at ~180ms. A page render makes several of those in
+  sequence, which is how `/write` came to take three seconds. `vercel.json` is
+  strict JSON and cannot hold a comment saying so, hence this paragraph.
+- **`getClaims()`, never `getUser()`, and still never `getSession()`.**
+  `getSession()` trusts the cookie as-is and is unsafe. `getUser()` is safe but
+  is an HTTP call to the auth server every time. `getClaims()` is both: it calls
+  `getSession()` first, so the session still refreshes and the cookie still
+  rotates, then verifies the JWT signature locally against the cached JWKS. This
+  project signs **ES256**, so that verification is genuinely local and costs no
+  network at all. On a project still using the legacy shared HS256 secret it
+  falls back to `getUser()` by itself, so the swap can never be worse.
+- **Middleware is the one thing the region pin cannot help.** It runs at the
+  edge PoP nearest the operator, not in `hnd1`. That is why it verifies locally
+  rather than calling the auth server.
+- **`createServerSupabase`, `getAuthUser` and `getOrgContext` are all
+  `cache()`d, and that is load-bearing.** One render of `/leads?lead=<id>`
+  reaches auth from the layout, the page and the drawer. Uncached that was six
+  authentications and three `org_members` reads for one request. Anything new
+  that needs the current user must go through `getOrgContext()` rather than
+  reaching for `supabase.auth` itself, or it silently adds a round trip back.
+- **Every page in `(app)` is `force-dynamic`, so `app/(app)/loading.tsx` is not
+  decoration.** Without it Next has nothing to show while the server works and
+  the browser sits on the *previous* page, which reads as a dead click. Perceived
+  speed was a bigger share of "this app is slow" than any single query.
+- **Do not select a column the screen does not render.** `loadWriteContext()`
+  used to pull `composed_body` for every live send including every `sent` one,
+  which is every email ever written, growing forever, on a screen that only ever
+  displays the body of a `planned` or `blocked` row. Bodies are now a second,
+  narrower query merged in by id.
+- **RLS predicates wrap their helpers in a scalar subquery** —
+  `org_id = (select app.current_org_id())`, not `org_id = app.current_org_id()`.
+  Those helpers are `security definer`, and Postgres never inlines a security
+  definer function, so unwrapped it is called once per row: 5000 times on the
+  leads grid. The subquery makes it an InitPlan evaluated once. `0030` converted
+  all 41 policies; write new ones the same way.
+
 ## The send path (Phase 2)
 
 Two things write into `scheduled_sends`, and only the first line differs:
