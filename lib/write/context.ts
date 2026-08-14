@@ -18,16 +18,21 @@ import { DateTime } from "luxon";
 
 import {
   buildCapacity,
-  type BookingMailbox,
   type BookingSettings,
   type Capacity,
 } from "@/lib/scheduler/book";
+import {
+  buildMailboxSenders,
+  type MailboxSenders,
+  type RoutedMailbox,
+  type RoutingBlock,
+} from "@/lib/scheduler/routing";
 import { CADENCE_BUSINESS_DAYS, MAX_STEP } from "@/lib/scheduler/slots";
 import { addBusinessDays } from "@/lib/timezone/businessDays";
 import { holidaySet } from "@/lib/timezone/holidays";
 
 /** A mailbox the composer can actually send from. */
-export interface WriteMailbox extends BookingMailbox {
+export interface WriteMailbox extends RoutedMailbox {
   email: string;
   /** The From header, and {{sender_name}}. Null blocks sending. */
   display_name: string | null;
@@ -36,6 +41,8 @@ export interface WriteMailbox extends BookingMailbox {
 export interface WriteSend {
   id: string;
   lead_id: string;
+  /** Which account it goes out from. Null until the planner assigns one. */
+  mailbox_id: string | null;
   step_number: number;
   status: string;
   scheduled_at: string;
@@ -48,6 +55,12 @@ export interface WriteSend {
 export interface WriteContext {
   settings: BookingSettings & { dry_run: boolean };
   mailboxes: WriteMailbox[];
+  /**
+   * Which accounts may send from which mailbox. Normally the owner alone; more
+   * when one human holds two accounts here. Resolved in SQL so this side never
+   * has to know what an alias is.
+   */
+  senders: MailboxSenders;
   /** Every live send in the org, grouped by lead. */
   sendsByLead: Map<string, WriteSend[]>;
   capacity: Capacity;
@@ -79,6 +92,7 @@ export async function loadWriteContext(
   const [
     { data: settingsRow },
     { data: mailboxRows },
+    { data: senderRows },
     { data: sendRows },
     { data: bodyRows },
     { data: suppressionRows },
@@ -93,9 +107,12 @@ export async function loadWriteContext(
       .maybeSingle(),
     supabase
       .from("mailboxes")
-      .select("id, email, display_name, timezone, daily_cap")
+      .select("id, user_id, email, display_name, timezone, daily_cap")
       .eq("is_sendable", true)
       .order("id"),
+    // Six rows. Joined here rather than in the query above because it needs
+    // auth.users, which a browser-bound client cannot read.
+    supabase.rpc("mailbox_senders"),
     // Every live send, for the step arithmetic and the capacity index. No
     // bodies: at ~40 sends a day these rows are tiny and the bodies are not.
     // `scheduled_local` is not here either — /queue reads that column from its
@@ -134,14 +151,12 @@ export async function loadWriteContext(
   // Falling back to nulls is the right answer for exactly that case: a row the
   // dispatcher has taken is one nextStepFor() refuses to replace anyway.
   const sends = (sendRows ?? []).map((row) => ({
-    ...(row as Omit<WriteSend, "composed_subject" | "composed_body"> & {
-      mailbox_id: string | null;
-    }),
+    ...(row as Omit<WriteSend, "composed_subject" | "composed_body">),
     ...(bodies.get(row.id as string) ?? {
       composed_subject: null,
       composed_body: null,
     }),
-  })) as (WriteSend & { mailbox_id: string | null })[];
+  })) as WriteSend[];
 
   const sendsByLead = new Map<string, WriteSend[]>();
   for (const send of sends) {
@@ -153,6 +168,9 @@ export async function loadWriteContext(
   return {
     settings: settingsRow as BookingSettings & { dry_run: boolean },
     mailboxes,
+    senders: buildMailboxSenders(
+      (senderRows ?? []) as { mailbox_id: string; user_id: string }[],
+    ),
     sendsByLead,
     capacity: buildCapacity(mailboxes, sends, now),
     // Two years, matching the planner. A lookahead cannot reach past that.
@@ -165,6 +183,30 @@ export async function loadWriteContext(
     ),
     now,
   };
+}
+
+/**
+ * Why this lead cannot be written to, in words an operator can act on.
+ *
+ * Shared by the page and the action for the same reason the slot arithmetic is:
+ * the preview and the confirmation must not describe the same obstacle
+ * differently. "No sendable mailbox is connected" used to cover all of these,
+ * and it was wrong in the common case -- there WAS one, it just was not yours.
+ */
+export function routingBlockMessage(
+  blocked: RoutingBlock,
+  pinnedEmail?: string | null,
+): string {
+  switch (blocked) {
+    case "pin_unavailable":
+      return pinnedEmail
+        ? `This lead's earlier email went out from ${pinnedEmail}, which is paused or disconnected. Reconnect it on Mailboxes so the follow-up stays on the same thread.`
+        : "This lead's earlier email went out from a mailbox that is paused or disconnected. Reconnect it on Mailboxes so the follow-up stays on the same thread.";
+    case "no_owner":
+      return "Nobody has claimed this lead, so there is no account to send it from.";
+    case "owner_has_no_mailbox":
+      return "You have no connected mailbox, so there is nothing to send from. Connect one on Mailboxes.";
+  }
 }
 
 export type NextStep =

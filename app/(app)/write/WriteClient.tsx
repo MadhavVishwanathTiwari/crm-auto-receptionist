@@ -42,7 +42,14 @@ export interface Draft {
   replacesWasWritten: boolean;
   existingSubject: string | null;
   existingBody: string | null;
-  slot: { at: string; local: string; mailbox: string; mailboxEmail: string } | null;
+  slot: {
+    at: string;
+    local: string;
+    mailbox: string;
+    mailboxEmail: string;
+    /** Forced onto a colleague's mailbox to keep an existing thread intact. */
+    pinned: boolean;
+  } | null;
   slotProblem: string | null;
   audit: {
     outcome: string | null;
@@ -96,13 +103,17 @@ export function WriteClient({
   templates,
   dryRun,
   mailboxCount,
+  myMailboxEmail,
   senderName,
   loadError,
 }: {
   drafts: Draft[];
   templates: StarterTemplate[];
   dryRun: boolean;
+  /** How many mailboxes YOU can send from. Zero is a blocking state. */
   mailboxCount: number;
+  /** The address your emails leave from, for the header line. */
+  myMailboxEmail: string | null;
   senderName: string | null;
   loadError: string | null;
 }) {
@@ -281,6 +292,15 @@ export function WriteClient({
           </div>
           <p className="mt-0.5 text-[var(--color-ink-3)]">
             You write it. The app picks the hour.
+          </p>
+          {/* Whose outbox this session is. Standing context, so it does not
+              have to be re-read per lead. */}
+          <p className="mt-0.5 truncate text-[var(--color-ink-3)]">
+            {myMailboxEmail ? (
+              <>sending as {myMailboxEmail}</>
+            ) : (
+              <span className="text-[var(--color-warn)]">no mailbox of yours</span>
+            )}
           </p>
         </div>
 
@@ -469,12 +489,31 @@ export function WriteClient({
                 </span>
               </div>
 
+              {/*
+                Which account it leaves from, BEFORE it leaves. This was
+                computed and passed down for months and never rendered, so the
+                first anyone learned of the sending address was the confirmation
+                line after pressing Ctrl+Enter -- which is how an operator sent
+                three emails from a colleague's mailbox without noticing.
+              */}
+              {draft.slot && !draft.replacesWasWritten && (
+                <p className="mt-1 text-[var(--color-ink-2)]">
+                  from {draft.slot.mailboxEmail}
+                  {draft.slot.pinned ? (
+                    <span className="text-[var(--color-ink-3)]">
+                      {" "}
+                      to stay on the thread this lead already has
+                    </span>
+                  ) : null}
+                </p>
+              )}
+
               {(dryRun || mailboxCount === 0 || !senderName) && (
                 <p className="mt-1 text-[var(--color-warn)]">
                   {mailboxCount === 0
-                    ? "No mailbox is connected, so nothing can go out yet."
+                    ? "You have no connected mailbox, so nothing you write can go out. Connect one on Mailboxes."
                     : !senderName
-                      ? "No mailbox has a display name yet, so nothing can go out. Set one on Mailboxes."
+                      ? "Your mailbox has no display name yet, so nothing can go out. Set one on Mailboxes."
                       : "Dry run is on, so queued emails will sit here rather than send. Turn it off on Settings."}
                 </p>
               )}

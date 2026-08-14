@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 
 import { requireOrgContext } from "@/lib/org";
+import { buildMailboxSenders } from "@/lib/scheduler/routing";
 
 import { PAGE, PAGE_HEADER } from "../ui";
 import { MailboxList, type MailboxRow } from "./MailboxList";
@@ -46,14 +47,25 @@ export default async function MailboxesPage({
   const { supabase, userId } = await requireOrgContext();
   const { connected, error: errorCode } = await searchParams;
 
-  const { data: mailboxRows, error } = await supabase
-    .from("mailboxes")
-    .select(
-      "id, user_id, email, display_name, timezone, daily_cap, paused_at, disconnected_at, last_send_at, last_polled_at",
-    )
-    .order("created_at", { ascending: true });
+  const [{ data: mailboxRows, error }, { data: senderRows }] = await Promise.all([
+    supabase
+      .from("mailboxes")
+      .select(
+        "id, user_id, email, display_name, timezone, daily_cap, paused_at, disconnected_at, last_send_at, last_polled_at",
+      )
+      .order("created_at", { ascending: true }),
+    supabase.rpc("mailbox_senders"),
+  ]);
 
   const mailboxes = mailboxRows ?? [];
+
+  // Not `user_id === userId`. One human here holds two accounts -- one
+  // connected the mailbox, the other owns the leads -- so a strict comparison
+  // labels his own mailbox as somebody else's. Resolved in SQL against
+  // app.operator_aliases, the same way the send path decides it.
+  const senders = buildMailboxSenders(
+    (senderRows ?? []) as { mailbox_id: string; user_id: string }[],
+  );
 
   // Usage is counted against cap_date, which the claimer stamps from the
   // MAILBOX's timezone. Reading it back the same way is the only way the number
@@ -95,7 +107,7 @@ export default async function MailboxesPage({
     last_send_at: mailbox.last_send_at as string | null,
     last_polled_at: mailbox.last_polled_at as string | null,
     used_today: used.get(mailbox.id as string) ?? 0,
-    is_mine: mailbox.user_id === userId,
+    is_mine: senders.get(mailbox.id as string)?.has(userId) ?? false,
   }));
 
   const notice = errorCode

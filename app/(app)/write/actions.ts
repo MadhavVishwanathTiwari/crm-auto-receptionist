@@ -5,9 +5,15 @@ import { revalidatePath } from "next/cache";
 import { getOrgContext } from "@/lib/org";
 import { bookSlot } from "@/lib/scheduler/book";
 import {
+  mailboxesForSend,
+  pinnedMailboxIdFor,
+  type RoutingBlock,
+} from "@/lib/scheduler/routing";
+import {
   earliestDayFor,
   loadWriteContext,
   nextStepFor,
+  routingBlockMessage,
 } from "@/lib/write/context";
 
 /**
@@ -118,6 +124,20 @@ export async function queueWrittenEmail(input: {
 
   const zone = lead.timezone as string;
 
+  // Whose mailbox, before which slot. An email you wrote leaves from your own
+  // account, unless this lead's thread already started somewhere else, in which
+  // case it has to stay there. The RPC below enforces the same rule; this is
+  // what makes the message a sentence rather than a constraint violation.
+  const routed = mailboxesForSend(write.mailboxes, {
+    ownerId: lead.claimed_by as string | null,
+    pinnedMailboxId: pinnedMailboxIdFor(sends),
+    senders: write.senders,
+  });
+
+  if (!routed.ok) {
+    return { ok: false, error: routingBlockMessage(routed.blocked as RoutingBlock) };
+  }
+
   const slot = bookSlot({
     now: write.now,
     zone,
@@ -134,18 +154,23 @@ export async function queueWrittenEmail(input: {
     // same busy slot again. Same shape as the planner's seed.
     seed: `${lead.id}:${step.step}:${(step.replaces?.step_number ?? 0) + sends.length}`,
     settings: write.settings,
-    mailboxes: write.mailboxes,
+    mailboxes: routed.mailboxes,
     capacity: write.capacity,
     holidays: write.holidays,
   });
 
   if (!slot.ok) {
+    // "no_mailbox" is unreachable now that routing has already returned a
+    // non-empty list, but the exhaustive branch stays: it is one line, and the
+    // alternative is a wrong message the day somebody changes routing.
     return {
       ok: false,
       error:
         slot.reason === "no_mailbox"
           ? "No sendable mailbox is connected."
-          : `Every mailbox is full for the next ${write.settings.max_lookahead_days} days. Raise a daily cap or connect another mailbox.`,
+          : routed.reason === "pinned"
+            ? `${routed.pinnedTo?.email ?? "That mailbox"} is at its daily cap for the next ${write.settings.max_lookahead_days} days, and this lead's thread has to stay on it. Raise its cap on Mailboxes.`
+            : `Your mailbox is full for the next ${write.settings.max_lookahead_days} days. Raise its daily cap on Mailboxes.`,
     };
   }
 

@@ -14,11 +14,13 @@
 
 import { requireOrgContext } from "@/lib/org";
 import { bookSlot, reserve } from "@/lib/scheduler/book";
+import { mailboxesForSend, pinnedMailboxIdFor } from "@/lib/scheduler/routing";
 import { buildTemplateValues, type EvidenceForRender } from "@/lib/templates/render";
 import {
   earliestDayFor,
   loadWriteContext,
   nextStepFor,
+  routingBlockMessage,
 } from "@/lib/write/context";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
@@ -123,10 +125,21 @@ export default async function WritePage() {
     }
   }
 
-  // The From name every {{sender_name}} would render to. One mailbox in
-  // practice; if there are several, the preview uses the first, and the action
-  // re-picks by capacity anyway.
-  const senderName = write.mailboxes.find((m) => m.display_name)?.display_name ?? null;
+  // YOUR mailboxes, and nobody else's. This used to be "the first mailbox that
+  // has a display name", which on Ojas's screen rendered every {{sender_name}}
+  // as "Madhav" -- he would have signed somebody else's name on his own email.
+  const myMailboxes = mailboxesForSend(write.mailboxes, {
+    ownerId: userId,
+    pinnedMailboxId: null,
+    senders: write.senders,
+  });
+
+  // The From name every {{sender_name}} renders to. One mailbox per operator in
+  // practice; with several the preview uses the first and the action re-picks by
+  // capacity, which cannot change whose name it is.
+  const senderName = myMailboxes.ok
+    ? (myMailboxes.mailboxes.find((m) => m.display_name)?.display_name ?? null)
+    : null;
 
   const drafts: Draft[] = [];
 
@@ -146,27 +159,39 @@ export default async function WritePage() {
     const step = nextStepFor(sends);
     if (!step.ok) continue;
 
-    const slot = bookSlot({
-      now: write.now,
-      zone,
-      earliestDay: earliestDayFor(
-        step.step,
-        step.lastSentAt,
-        zone,
-        write.now,
-        write.holidays,
-      ),
-      step: step.step,
-      seed: `${lead.id}:${step.step}:${(step.replaces?.step_number ?? 0) + sends.length}`,
-      settings: write.settings,
-      mailboxes: write.mailboxes,
-      capacity: write.capacity,
-      holidays: write.holidays,
+    // Same call the action makes, so the address shown in the footer is the one
+    // the send actually leaves from. Every lead here is claimed by the current
+    // operator, so the owner is userId by construction -- passed explicitly
+    // rather than assumed, because the action reads it off the lead.
+    const routed = mailboxesForSend(write.mailboxes, {
+      ownerId: userId,
+      pinnedMailboxId: pinnedMailboxIdFor(sends),
+      senders: write.senders,
     });
+
+    const slot = routed.ok
+      ? bookSlot({
+          now: write.now,
+          zone,
+          earliestDay: earliestDayFor(
+            step.step,
+            step.lastSentAt,
+            zone,
+            write.now,
+            write.holidays,
+          ),
+          step: step.step,
+          seed: `${lead.id}:${step.step}:${(step.replaces?.step_number ?? 0) + sends.length}`,
+          settings: write.settings,
+          mailboxes: routed.mailboxes,
+          capacity: write.capacity,
+          holidays: write.holidays,
+        })
+      : null;
 
     // Hold the seat, so the next lead's preview is the time it would really
     // get rather than the same one this lead just took.
-    if (slot.ok) reserve(write.capacity, slot.mailbox.id, slot.capDate);
+    if (slot?.ok) reserve(write.capacity, slot.mailbox.id, slot.capDate);
 
     const leadEvidence = evidence.get(lead.id) ?? null;
 
@@ -194,20 +219,28 @@ export default async function WritePage() {
       replacesWasWritten: step.replaces?.composed_body != null,
       existingSubject: step.replaces?.composed_subject ?? null,
       existingBody: step.replaces?.composed_body ?? null,
-      slot: slot.ok
-        ? {
-            at: slot.at.toUTC().toISO()!,
-            local: slot.scheduledLocal,
-            mailbox: slot.mailbox.id,
-            mailboxEmail:
-              write.mailboxes.find((m) => m.id === slot.mailbox.id)?.email ?? "",
-          }
-        : null,
-      slotProblem: slot.ok
-        ? null
-        : slot.reason === "no_mailbox"
-          ? "No sendable mailbox is connected."
-          : `Every mailbox is full for the next ${write.settings.max_lookahead_days} days.`,
+      slot:
+        slot?.ok && routed.ok
+          ? {
+              at: slot.at.toUTC().toISO()!,
+              local: slot.scheduledLocal,
+              mailbox: slot.mailbox.id,
+              mailboxEmail:
+                write.mailboxes.find((m) => m.id === slot.mailbox.id)?.email ?? "",
+              // Saying so is what makes a colleague's address in the From line
+              // read as deliberate rather than as the bug it used to be.
+              pinned: routed.reason === "pinned",
+            }
+          : null,
+      slotProblem: !routed.ok
+        ? routingBlockMessage(routed.blocked, null)
+        : slot?.ok
+          ? null
+          : slot?.reason === "no_mailbox"
+            ? "No sendable mailbox is connected."
+            : routed.reason === "pinned"
+              ? `${routed.pinnedTo?.email ?? "That mailbox"} is at its cap for the next ${write.settings.max_lookahead_days} days, and this thread has to stay on it.`
+              : `Your mailbox is full for the next ${write.settings.max_lookahead_days} days.`,
       audit: leadEvidence
         ? {
             outcome: leadEvidence.outcome,
@@ -246,7 +279,12 @@ export default async function WritePage() {
       drafts={drafts}
       templates={templates}
       dryRun={write.settings.dry_run}
-      mailboxCount={write.mailboxes.length}
+      // Yours, not the org's. An org with a mailbox you cannot send from is
+      // the state this whole change exists to stop being invisible.
+      mailboxCount={myMailboxes.ok ? myMailboxes.mailboxes.length : 0}
+      myMailboxEmail={
+        myMailboxes.ok ? (myMailboxes.mailboxes[0]?.email ?? null) : null
+      }
       senderName={senderName}
       loadError={error?.message ?? null}
     />

@@ -46,6 +46,11 @@ Full build plan, capacity analysis, and phasing:
    the repeats-across-America list — "Glendale" alone never resolves. Adding a
    city is a one-line change; adding a *state* to the single-zone list is the
    thing to be suspicious of.
+7. **An email leaves from its own operator's mailbox.** Never the emptiest one.
+   `lib/scheduler/routing.ts` narrows the candidate list before `bookSlot` sees
+   it, and `queue_composed_send()` refuses anything else. The one exception is a
+   lead whose sequence already started somewhere: that is a Gmail requirement,
+   not a preference. See "Whose mailbox" below.
 
 ## Things that will bite you
 
@@ -146,6 +151,57 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
 - **`mailboxes.display_name` is null until an operator sets it.** It is the From
   header and `{{sender_name}}`; a template using that variable refuses to send
   rather than putting an email address where a human name belongs.
+
+## Whose mailbox (`0032`)
+
+For a long time, nothing in the send path had an opinion about this.
+`pickMailbox()` was handed every sendable mailbox in the org and returned the
+one with the most room, so an email Ojas hand-wrote, to a lead Ojas owned, went
+out from `madhav@` whenever that account was emptier. The reply then landed in
+Madhav's inbox, and the starter templates on Ojas's screen rendered
+`{{sender_name}}` as "Madhav", because that too resolved to *the first mailbox
+with a display name*.
+
+None of that was an RLS failure — org scoping held the whole time.
+`mailboxes.user_id` had existed since `0013` and the send path never read it.
+
+`lib/scheduler/routing.ts` is the missing half, in priority order:
+
+1. **Pinned** — a lead with any `sent` touch is committed to the mailbox that
+   sent it, whoever owns the lead now. `dispatch-sends` looks the prior
+   `provider_thread_id` up **per lead** and hands it to whichever mailbox the
+   next send names, and a Gmail threadId only exists inside the account that
+   issued it. This is a hard requirement, not a courtesy to the prospect.
+2. **Owner** — otherwise the mailboxes belonging to `leads.claimed_by`. Several
+   is fine; `pickMailbox` still spreads across them by capacity.
+3. **Refused** — never somebody else's address.
+
+- **`book.ts` did not change, and that is the point.** `buildCapacity` indexes
+  every mailbox in the org while `pickMailbox` only iterates the array it is
+  handed, so filtering at the call site is sufficient and the cap arithmetic
+  stays in one place. A pinned mailbox with no room today is not a refusal —
+  `bookSlot` walks to tomorrow, which is right for a follow-up.
+- **Ownership is not `user_id = auth.uid()`.** madhav holds two accounts here:
+  `madhav@autoreceptionist.io` connected the mailbox, and
+  `madhav@tryautoreceptionist.com` claimed the leads. A strict comparison
+  refuses all 30 of them while working perfectly for Ojas, which is a worse bug
+  than the one being fixed. `app.same_operator()` resolves it through
+  `app.operator_aliases` — exact id first, group as the fallback, the same order
+  `0026` established. `public.mailbox_senders()` serves the same answer to
+  TypeScript so alias resolution is never reimplemented there.
+- **`queue_composed_send()` is the gate, not the composer.** The RPC is
+  reachable by any member of the org, so filtering the UI's candidate list makes
+  the right thing easy and the wrong thing still possible. The check is on the
+  caller, plus the pinned-mailbox exception.
+- **`public.reroute_planned_sends_to_owner()` repairs what is already queued**,
+  admin only, dry run by default, button on `/import`. It skips pinned leads for
+  the reason above, and never touches `claimed`, `sending` or `sent`. It does not
+  re-time: the slot an operator was shown is the slot they were promised, and
+  `claim_due_sends()` re-checks caps at dispatch anyway.
+- **The composer names the sending address before you press Ctrl+Enter.**
+  `mailboxEmail` was computed and passed to `WriteClient` for months and never
+  rendered, so the first anyone learned of it was the confirmation line
+  afterwards. That is how three emails went out of the wrong account unnoticed.
 
 ## Writing the email yourself (`/write`)
 
@@ -429,6 +485,13 @@ Connection gotchas, both discovered the hard way:
   either way. See the send-path notes above.)
 - **`supabase gen types` and `db diff` shell out to Docker** even with a
   `--db-url`. Only `db push` works without it.
+- **A skewed machine clock fails the claiming tests and nothing else.**
+  `makeDueSend()` seeds `scheduled_at` from the *local* clock at `now() - 1
+  minute`, and `claim_due_sends()` requires `scheduled_at <= now()` measured by
+  the *database*. More than a minute of skew puts every seeded send in the
+  database's future, so the claim matches nothing and three tests in
+  `scheduled-sends.test.ts` fail with an empty result rather than an error.
+  Check with `select now()` against the machine clock before believing them.
 
 ## Related repos
 

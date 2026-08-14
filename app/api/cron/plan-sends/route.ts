@@ -22,8 +22,14 @@ import {
   buildCapacity,
   pickMailbox,
   reserve,
+  type BookingMailbox,
   type Capacity,
 } from "@/lib/scheduler/book";
+import {
+  buildMailboxSenders,
+  mailboxesForSend,
+  pinnedMailboxIdFor,
+} from "@/lib/scheduler/routing";
 import {
   CADENCE_BUSINESS_DAYS,
   MAX_STEP,
@@ -69,6 +75,8 @@ interface Settings {
 
 interface Mailbox {
   id: string;
+  /** The operator this mailbox belongs to. Decides who it may send for. */
+  user_id: string | null;
   timezone: string;
   daily_cap: number;
 }
@@ -88,6 +96,8 @@ interface Lead {
   website_domain: string | null;
   demo_ready_at: string | null;
   status: string;
+  /** Whose lead it is, and therefore whose mailbox its touches go out from. */
+  claimed_by: string | null;
 }
 
 interface Send {
@@ -116,6 +126,12 @@ export interface PlanReport {
   skipped_no_template: number;
   skipped_no_demo: number;
   skipped_suppressed: number;
+  /**
+   * Owner has no sendable mailbox, or the thread's mailbox went away. Counted
+   * rather than silently skipped: it means somebody's leads have quietly
+   * stopped, which is invisible if it only shows up as a smaller `planned`.
+   */
+  skipped_no_mailbox: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,27 +195,39 @@ async function planOrg(
     skipped_no_template: 0,
     skipped_no_demo: 0,
     skipped_suppressed: 0,
+    skipped_no_mailbox: 0,
   };
 
   const now = DateTime.now();
 
-  const [{ data: mailboxRows }, { data: templateRows }, { data: suppressionRows }] =
-    await Promise.all([
-      supabase
-        .from("mailboxes")
-        .select("id, timezone, daily_cap")
-        .eq("org_id", orgId)
-        .eq("is_sendable", true)
-        .order("id"),
-      supabase
-        .from("templates")
-        .select("id, step_number, angle_type, requires_demo")
-        .eq("org_id", orgId)
-        .eq("is_active", true),
-      supabase.from("suppressions").select("email_norm, domain").eq("org_id", orgId),
-    ]);
+  const [
+    { data: mailboxRows },
+    { data: senderRows },
+    { data: templateRows },
+    { data: suppressionRows },
+  ] = await Promise.all([
+    supabase
+      .from("mailboxes")
+      .select("id, user_id, timezone, daily_cap")
+      .eq("org_id", orgId)
+      .eq("is_sendable", true)
+      .order("id"),
+    // Which accounts may send from which mailbox. The org is explicit because
+    // this runs as the service role, which has no auth.uid() for
+    // app.current_org_id() to resolve.
+    supabase.rpc("mailbox_senders", { p_org: orgId }),
+    supabase
+      .from("templates")
+      .select("id, step_number, angle_type, requires_demo")
+      .eq("org_id", orgId)
+      .eq("is_active", true),
+    supabase.from("suppressions").select("email_norm, domain").eq("org_id", orgId),
+  ]);
 
   const mailboxes = (mailboxRows ?? []) as Mailbox[];
+  const senders = buildMailboxSenders(
+    (senderRows ?? []) as { mailbox_id: string; user_id: string }[],
+  );
   const templates = (templateRows ?? []) as Template[];
 
   const suppressedEmails = new Set(
@@ -239,7 +267,7 @@ async function planOrg(
   const { data: leadRows } = await supabase
     .from("leads")
     .select(
-      "id, angle_type, timezone, work_email_norm, website_domain, demo_ready_at, status",
+      "id, angle_type, timezone, work_email_norm, website_domain, demo_ready_at, status, claimed_by",
     )
     .eq("org_id", orgId)
     .eq("is_qualified", true)
@@ -421,9 +449,38 @@ async function planOrg(
 
     const attempt = (rollingForward?.plan_attempt ?? -1) + 1;
 
+    // Whose mailbox this touch may use. The lead's owner, or -- once a touch has
+    // gone out -- the account that already holds the thread, because the Gmail
+    // threadId dispatch-sends reuses only exists inside that one mailbox.
+    const routed = mailboxesForSend(mailboxes, {
+      ownerId: lead.claimed_by,
+      pinnedMailboxId: pinnedMailboxIdFor(leadSends),
+      senders,
+    });
+
+    if (!routed.ok) {
+      report.skipped_no_mailbox += 1;
+
+      await raiseAlert(supabase, {
+        org_id: orgId,
+        kind: "mailbox_auth",
+        lead_id: lead.id,
+        message:
+          routed.blocked === "pin_unavailable"
+            ? "This lead's thread started on a mailbox that is now paused or disconnected, so its follow-up cannot go out."
+            : "This lead's owner has no sendable mailbox, so nothing can be planned for it.",
+        dedupe_token: `no-owner-mailbox:${lead.id}`,
+      });
+
+      continue;
+    }
+
     // Walk forward until a day has both a slot and a mailbox with room on it.
     let cursor: DateTime = earliestDay;
-    let placed: { at: DateTime; mailbox: Mailbox; capDate: string } | null = null;
+    // BookingMailbox, not Mailbox: pickMailbox returns what book.ts knows about
+    // a mailbox, and only the id is read from it here.
+    let placed: { at: DateTime; mailbox: BookingMailbox; capDate: string } | null =
+      null;
 
     for (let tries = 0; tries <= settings.max_lookahead_days; tries++) {
       const slot = nextSlot({
@@ -439,7 +496,7 @@ async function planOrg(
 
       if (!slot.ok) break;
 
-      const chosen = pickMailbox(capacity, mailboxes, slot.at);
+      const chosen = pickMailbox(capacity, routed.mailboxes, slot.at);
       if (chosen) {
         placed = { at: slot.at, mailbox: chosen.mailbox, capDate: chosen.capDate };
         break;

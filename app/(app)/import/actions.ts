@@ -76,3 +76,67 @@ export async function backfillLeadOwners(
     problems: rows.filter((row) => PROBLEM_OUTCOMES.has(row.outcome)).slice(0, 50),
   };
 }
+
+/**
+ * The repair for sends already queued on the wrong person's mailbox.
+ *
+ * Routing was org-wide until 0032: pickMailbox() returned whichever mailbox was
+ * emptiest, so an email one operator wrote went out from the other's account and
+ * the reply landed in the wrong inbox. Fixing that forward does nothing for what
+ * is already booked, and those go out within the day.
+ *
+ * Dry run first for the same reason as the ownership backfill: the tally is the
+ * only chance to see a lead pinned to a thread, or an owner with no mailbox,
+ * before anything moves.
+ */
+export interface RerouteRow {
+  lead_id: string;
+  company: string | null;
+  send_id: string;
+  step_number: number;
+  from_mailbox: string | null;
+  to_mailbox: string | null;
+  outcome: string;
+}
+
+export interface RerouteResult {
+  ok: boolean;
+  error?: string;
+  dryRun: boolean;
+  counts: Record<string, number>;
+  /** Everything that is not already correct, so it can be read before running. */
+  notable: RerouteRow[];
+}
+
+export async function rerouteSendsToOwner(dryRun: boolean): Promise<RerouteResult> {
+  const context = await getOrgContext();
+  if (!context) {
+    return { ok: false, error: "Not signed in.", dryRun, counts: {}, notable: [] };
+  }
+
+  const { data, error } = await context.supabase.rpc(
+    "reroute_planned_sends_to_owner",
+    { p_dry_run: dryRun },
+  );
+
+  if (error) {
+    return { ok: false, error: error.message, dryRun, counts: {}, notable: [] };
+  }
+
+  const rows = (data ?? []) as RerouteRow[];
+  const counts: Record<string, number> = {};
+  for (const row of rows) counts[row.outcome] = (counts[row.outcome] ?? 0) + 1;
+
+  if (!dryRun) {
+    for (const path of ["/queue", "/write", "/leads", "/mailboxes"]) {
+      revalidatePath(path);
+    }
+  }
+
+  return {
+    ok: true,
+    dryRun,
+    counts,
+    notable: rows.filter((row) => row.outcome !== "already correct").slice(0, 50),
+  };
+}
