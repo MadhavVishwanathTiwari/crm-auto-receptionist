@@ -36,6 +36,17 @@ Full build plan, capacity analysis, and phasing:
    for manual assignment and is never scheduled. No state→timezone table — it
    silently corrupts FL, TX, TN, ID, OR, KS, NE, ND, SD, MI, IN, KY and Arizona.
 
+   `lib/timezone/places.ts` is the one narrow exception and it is not that
+   table. Coordinates win whenever they exist. Failing those, a state lying
+   entirely inside one zone (CT, GA, CA, …) resolves from the state, because
+   that is a fact rather than a majority; every state a boundary crosses
+   resolves from a **named city** or not at all, and so does Arizona, whose
+   Navajo Nation towns are deliberately absent so they stay manual. A bare city
+   with no state resolves only if the name is unique in the table and not on
+   the repeats-across-America list — "Glendale" alone never resolves. Adding a
+   city is a one-line change; adding a *state* to the single-zone list is the
+   thing to be suspicious of.
+
 ## Things that will bite you
 
 - **A PostgREST UPDATE denied by RLS returns 204 with zero rows, not an error.**
