@@ -16,7 +16,7 @@ config({ path: ".env", quiet: true });
 
 const BUNDLE_DIRS = [".next/static", ".next/server/app"];
 
-// Literal variable names that should never appear in client output.
+// Server-only variable names that client code must never READ.
 const FORBIDDEN_NAMES = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "SUPABASE_SECRET_KEY",
@@ -30,6 +30,36 @@ const FORBIDDEN_NAMES = [
 const FORBIDDEN_VALUES = FORBIDDEN_NAMES.map((n) => process.env[n])
   .filter((v) => typeof v === "string" && v.length >= 20)
   .map((v) => v.trim());
+
+/**
+ * Matches an environment READ of `name`, not the name in passing.
+ *
+ * The bare name used to be enough, which flagged the /settings help text for
+ * telling an operator to put CRON_SECRET in Vault — documentation, in a client
+ * component, quite correctly naming the variable it is documenting. A guard
+ * that cries wolf over its own instructions gets muted, and a muted guard is
+ * worth nothing on the day it is right.
+ *
+ * What actually matters is client code reaching for the value: `process.env.X`,
+ * `env["X"]`, or a destructure out of either. Covers the minified shapes too —
+ * the object may be renamed, so the property access is the anchor, and the
+ * literal-VALUE scan below stays as the backstop for a key inlined at build.
+ */
+function envAccess(name) {
+  return new RegExp(
+    // process.env.NAME / e.env.NAME / env.NAME
+    String.raw`\benv\s*\.\s*${name}\b` +
+      // env["NAME"] / env['NAME'] / env[`NAME`]
+      String.raw`|\benv\s*\[\s*["'\`]${name}["'\`]\s*\]` +
+      // { NAME } = process.env  (and the minified `NAME:` rename form)
+      String.raw`|\{[^{}]*\b${name}\b[^{}]*\}\s*=\s*[\w.$]*\benv\b`,
+  );
+}
+
+const FORBIDDEN_READS = FORBIDDEN_NAMES.map((name) => ({
+  name,
+  pattern: envAccess(name),
+}));
 
 function* walk(dir) {
   if (!existsSync(dir)) return;
@@ -50,8 +80,8 @@ for (const dir of BUNDLE_DIRS) {
   for (const file of walk(dir)) {
     const text = readFileSync(file, "utf8");
     if (!isServer) {
-      for (const name of FORBIDDEN_NAMES) {
-        if (text.includes(name)) hits.push(`${file}: references ${name}`);
+      for (const { name, pattern } of FORBIDDEN_READS) {
+        if (pattern.test(text)) hits.push(`${file}: reads ${name}`);
       }
     }
     for (const value of FORBIDDEN_VALUES) {
