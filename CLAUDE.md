@@ -28,8 +28,14 @@ Full build plan, capacity analysis, and phasing:
    trigger recomputes `leads.status`. `leads_guard_protected_columns` rejects
    direct writes to `status`, `claimed_by`, and the demo URLs. Terminal outcomes
    go in as a `closed` event, so even those pass through the log.
-4. **`work_email` is the only send target.** `email_1/2/3` and `likely_email`
-   are imported for reference and must never be sent to.
+4. **`work_email` is the only address, not merely the only send target.**
+   `email_1/2/3` and `likely_email` were dropped in `0034`. They imported "for
+   reference", nothing ever read them, and what they held was mostly webmaster
+   addresses, a site builder's support desk and placeholders left in an unedited
+   template. A column whose whole contract is that nobody may use it is a column
+   that exists to be used by mistake. `leads.raw` still has the original row if a
+   question ever needs one. A second address comes back as a feature with a
+   reason to read it, not as spare columns.
 5. **All scheduling math is prospect-local.** Nobody sees UTC or IST. The UI
    shows the operator's local time with prospect-local alongside.
 6. **Never guess a timezone.** A lead with no resolvable IANA zone is flagged

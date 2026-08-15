@@ -22,7 +22,7 @@ export async function LeadDrawerData({ leadId }: { leadId: string }) {
     supabase
       .from("leads")
       .select(
-        "id, company_name, first_name, last_name, title, work_email, email_1, email_2, email_3, likely_email, phone, website, city, state, postal_code, timezone, timezone_source, industry, rating, reviews_count, is_qualified, status, claimed_by, terminal_outcome, halt_reason",
+        "id, company_name, first_name, last_name, title, work_email, phone, website, city, state, postal_code, timezone, timezone_source, industry, rating, reviews_count, is_qualified, status, claimed_by, terminal_outcome, halt_reason",
       )
       .eq("id", leadId)
       .maybeSingle(),

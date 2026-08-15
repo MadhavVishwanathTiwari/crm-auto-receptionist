@@ -25,10 +25,6 @@ export interface LeadDetail {
   last_name: string | null;
   title: string | null;
   work_email: string | null;
-  email_1: string | null;
-  email_2: string | null;
-  email_3: string | null;
-  likely_email: string | null;
   phone: string | null;
   website: string | null;
   city: string | null;
@@ -215,23 +211,6 @@ export function LeadDrawer({
             />
           )}
         </section>
-
-        {/* Reference addresses. Never a send target — work_email is the only one
-            the scheduler or the Gmail layer will ever read. */}
-        {(lead.email_1 ?? lead.email_2 ?? lead.email_3 ?? lead.likely_email) && (
-          <section>
-            <h3 className="mb-1 text-[var(--color-ink-3)]">
-              Other addresses (reference only, never emailed)
-            </h3>
-            <div className="space-y-0.5 text-[var(--color-ink-2)]">
-              {[lead.email_1, lead.email_2, lead.email_3, lead.likely_email]
-                .filter(Boolean)
-                .map((address) => (
-                  <div key={address}>{address}</div>
-                ))}
-            </div>
-          </section>
-        )}
 
         <section>
           <h3 className="mb-2 text-[var(--color-ink-3)]">Timezone</h3>

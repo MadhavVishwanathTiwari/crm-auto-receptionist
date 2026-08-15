@@ -21,8 +21,8 @@
 // being rows in this table rather than a second pipeline; suppression, caps,
 // threading, stall reaping and the dry-run switch are written once.
 //
-// work_email is the only send target. email_1/2/3 and likely_email are imported
-// for reference and are not read anywhere in this file.
+// work_email is the only address a lead has. The reference columns that used to
+// sit beside it were dropped in 0034 precisely so this file cannot pick wrong.
 //
 // Service role: no user session exists, and it must reach every org.
 

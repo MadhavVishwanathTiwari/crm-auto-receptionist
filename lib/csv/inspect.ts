@@ -69,14 +69,7 @@ const AGGREGATOR_DOMAINS = new Set([
   "thumbtack.com",
 ]);
 
-const EMAIL_FIELDS: CanonicalField[] = [
-  "work_email",
-  "email_1",
-  "email_2",
-  "email_3",
-  "likely_email",
-  "lead_owner",
-];
+const EMAIL_FIELDS: CanonicalField[] = ["work_email", "lead_owner"];
 
 /**
  * Fields where an empty column changes what the app can do with the lead —

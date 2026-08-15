@@ -18,7 +18,7 @@ import { splitFullName } from "@/lib/normalize";
 export type CanonicalField =
   | "place_id" | "company_name" | "full_name" | "first_name" | "last_name"
   | "middle_name" | "name_suffix"
-  | "title" | "work_email" | "email_1" | "email_2" | "email_3" | "likely_email"
+  | "title" | "work_email"
   | "email_confidence" | "email_provider" | "verification"
   | "phone" | "website" | "gmaps_url"
   | "city" | "state" | "postal_code" | "country_code"
@@ -73,13 +73,14 @@ export const FIELD_SPECS: FieldSpec[] = [
   // IS the business.
   { field: "title", label: "Job title", synonyms: ["title", "job_title", "jobtitle", "role"] },
 
-  // Imported for reference only. work_email is the sole send target; nothing in
-  // the scheduler or the Gmail layer reads these.
-  { field: "email_1", label: "Email 1 (reference)", synonyms: ["email_1", "email1"] },
-  { field: "email_2", label: "Email 2 (reference)", synonyms: ["email_2", "email2"] },
-  { field: "email_3", label: "Email 3 (reference)", synonyms: ["email_3", "email3"] },
-  { field: "likely_email", label: "Likely email (reference)",
-    synonyms: ["likely_email", "likelyemail", "guessed_email"] },
+  // There is deliberately nowhere to put a second address. Clay's email_1/2/3
+  // and likely_email used to import "for reference" and were never read by
+  // anything — they were columns whose entire contract was that nobody may use
+  // them. Their values are still in `leads.raw` if a question ever needs one.
+  //
+  // The scraped ones were mostly noise anyway: webmaster addresses, a website
+  // builder's support desk, and placeholders like example@domain.com lifted off
+  // an unedited template.
 
   { field: "email_confidence", label: "Email confidence", exact: true,
     synonyms: ["confidence", "email_confidence"] },
@@ -153,8 +154,9 @@ export type ColumnMapping = Partial<Record<CanonicalField, string>>;
  * Best-effort mapping of headers onto canonical fields.
  *
  * Exact normalized match first, then a containment match, and every header is
- * claimed at most once — otherwise "email" would win work_email, email_1 and
- * likely_email simultaneously.
+ * claimed at most once — otherwise a header like `email_provider` would satisfy
+ * work_email's `email` synonym as readily as its own, and the send target would
+ * be whichever spec happened to ask first.
  */
 export function autoMapColumns(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {};
@@ -272,10 +274,6 @@ export function mapRow(
     title: text("title"),
 
     work_email: cleanEmail(raw("work_email")),
-    email_1: cleanEmail(raw("email_1")),
-    email_2: cleanEmail(raw("email_2")),
-    email_3: cleanEmail(raw("email_3")),
-    likely_email: cleanEmail(raw("likely_email")),
     email_confidence: cleanConfidence(raw("email_confidence")),
     email_provider: text("email_provider"),
     verification: cleanVerification(raw("verification")),

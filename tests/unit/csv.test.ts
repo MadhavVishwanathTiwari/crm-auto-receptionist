@@ -195,10 +195,26 @@ describe("auto column mapping", () => {
   });
 
   it("never assigns one header to two fields", () => {
-    // "email" must not simultaneously win work_email, email_1 and likely_email.
-    const mapping = autoMapColumns(["email", "email_1", "likely_email"]);
+    // `email_provider` satisfies work_email's `email` synonym as readily as its
+    // own, so without the claim rule the send target would be an ESP name.
+    const mapping = autoMapColumns(["email", "email_provider", "company"]);
     const used = Object.values(mapping);
+
     expect(new Set(used).size).toBe(used.length);
+    expect(mapping.work_email).toBe("email");
+    expect(mapping.email_provider).toBe("email_provider");
+  });
+
+  it("has nowhere to put a second address", () => {
+    // 0034 dropped email_1/2/3 and likely_email. The columns still arrive in
+    // real Clay exports; they must now land in "not imported" rather than in a
+    // column nothing is allowed to read.
+    const mapping = autoMapColumns(CLAY_HEADERS.split(","));
+
+    expect(mapping.work_email).toBe("work_email");
+    for (const field of ["email_1", "email_2", "email_3", "likely_email"]) {
+      expect(mapping[field as keyof typeof mapping]).toBeUndefined();
+    }
   });
 
   it("survives reordered columns", () => {

@@ -171,8 +171,9 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
     remapped.current = true;
     setMapping((current) => {
       const next = { ...current };
-      // A header may back only one field, matching autoMapColumns. Letting
-      // "email" feed both work_email and likely_email would send to a guess.
+      // A header may back only one field, matching autoMapColumns. Letting one
+      // column feed two fields is how a send target ends up holding whatever
+      // the other field wanted.
       for (const key of Object.keys(next) as CanonicalField[]) {
         if (next[key] === header) delete next[key];
       }
