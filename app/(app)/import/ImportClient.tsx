@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { FieldStats, MappingWarning } from "@/lib/csv/inspect";
 import { FIELD_SPECS, type CanonicalField } from "@/lib/csv/mapping";
 
 import { BUTTON, INPUT, OUTCOME_TONE, PANEL } from "../ui";
@@ -17,6 +18,16 @@ interface Preview {
   mapping: Mapping;
   sample: Array<Record<string, string>>;
   invalidRows: number;
+  fieldStats: FieldStats;
+  warnings: MappingWarning[];
+  unmapped: string[];
+}
+
+/** The half of a preview that changes when the operator remaps a column. */
+interface Insight {
+  fieldStats: FieldStats;
+  warnings: MappingWarning[];
+  unmapped: string[];
 }
 
 interface Result {
@@ -27,13 +38,27 @@ interface Result {
   ownershipError?: string;
 }
 
+/** A mapping from a previous upload of a file with exactly these columns. */
+export interface SavedMapping {
+  filename: string;
+  headers: string[];
+  mapping: Mapping;
+}
+
 const SHAPE_LABEL = {
   clay: "Clay export",
   legacy_sheet: "Legacy outreach sheet",
   custom: "Unrecognised layout",
 } as const;
 
-export function ImportClient() {
+/** Debounce on re-previewing after a remap, so dragging through a select does not spam. */
+const REMAP_DELAY_MS = 400;
+
+function sameHeaders(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i]);
+}
+
+export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
   const router = useRouter();
 
   // The file text lives here for the whole flow. Preview and commit are both
@@ -41,11 +66,17 @@ export function ImportClient() {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [mapping, setMapping] = useState<Mapping>({});
+  const [insight, setInsight] = useState<Insight | null>(null);
+  const [recomputing, setRecomputing] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function post(path: string, body: unknown) {
+  // Only a manual remap should trigger a re-preview; a mapping that just came
+  // back from the server is already described by the insight beside it.
+  const remapped = useRef(false);
+
+  const post = useCallback(async (path: string, body: unknown) => {
     const response = await fetch(path, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -54,6 +85,17 @@ export function ImportClient() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error ?? "Something went wrong.");
     return payload;
+  }, []);
+
+  function adopt(next: Preview) {
+    setPreview(next);
+    setMapping(next.mapping);
+    setInsight({
+      fieldStats: next.fieldStats,
+      warnings: next.warnings,
+      unmapped: next.unmapped,
+    });
+    remapped.current = false;
   }
 
   async function onPick(event: React.ChangeEvent<HTMLInputElement>) {
@@ -64,13 +106,12 @@ export function ImportClient() {
     setError(null);
     setResult(null);
     setPreview(null);
+    setInsight(null);
 
     try {
       const text = await picked.text();
       setFile({ name: picked.name, text });
-      const next: Preview = await post("/api/import/preview", { text });
-      setPreview(next);
-      setMapping(next.mapping);
+      adopt(await post("/api/import/preview", { text }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       setFile(null);
@@ -85,12 +126,7 @@ export function ImportClient() {
     setBusy(true);
     setError(null);
     try {
-      const next: Preview = await post("/api/import/preview", {
-        text: file.text,
-        headerRowIndex,
-      });
-      setPreview(next);
-      setMapping(next.mapping);
+      adopt(await post("/api/import/preview", { text: file.text, headerRowIndex }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -98,7 +134,41 @@ export function ImportClient() {
     }
   }
 
+  // Recompute the evidence after a remap. The preview route is stateless and
+  // takes the mapping as an override, so this is the same call as the first
+  // one — which keeps one implementation of what a mapping means.
+  useEffect(() => {
+    if (!file || !preview || !remapped.current) return;
+
+    const timer = setTimeout(async () => {
+      setRecomputing(true);
+      try {
+        const next: Preview = await post("/api/import/preview", {
+          text: file.text,
+          headerRowIndex: preview.headerRowIndex,
+          mapping,
+        });
+        setInsight({
+          fieldStats: next.fieldStats,
+          warnings: next.warnings,
+          unmapped: next.unmapped,
+        });
+        setPreview((current) =>
+          current ? { ...current, invalidRows: next.invalidRows } : current,
+        );
+      } catch {
+        // A failed recompute leaves the previous evidence on screen, which is
+        // stale rather than wrong, and the commit re-derives everything anyway.
+      } finally {
+        setRecomputing(false);
+      }
+    }, REMAP_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [mapping, file, preview, post]);
+
   function remap(field: CanonicalField, header: string) {
+    remapped.current = true;
     setMapping((current) => {
       const next = { ...current };
       // A header may back only one field, matching autoMapColumns. Letting
@@ -110,6 +180,11 @@ export function ImportClient() {
       else next[field] = header;
       return next;
     });
+  }
+
+  function reuse(saved: SavedMapping) {
+    remapped.current = true;
+    setMapping(saved.mapping);
   }
 
   async function onCommit() {
@@ -125,6 +200,7 @@ export function ImportClient() {
       });
       setResult(next);
       setPreview(null);
+      setInsight(null);
       setFile(null);
       // The leads grid and the review queue both changed.
       router.refresh();
@@ -138,6 +214,17 @@ export function ImportClient() {
   const missingRequired = FIELD_SPECS.filter(
     (spec) => spec.required && !mapping[spec.field],
   );
+
+  const fieldWarnings = new Map<CanonicalField, string>();
+  const readiness: string[] = [];
+  for (const warning of insight?.warnings ?? []) {
+    if (warning.field) fieldWarnings.set(warning.field, warning.message);
+    else readiness.push(warning.message);
+  }
+
+  const reusable = preview
+    ? saved.find((entry) => sameHeaders(entry.headers, preview.headers))
+    : undefined;
 
   return (
     <div className="space-y-4">
@@ -154,8 +241,9 @@ export function ImportClient() {
           className={INPUT + " w-[400px] file:mr-3 file:border-0 file:bg-transparent file:text-[var(--color-ink-2)]"}
         />
         <p className="mt-2 text-[var(--color-ink-3)]">
-          Clay exports and the legacy outreach sheet are both recognised. Nothing
-          is written until you commit.
+          Clay exports and the legacy outreach sheet are both recognised, and any
+          other layout can be mapped by hand below. Nothing is written until you
+          commit.
         </p>
       </div>
 
@@ -231,35 +319,118 @@ export function ImportClient() {
                 className={INPUT + " tabular ml-1 w-16"}
               />
             </label>
+
+            {reusable && (
+              <p className="mt-3 flex items-center gap-3 text-[var(--color-ink-2)]">
+                <span>
+                  These columns match an earlier upload,{" "}
+                  <span className="text-[var(--color-ink)]">{reusable.filename}</span>.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => reuse(reusable)}
+                  disabled={busy}
+                  className={BUTTON}
+                >
+                  Reuse that mapping
+                </button>
+              </p>
+            )}
           </div>
 
-          <div className={PANEL}>
-            <h2 className="mb-3 text-[var(--color-ink)]">Column mapping</h2>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-              {FIELD_SPECS.map((spec) => (
-                <label key={spec.field} className="flex items-center gap-2">
-                  <span className="w-44 shrink-0 text-[var(--color-ink-2)]">
-                    {spec.label}
-                    {spec.required && (
-                      <span className="text-[var(--color-danger)]"> *</span>
-                    )}
-                  </span>
-                  <select
-                    value={mapping[spec.field] ?? ""}
-                    disabled={busy}
-                    onChange={(e) => remap(spec.field, e.target.value)}
-                    className={INPUT + " min-w-0 flex-1"}
-                  >
-                    <option value="">— not imported —</option>
-                    {preview.headers.map((header) => (
-                      <option key={header} value={header}>
-                        {header}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
+          {readiness.length > 0 && (
+            <div className={PANEL}>
+              <h2 className="mb-2 text-[var(--color-ink)]">
+                These leads will import, but
+              </h2>
+              <ul className="max-w-[80ch] space-y-1 text-[var(--color-warn)]">
+                {readiness.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
             </div>
+          )}
+
+          <div className={PANEL}>
+            <div className="mb-3 flex items-baseline gap-3">
+              <h2 className="text-[var(--color-ink)]">Column mapping</h2>
+              <span className="text-[var(--color-ink-3)]">
+                {recomputing
+                  ? "checking..."
+                  : `what ${preview.totalRows === 1 ? "the row" : "these rows"} would become`}
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              {FIELD_SPECS.map((spec) => {
+                const stat = insight?.fieldStats[spec.field];
+                const warning = fieldWarnings.get(spec.field);
+                const empty = stat !== undefined && stat.filled === 0;
+
+                return (
+                  <div key={spec.field}>
+                    <label className="flex items-center gap-3">
+                      <span className="w-40 shrink-0 text-[var(--color-ink-2)]">
+                        {spec.label}
+                        {spec.required && (
+                          <span className="text-[var(--color-danger)]"> *</span>
+                        )}
+                      </span>
+                      <select
+                        value={mapping[spec.field] ?? ""}
+                        disabled={busy}
+                        onChange={(e) => remap(spec.field, e.target.value)}
+                        className={INPUT + " w-56 shrink-0"}
+                      >
+                        <option value="">— not imported —</option>
+                        {preview.headers.map((header) => (
+                          <option key={header} value={header}>
+                            {header}
+                          </option>
+                        ))}
+                      </select>
+
+                      <span
+                        className={
+                          "tabular w-16 shrink-0 text-right " +
+                          (empty
+                            ? "text-[var(--color-danger)]"
+                            : warning
+                              ? "text-[var(--color-warn)]"
+                              : "text-[var(--color-ink-3)]")
+                        }
+                      >
+                        {stat ? `${stat.filled}/${stat.total}` : ""}
+                      </span>
+
+                      <span
+                        className="min-w-0 flex-1 truncate text-[var(--color-ink-3)]"
+                        title={stat?.examples.join("  ·  ")}
+                      >
+                        {stat?.examples[0] ?? ""}
+                      </span>
+                    </label>
+
+                    {warning && (
+                      <p className="ml-[11.75rem] max-w-[70ch] text-[var(--color-warn)]">
+                        {warning}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {insight && insight.unmapped.length > 0 && (
+              <div className="mt-4 border-t border-[var(--color-line)] pt-3">
+                <p className="max-w-[80ch] text-[var(--color-ink-3)]">
+                  <span className="text-[var(--color-ink-2)]">
+                    Not imported ({insight.unmapped.length}):
+                  </span>{" "}
+                  {insight.unmapped.join(", ")}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className={PANEL + " overflow-x-auto"}>

@@ -12,6 +12,13 @@
 import type { OrgContext } from "@/lib/org";
 
 import { collectLookupKeys, partitionRows, type ExistingKeys } from "./dedupe";
+import {
+  collectFieldStats,
+  mappingWarnings,
+  unmappedHeaders,
+  type FieldStats,
+  type MappingWarning,
+} from "./inspect";
 import { autoMapColumns, detectShape, mapRow, type ColumnMapping } from "./mapping";
 import { parseCsv } from "./parse";
 
@@ -33,6 +40,12 @@ export interface ImportPreview {
   sample: Array<Record<string, string>>;
   /** Rows that cannot be inserted at all, found before anything is written. */
   invalidRows: number;
+  /** Per mapped field: how often the column produced a value, and which. */
+  fieldStats: FieldStats;
+  /** Everything wrong with this mapping. None of it blocks a commit. */
+  warnings: MappingWarning[];
+  /** Columns no field claims, so a dropped one is visible rather than absent. */
+  unmapped: string[];
 }
 
 export function previewCsv(
@@ -46,9 +59,10 @@ export function previewCsv(
   // Cheap enough to map every row here: it is the same work commit does, and
   // showing "12 rows will fail" before the write is the whole point of a
   // preview step.
-  const invalidRows = parsed.rows.filter(
-    (row) => mapRow(row, mapping).errors.length > 0,
-  ).length;
+  const mapped = parsed.rows.map((row) => mapRow(row, mapping));
+  const invalidRows = mapped.filter((row) => row.errors.length > 0).length;
+
+  const fieldStats = collectFieldStats(parsed.rows, mapped, mapping);
 
   return {
     headers: parsed.headers,
@@ -58,6 +72,9 @@ export function previewCsv(
     mapping,
     sample: parsed.rows.slice(0, 5),
     invalidRows,
+    fieldStats,
+    warnings: mappingWarnings(mapping, fieldStats),
+    unmapped: unmappedHeaders(parsed.headers, mapping),
   };
 }
 

@@ -17,6 +17,7 @@ import { splitFullName } from "@/lib/normalize";
 
 export type CanonicalField =
   | "place_id" | "company_name" | "full_name" | "first_name" | "last_name"
+  | "middle_name" | "name_suffix"
   | "title" | "work_email" | "email_1" | "email_2" | "email_3" | "likely_email"
   | "email_confidence" | "email_provider" | "verification"
   | "phone" | "website" | "gmaps_url"
@@ -33,6 +34,19 @@ interface FieldSpec {
   label: string;
   synonyms: string[];
   required?: boolean;
+  /**
+   * Synonyms that only apply once every field has had a chance at a real match.
+   * `url` is the case this exists for: it means the company site in a bare CSV
+   * and the Google Maps link in a Clay export, and the only thing telling those
+   * apart is whether a better `website` column is also present.
+   */
+  weak?: string[];
+  /**
+   * Skip the containment pass for this spec. For a synonym that is a common
+   * word, containment matches far more than it should — "confidence" is inside
+   * "Use AI Confidence Reason", which is a prose paragraph and not a grade.
+   */
+  exact?: boolean;
 }
 
 export const FIELD_SPECS: FieldSpec[] = [
@@ -43,10 +57,17 @@ export const FIELD_SPECS: FieldSpec[] = [
 
   { field: "place_id", label: "Google place ID",
     synonyms: ["placeid", "place_id", "google_place_id"] },
+  // "person_name" normalizes to 10 characters, so unlike "name" it clears the
+  // containment floor below and catches an export that qualifies the column:
+  // "Use AI Person Name", "decision_maker_person_name".
   { field: "full_name", label: "Full name",
-    synonyms: ["full_name", "fullname", "name", "contact_name"] },
+    synonyms: ["full_name", "fullname", "name", "contact_name", "person_name"] },
   { field: "first_name", label: "First name", synonyms: ["first_name", "firstname"] },
   { field: "last_name", label: "Last name", synonyms: ["last_name", "lastname", "surname"] },
+  // Normally derived by splitFullName rather than mapped. They are here so a
+  // file that carries them as their own columns can still be mapped by hand.
+  { field: "middle_name", label: "Middle name", synonyms: ["middle_name", "middlename"] },
+  { field: "name_suffix", label: "Name suffix", synonyms: ["name_suffix", "namesuffix", "suffix"] },
   // Person's job title. Both supported shapes carry company_name separately, so
   // this is never the business name — unlike a raw Apify export, where `title`
   // IS the business.
@@ -60,7 +81,7 @@ export const FIELD_SPECS: FieldSpec[] = [
   { field: "likely_email", label: "Likely email (reference)",
     synonyms: ["likely_email", "likelyemail", "guessed_email"] },
 
-  { field: "email_confidence", label: "Email confidence",
+  { field: "email_confidence", label: "Email confidence", exact: true,
     synonyms: ["confidence", "email_confidence"] },
   { field: "email_provider", label: "Email provider",
     synonyms: ["email_provider", "esp", "provider"] },
@@ -68,9 +89,15 @@ export const FIELD_SPECS: FieldSpec[] = [
     synonyms: ["verification", "verified", "email_status"] },
 
   { field: "phone", label: "Phone", synonyms: ["phone", "phone_number", "telephone", "mobile"] },
-  { field: "website", label: "Website",
-    synonyms: ["website", "site", "url", "domain", "scrape_website", "company_website"] },
-  { field: "gmaps_url", label: "Google Maps URL",
+  // `url` is weak on both, and website is listed first, so it falls to whichever
+  // of the two has nothing better. A Clay export carrying `url` alongside a real
+  // `website` column means the Google Maps link by it; a bare CSV means the site.
+  // Getting this backwards is expensive: website_domain is generated from
+  // website, a maps link normalizes to google.com, and that is the join key the
+  // demo builder and near-duplicate detection both use.
+  { field: "website", label: "Website", weak: ["url"],
+    synonyms: ["website", "site", "domain", "scrape_website", "company_website"] },
+  { field: "gmaps_url", label: "Google Maps URL", weak: ["url"],
     synonyms: ["gmaps_url", "gmapsurl", "google_maps_url", "maps_url"] },
 
   { field: "city", label: "City", synonyms: ["city", "town", "locality"] },
@@ -134,6 +161,12 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
   const taken = new Set<string>();
   const normalized = headers.map((h) => ({ header: h, key: normalizeHeader(h) }));
 
+  const claim = (field: CanonicalField, hit?: { header: string }) => {
+    if (!hit) return;
+    mapping[field] = hit.header;
+    taken.add(hit.header);
+  };
+
   for (const spec of FIELD_SPECS) {
     const keys = spec.synonyms.map(normalizeHeader);
 
@@ -141,7 +174,7 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
       (h) => !taken.has(h.header) && keys.includes(h.key),
     );
 
-    if (!hit) {
+    if (!hit && !spec.exact) {
       // Containment runs ONE WAY ONLY: the header must contain the synonym, not
       // the reverse. Matching a header that is a substring of a synonym lets a
       // generic name win a specific column — "full_name" has the synonym
@@ -155,10 +188,21 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
       );
     }
 
-    if (hit) {
-      mapping[spec.field] = hit.header;
-      taken.add(hit.header);
-    }
+    claim(spec.field, hit);
+  }
+
+  // Weak synonyms run in a pass of their own, after every field has had both of
+  // its real chances. That ordering is the whole mechanism: a header only falls
+  // to a weak match when nothing claimed it on merit, and within this pass
+  // FIELD_SPECS order breaks the tie, so `website` takes `url` in a file that
+  // has no better column and `gmaps_url` takes it in a file that does.
+  for (const spec of FIELD_SPECS) {
+    if (!spec.weak || mapping[spec.field]) continue;
+    const keys = spec.weak.map(normalizeHeader);
+    claim(
+      spec.field,
+      normalized.find((h) => !taken.has(h.header) && keys.includes(h.key)),
+    );
   }
 
   return mapping;
@@ -266,14 +310,20 @@ export function mapRow(
   };
 
   // Clay joins the name; the legacy sheet splits it. Explicit columns win, and
-  // full_name only fills the gaps.
+  // full_name only fills the gaps. A file that names first or last is treated as
+  // having split the name itself, so the middle and suffix the splitter found in
+  // a full_name column are not mixed in with them — but an explicit column for
+  // either still wins outright.
   const first = text("first_name");
   const last = text("last_name");
+  const middle = text("middle_name");
+  const suffix = text("name_suffix");
+  const preSplit = Boolean(first || last);
   const split = splitFullName(text("full_name"));
   values.first_name = first ?? split.firstName;
   values.last_name = last ?? split.lastName;
-  values.middle_name = first || last ? null : split.middleName;
-  values.name_suffix = first || last ? null : split.suffix;
+  values.middle_name = middle ?? (preSplit ? null : split.middleName);
+  values.name_suffix = suffix ?? (preSplit ? null : split.suffix);
 
   const angle = text("angle_type")?.toLowerCase().replace(/[\s-]+/g, "_");
   values.angle_type =

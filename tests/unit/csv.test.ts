@@ -8,6 +8,7 @@ import {
   cleanValue,
   cleanVerification,
 } from "@/lib/csv/clean";
+import { previewCsv } from "@/lib/csv/commit";
 import {
   autoMapColumns,
   detectShape,
@@ -23,6 +24,20 @@ const CLAY_HEADERS =
   "scrape_website,email_1,email_2,email_3,company_instagram,company_facebook," +
   "company_twitter,decision_maker_contact,full_name,title,personal_twitter," +
   "personal_facebook,personal_linkedin,personal_instagram,confidence,likely_email,work_email";
+
+// A later Clay export, verbatim from
+// home_services_24_hour_Las_Vegas_NV_Run_1-upload-batch-1.csv. It differs from
+// CLAY_HEADERS in two ways that both used to map wrong: the Google Maps link is
+// called `url` rather than `gmaps_url`, and the decision maker's name and title
+// are qualified with the enrichment step that produced them.
+const RUN1_HEADERS =
+  "url,city,phone,state,company_name,street,address,placeId,website,Scrape Website," +
+  "Possible Phonenumbers,Valid Phonenumbers,Regioncode Phonenumbers,email_1,email_2," +
+  "company_facebook,company_twitter,personal_facebook,latitude,company_linkedin," +
+  "personal_linkedin,company_instagram,personal_instagram,longitude,postalCode," +
+  "totalScore,countryCode,categoryName,reviewsCount,E164 Number Phonenumbers," +
+  "Decision Maker,Use AI Person Name,Use AI Person Title,Use AI Confidence Reason," +
+  "Use AI Status,Work Email";
 
 const LEGACY_HEADERS =
   "verification,status,lead_owner,tmz,ist_range,demo_txt,demo_web,lead_score," +
@@ -131,6 +146,16 @@ describe("header row detection", () => {
     expect(parsed.rows[0]!.column_2).toBe("x");
   });
 
+  it("keeps both columns when a header name repeats", () => {
+    // Rows are keyed by header name, so without this the first `email` column
+    // is silently overwritten by the second and its values are simply gone.
+    const parsed = parseCsv("email,name,email\na@x.com,Gabe,b@x.com\n");
+
+    expect(parsed.headers).toEqual(["email", "name", "email (2)"]);
+    expect(parsed.rows[0]!.email).toBe("a@x.com");
+    expect(parsed.rows[0]!["email (2)"]).toBe("b@x.com");
+  });
+
   it("refuses empty files and files with no data rows", () => {
     expect(() => parseCsv("")).toThrow(CsvParseError);
     expect(() => parseCsv("a,b,c\n")).toThrow(CsvParseError);
@@ -179,6 +204,47 @@ describe("auto column mapping", () => {
   it("survives reordered columns", () => {
     const shuffled = CLAY_HEADERS.split(",").reverse();
     expect(autoMapColumns(shuffled).rating).toBe("total_score");
+  });
+
+  it("maps the later Clay export, whatever it renamed", () => {
+    const mapping = autoMapColumns(RUN1_HEADERS.split(","));
+
+    expect(mapping.work_email).toBe("Work Email");
+    expect(mapping.place_id).toBe("placeId");
+    expect(mapping.postal_code).toBe("postalCode");
+    expect(mapping.rating).toBe("totalScore");
+    expect(mapping.industry).toBe("categoryName");
+    expect(mapping.reviews_count).toBe("reviewsCount");
+    expect(mapping.title).toBe("Use AI Person Title");
+    expect(mapping.full_name).toBe("Use AI Person Name");
+  });
+
+  it("gives `website` the real column and `url` the maps link", () => {
+    // `url` is the first header in the file and used to win `website` outright,
+    // which made website_domain `google.com` for every lead in the import.
+    const mapping = autoMapColumns(RUN1_HEADERS.split(","));
+
+    expect(mapping.website).toBe("website");
+    expect(mapping.gmaps_url).toBe("url");
+  });
+
+  it("still gives `url` to website when it is the only thing on offer", () => {
+    // The weak tier is a preference, not a ban: a bare CSV means the company
+    // site by `url`, and website is listed before gmaps_url so it claims it.
+    const mapping = autoMapColumns(["company_name", "work_email", "url"]);
+
+    expect(mapping.website).toBe("url");
+    expect(mapping.gmaps_url).toBeUndefined();
+  });
+
+  it("does not let a prose column win a typed enum", () => {
+    // "confidence" is inside "Use AI Confidence Reason", which is a paragraph
+    // explaining who the decision maker is, not high/medium/low.
+    const mapping = autoMapColumns(RUN1_HEADERS.split(","));
+
+    expect(mapping.email_confidence).toBeUndefined();
+    // ...but an exact match is still an exact match.
+    expect(autoMapColumns(CLAY_HEADERS.split(",")).email_confidence).toBe("confidence");
   });
 });
 
@@ -266,6 +332,52 @@ describe("mapRow", () => {
     expect(result.values.last_name).toBe("Martinez");
   });
 
+  it("splits the shapes a decision-maker column actually contains", () => {
+    // Every one of these is a real value from the Las Vegas run.
+    const split = (fullName: string) =>
+      mapRow(
+        { work_email: "a@b.com", company_name: "Acme", full_name: fullName },
+        mapping,
+      ).values;
+
+    expect(split("Kenneth Melvin Ray Jr.")).toMatchObject({
+      first_name: "Kenneth",
+      middle_name: "Melvin",
+      last_name: "Ray",
+      name_suffix: "Jr.",
+    });
+
+    expect(split("Patrick W. Ledbetter")).toMatchObject({
+      first_name: "Patrick",
+      middle_name: "W.",
+      last_name: "Ledbetter",
+    });
+
+    expect(split("Elizabeth Renteria-Cosio")).toMatchObject({
+      first_name: "Elizabeth",
+      last_name: "Renteria-Cosio",
+    });
+
+    // One-word names are common on a sole trader's site. A first name with no
+    // surname is right; inventing one, or dropping the row, is not.
+    expect(split("Sam")).toMatchObject({ first_name: "Sam", last_name: null });
+  });
+
+  it("lets an explicit middle or suffix column win over the splitter", () => {
+    const result = mapRow(
+      {
+        work_email: "a@b.com",
+        company_name: "Acme",
+        full_name: "Kenneth Melvin Ray Jr.",
+        middle_name: "Q.",
+      },
+      { ...mapping, middle_name: "middle_name" },
+    );
+
+    expect(result.values.middle_name).toBe("Q.");
+    expect(result.values.name_suffix).toBe("Jr.");
+  });
+
   it("does not compute dedupe keys — those are generated columns", () => {
     const result = mapRow(
       { work_email: "a@b.com", company_name: "Acme", phone: "(602) 555-0142" },
@@ -276,5 +388,88 @@ describe("mapRow", () => {
     expect(result.values).not.toHaveProperty("work_email_norm");
     expect(result.values).not.toHaveProperty("phone_e164");
     expect(result.values).not.toHaveProperty("website_domain");
+  });
+});
+
+describe("preview evidence", () => {
+  // Two rows of the Las Vegas run, cut down to the columns that matter here.
+  const CSV =
+    "url,company_name,website,city,state,latitude,longitude,Use AI Person Name,Work Email\n" +
+    "https://www.google.com/maps/search/?api=1&query=Red%20Rock,Red Rock Heating," +
+    "https://www.redrockhvaclv.com/,Las Vegas,Nevada,36.16,-115.14,Travis Larson,tlarson@larsonairlv.com\n" +
+    "https://www.google.com/maps/search/?api=1&query=Polar,Polar Inc.," +
+    "https://mypolarair.com/,Las Vegas,Nevada,36.20,-115.25,Edward Sandoval,ed@mypolarair.com\n";
+
+  it("reports what each column would become, not just its name", () => {
+    const preview = previewCsv(CSV);
+
+    expect(preview.fieldStats.website).toMatchObject({
+      header: "website",
+      filled: 2,
+      total: 2,
+    });
+    expect(preview.fieldStats.website!.examples[0]).toBe(
+      "https://www.redrockhvaclv.com/",
+    );
+
+    // full_name has no column of its own, so its evidence is what the splitter
+    // made of it — which is the only way to see that the split worked.
+    expect(preview.fieldStats.full_name!.examples[0]).toBe("Travis Larson");
+  });
+
+  it("names the columns it is dropping", () => {
+    // `url` is claimed by gmaps_url here, so nothing is silently lost.
+    expect(previewCsv(CSV).unmapped).toEqual([]);
+
+    // "Decision Maker" holds the literal word "Response" in this export, so
+    // nothing claims it — and the operator should be able to see that.
+    expect(
+      previewCsv("company_name,work_email,Decision Maker\nA,a@b.com,Response\n").unmapped,
+    ).toEqual(["Decision Maker"]);
+  });
+
+  it("warns when website is pointed at a directory link", () => {
+    const auto = previewCsv(CSV).mapping;
+    expect(previewCsv(CSV).warnings.filter((w) => w.field === "website")).toEqual([]);
+
+    const wrong = previewCsv(CSV, undefined, {
+      ...auto,
+      website: "url",
+      gmaps_url: undefined,
+    });
+    expect(wrong.warnings.some((w) => w.field === "website")).toBe(true);
+  });
+
+  it("warns when nothing in the mapping can resolve a timezone", () => {
+    // Qualified, importable, and permanently unschedulable. The whole point of
+    // saying so here is that /queue is where it would otherwise surface.
+    const bare = previewCsv(CSV, undefined, {
+      work_email: "Work Email",
+      company_name: "company_name",
+    });
+
+    expect(bare.warnings.some((w) => !w.field && /timezone/.test(w.message))).toBe(true);
+    // Either route out of it is enough.
+    for (const mapping of [
+      { latitude: "latitude", longitude: "longitude" },
+      { city: "city", state: "state" },
+    ]) {
+      const fixed = previewCsv(CSV, undefined, {
+        work_email: "Work Email",
+        company_name: "company_name",
+        ...mapping,
+      });
+      expect(fixed.warnings.some((w) => !w.field && /timezone/.test(w.message))).toBe(false);
+    }
+  });
+
+  it("stays quiet about empty columns that change nothing", () => {
+    // A file with no Twitter handles is not a problem, and a warning nobody can
+    // act on is what teaches people to stop reading the warnings.
+    const csv = "company_name,work_email,city,state,website,company_twitter\n" +
+      "Acme,a@b.com,Las Vegas,Nevada,https://acme.com,\n";
+    const warnings = previewCsv(csv).warnings;
+
+    expect(warnings.some((w) => w.field === "company_twitter")).toBe(false);
   });
 });

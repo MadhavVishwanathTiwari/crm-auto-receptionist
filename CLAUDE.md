@@ -277,6 +277,67 @@ treats a null variable as missing and the dispatcher skips the send, so `city`,
 `industry` and `first_name` stay out until the import fills them reliably.
 `tests/integration/unaudited-sends.test.ts` asserts the selection both ways.
 
+## Mapping a CSV nobody has seen before (`0033`)
+
+Header casing and punctuation are already a non-issue: `normalizeHeader()`
+lowercases and strips everything non-alphanumeric, so `placeId`, `postalCode`,
+`totalScore` and `Work Email` all hit the same synonyms as their snake_case
+spellings. What bites is a header that matches the *wrong* field convincingly.
+
+- **`url` is a weak synonym, on `website` and on `gmaps_url` both.** It meant
+  the company site in one Clay export and the Google Maps link in the next.
+  Strong synonyms are matched for every field first; only then does a leftover
+  header fall to a weak one, and `FIELD_SPECS` order breaks the tie — so a file
+  with a real `website` column gives `url` to `gmaps_url`, and a bare CSV with
+  nothing else gives it to `website`. Getting this backwards is expensive rather
+  than untidy: `website_domain` is generated from `website`, a maps link
+  normalizes to `google.com`, and that domain is what `/api/v1/demos/pending`
+  hands the demo builder, what `POST /api/v1/demos` joins on, and the second key
+  `partitionRows()` checks — so an entire second batch collides on one value and
+  lands in `/review`.
+- **`exact: true` turns the containment pass off for one spec.** Containment
+  requires a synonym of 5+ characters inside the header, which is usually what
+  you want and is why `title` finds `Use AI Person Title`. But `confidence` sits
+  inside `Use AI Confidence Reason`, which is a prose paragraph about who the
+  decision maker is, and `email_confidence` is a three-value enum. The real
+  `confidence` column still maps, because exact matching is untouched.
+- **`person_name` is a synonym of `full_name` and `name` cannot be.** `name` is
+  4 characters, under the containment floor, deliberately — the floor is what
+  stops `full_name` eating `firstname`. `person_name` clears it and catches
+  `Use AI Person Name`. `splitFullName()` then does the rest, correctly, for
+  suffixes, middle initials, particles and one-word names alike.
+- **`{{first_name}}` still is not in any template.** Capturing the name and
+  spending it are separate decisions. A null variable makes `renderTemplate()`
+  leave the braces in and the dispatcher skip the send, so a template that
+  depends on it converts a thin import into silent skips.
+
+**The mapping screen reports what a mapping would do, not what it is called.**
+Per field: how many rows the column filled, and the first cleaned values, as
+they would be stored. Plus the headers nothing claims, so a dropped column is
+visible. This is the general form of the fix — `website <- url` and
+`website <- website` look identical as names and completely different as values,
+and so will the next one.
+
+- **Only `work_email` and `company_name` block a commit; the readiness warnings
+  never do.** A lead with no resolvable timezone imports clean, qualifies, and
+  can never be scheduled — refused by the planner, by `/write`, and by a trigger
+  that binds the service role. Nothing used to say so until `/queue`, later. It
+  is a warning rather than a block because a list with no coordinates is a real
+  thing an operator may knowingly import.
+- **An empty column only warns when emptiness changes what the app can do**
+  (`CONSEQUENTIAL` in `lib/csv/inspect.ts`). A file with no Twitter handles is
+  not a problem, and a warning nobody can act on teaches people to stop reading
+  the warnings.
+- **Repeated header names are suffixed rather than collapsed.** `parseCsv` keys
+  rows by header, so two columns called `email` used to become one and the first
+  one's values simply vanished.
+- **`public.repair_lead_websites()` fixes leads already imported with a maps
+  link**, admin only, dry run by default, button on `/import`. It recovers the
+  real site from `leads.raw` via `app.website_from_raw()`, which matches header
+  names the same way `normalizeHeader()` does and strips Clay's `✅`. A lead with
+  a demo already built reports `repaired, but a demo already exists`, because the
+  slug was derived from the wrong domain and no column update fixes that.
+
 ## Ownership comes across from the sheet
 
 The sheet names an operator per row in `lead_owner`, and a lead somebody has

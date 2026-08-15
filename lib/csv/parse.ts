@@ -87,9 +87,23 @@ export function parseCsv(text: string, headerRowIndex?: number): ParsedCsv {
 
   // Blank trailing headers are common in spreadsheet exports. Keep the position
   // so column alignment survives, but give it a stable synthetic name.
+  //
+  // Repeated names are disambiguated for a sharper reason: rows are keyed by
+  // header name below, so two columns called `email` would collapse onto one
+  // and the first column's values would disappear without a word. Suffixing the
+  // later ones keeps every physical column addressable in the mapping UI.
+  const used = new Set<string>();
   const headers = headerRow.map((h, i) => {
-    const trimmed = (h ?? "").trim();
-    return trimmed || `column_${i + 1}`;
+    const base = (h ?? "").trim() || `column_${i + 1}`;
+    if (!used.has(base)) {
+      used.add(base);
+      return base;
+    }
+    let n = 2;
+    while (used.has(`${base} (${n})`)) n++;
+    const unique = `${base} (${n})`;
+    used.add(unique);
+    return unique;
   });
 
   if (headers.every((h) => h.startsWith("column_"))) {

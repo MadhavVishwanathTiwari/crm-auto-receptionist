@@ -140,3 +140,63 @@ export async function rerouteSendsToOwner(dryRun: boolean): Promise<RerouteResul
     notable: rows.filter((row) => row.outcome !== "already correct").slice(0, 50),
   };
 }
+
+/**
+ * The repair for leads whose `website` is a Google Maps link.
+ *
+ * `url` was a synonym of `website` and it is the first column in the Clay
+ * export, so it won that field before the real `website` column was reached.
+ * website_domain is generated from website, a maps link normalizes to
+ * google.com, and that domain is the demo builder's join key and the second
+ * thing near-duplicate detection checks.
+ *
+ * Recoverable only because commitImport stores the original CSV row as `raw`.
+ * Dry run first: the tally is where a lead whose demo was already built against
+ * the wrong domain shows up, and that one needs a person rather than a rerun.
+ */
+export interface WebsiteRepairRow {
+  lead_id: string;
+  company: string | null;
+  old_website: string | null;
+  new_website: string | null;
+  outcome: string;
+}
+
+export interface WebsiteRepairResult {
+  ok: boolean;
+  error?: string;
+  dryRun: boolean;
+  counts: Record<string, number>;
+  /** A sample of what would change, so the mapping can be sanity-checked. */
+  notable: WebsiteRepairRow[];
+}
+
+export async function repairLeadWebsites(
+  dryRun: boolean,
+): Promise<WebsiteRepairResult> {
+  const context = await getOrgContext();
+  if (!context) {
+    return { ok: false, error: "Not signed in.", dryRun, counts: {}, notable: [] };
+  }
+
+  const { data, error } = await context.supabase.rpc("repair_lead_websites", {
+    p_dry_run: dryRun,
+  });
+
+  if (error) {
+    return { ok: false, error: error.message, dryRun, counts: {}, notable: [] };
+  }
+
+  const rows = (data ?? []) as WebsiteRepairRow[];
+  const counts: Record<string, number> = {};
+  for (const row of rows) counts[row.outcome] = (counts[row.outcome] ?? 0) + 1;
+
+  if (!dryRun) {
+    // website_domain feeds the demo queue and the leads grid.
+    for (const path of ["/leads", "/queue", "/write"]) {
+      revalidatePath(path);
+    }
+  }
+
+  return { ok: true, dryRun, counts, notable: rows.slice(0, 50) };
+}
