@@ -58,27 +58,36 @@ export async function claimLead(leadId: string): Promise<ActionResult> {
  * event ranks above `audited` in app.lead_status_from_events, the trigger
  * recomputes leads.status, and the planner has accepted `queued` since 0015.
  * The lead keeps angle_type null, which is what selects the generic template.
+ *
+ * Through an RPC since 0036, and it had to be. This inserted the event directly
+ * for four migrations, but lead_events_insert permits only ('audited', 'note',
+ * 'manual_override'), so every insert was rejected and the button never worked
+ * for anybody.
+ *
+ * The old code guarded for the wrong failure: a `with check` violation on
+ * INSERT raises 42501, it is not the silent 204-with-zero-rows case. That case
+ * is UPDATE and DELETE, where a `using` clause filters the row out before there
+ * is anything to violate — which is why setLeadTimezone below genuinely needs
+ * its zero-row check and this never did. Operators saw Postgres's own message.
+ *
+ * Widening the policy was the wrong fix: it checks org_id and nothing else, so
+ * it would have let either operator queue the other's leads. The ownership
+ * check lives in the definer function instead.
  */
 export async function queueWithoutAudit(leadId: string): Promise<ActionResult> {
   const context = await getOrgContext();
   if (!context) return { ok: false, error: "Not signed in." };
 
-  const { data, error } = await context.supabase
-    .from("lead_events")
-    .insert({
-      org_id: context.orgId,
-      lead_id: leadId,
-      type: "queued",
-      actor_id: context.userId,
-      payload: { reason: "queued without an audit" },
-    })
-    .select("id");
+  const { error } = await context.supabase.rpc("queue_lead_without_audit", {
+    p_lead_id: leadId,
+  });
 
-  if (error) return { ok: false, error: error.message };
-  // A write refused by RLS is 204 and zero rows, not an error. Here that means
-  // the lead belongs to the other operator.
-  if (!data || data.length === 0) {
-    return { ok: false, error: "That lead is not yours to queue." };
+  if (error) {
+    return {
+      ok: false,
+      error:
+        error.code === "42501" ? "That lead is not yours to queue." : error.message,
+    };
   }
 
   revalidatePath("/leads");

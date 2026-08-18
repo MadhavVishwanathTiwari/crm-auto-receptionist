@@ -13,9 +13,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
+import { COLUMN_LABEL, columnFor, isOverdue } from "@/lib/pipeline/stages";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
-import { BUTTON, BUTTON_QUIET, INPUT, STATUS_TONE } from "../ui";
+import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
 import { claimFromPool, claimLead, releaseLead } from "./actions";
 
 export interface LeadRow {
@@ -35,6 +36,10 @@ export interface LeadRow {
   lead_score: number | null;
   is_qualified: boolean;
   created_at: string;
+  stage: string;
+  terminal_outcome: string | null;
+  next_action: string | null;
+  next_action_at: string | null;
 }
 
 // Must match --row-height in globals.css exactly, or the virtualizer's scroll
@@ -118,6 +123,40 @@ export function LeadsGrid({
           return (
             <span className={STATUS_TONE[value] ?? ""}>
               {value.replace(/_/g, " ")}
+            </span>
+          );
+        },
+      },
+      {
+        // Status is what the machine did; stage is where the human thinks the
+        // deal is. Both are on the grid because a lead can be `replied` and
+        // parked in nurture, and neither column implies the other.
+        id: "stage",
+        header: "Stage",
+        size: 110,
+        accessorFn: (row) => COLUMN_LABEL[columnFor(row)] ?? row.stage,
+        cell: (info) => (
+          <span className={STAGE_TONE[columnFor(info.row.original)] ?? ""}>
+            {info.getValue<string>()}
+          </span>
+        ),
+      },
+      {
+        id: "next_action",
+        header: "Follow-up",
+        size: 180,
+        accessorFn: (row) => row.next_action ?? "",
+        cell: (info) => {
+          const row = info.row.original;
+          if (!row.next_action) return "—";
+          return (
+            <span
+              className={
+                isOverdue(row) ? "text-[var(--color-danger)]" : "text-[var(--color-warn)]"
+              }
+            >
+              {isOverdue(row) ? "⚠ " : ""}
+              {row.next_action}
             </span>
           );
         },

@@ -42,7 +42,7 @@ export default async function LeadsPage({
     // template literal type, and concatenating it collapses the result to an
     // error type.
     .select(
-      "id, company_name, first_name, last_name, title, work_email, status, claimed_by, city, state, timezone, rating, reviews_count, lead_score, is_qualified, created_at",
+      "id, company_name, first_name, last_name, title, work_email, status, claimed_by, city, state, timezone, rating, reviews_count, lead_score, is_qualified, created_at, stage, terminal_outcome, next_action, next_action_at",
     )
     .is("archived_at", null)
     .order("created_at", { ascending: false })

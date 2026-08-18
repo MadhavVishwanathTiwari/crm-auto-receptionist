@@ -52,3 +52,19 @@ export const OUTCOME_TONE: Record<string, string> = {
   flagged_review: "text-[var(--color-warn)]",
   failed_validation: "text-[var(--color-danger)]",
 };
+
+/**
+ * Board columns. Same rule as STATUS_TONE: colour encodes meaning, so the
+ * live-conversation stages read forward, nurture reads parked, and the two
+ * terminals keep the tone close_lead() already gave them.
+ */
+export const STAGE_TONE: Record<string, string> = {
+  prospect: "text-[var(--color-ink-3)]",
+  engaged: "text-[var(--color-info)]",
+  meeting: "text-[var(--color-ok)]",
+  proposal: "text-[var(--color-ok)]",
+  nurture: "text-[var(--color-warn)]",
+  closed_won: "text-[var(--color-ok)]",
+  closed_lost: "text-[var(--color-ink-3)]",
+  do_not_contact: "text-[var(--color-danger)]",
+};

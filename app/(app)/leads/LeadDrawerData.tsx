@@ -18,17 +18,19 @@ import {
 export async function LeadDrawerData({ leadId }: { leadId: string }) {
   const { supabase, userId } = await requireOrgContext();
 
-  const [detail, log, artifacts] = await Promise.all([
+  const [detail, log, artifacts, settings] = await Promise.all([
     supabase
       .from("leads")
       .select(
-        "id, company_name, first_name, last_name, title, work_email, phone, website, city, state, postal_code, timezone, timezone_source, industry, rating, reviews_count, is_qualified, status, claimed_by, terminal_outcome, halt_reason",
+        "id, company_name, first_name, last_name, title, work_email, phone, website, city, state, postal_code, timezone, timezone_source, industry, rating, reviews_count, is_qualified, status, claimed_by, terminal_outcome, halt_reason, stage, deal_value, next_action, next_action_at",
       )
       .eq("id", leadId)
       .maybeSingle(),
     supabase
       .from("lead_events")
-      .select("id, type, occurred_at")
+      // payload comes along now: notes carry their body in it, and stage moves
+      // their from/to. Nothing else in the log has anything worth rendering.
+      .select("id, type, occurred_at, payload")
       .eq("lead_id", leadId)
       .order("occurred_at", { ascending: false })
       .limit(100),
@@ -39,6 +41,7 @@ export async function LeadDrawerData({ leadId }: { leadId: string }) {
       )
       .eq("lead_id", leadId)
       .order("created_at", { ascending: false }),
+    supabase.from("org_settings").select("default_deal_value").maybeSingle(),
   ]);
 
   // A lead in another org is invisible under RLS rather than forbidden, so this
@@ -78,6 +81,7 @@ export async function LeadDrawerData({ leadId }: { leadId: string }) {
       evidence={evidence}
       screenshotUrls={screenshotUrls}
       currentUserId={userId}
+      defaultDealValue={Number(settings.data?.default_deal_value ?? 997)}
     />
   );
 }

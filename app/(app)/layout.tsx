@@ -13,7 +13,8 @@ import { SignOutButton } from "./SignOutButton";
 // The rest is ordered by the pipeline, not alphabetically: import -> claim on
 // the grid -> audit -> queue -> send -> what came back. Review sits next to
 // Import because it is that step's overflow, and Templates and Mailboxes sit
-// after Queue because they are what the queue turns into an email.
+// after Queue because they are what the queue turns into an email. Pipeline
+// follows Alerts for the same reason: it is what you DO about what came back.
 // Annotated rather than `as const`: with typed routes, a bare union of ten
 // literal hrefs makes Link infer its generic from the wrong member and reject
 // every other one.
@@ -25,6 +26,7 @@ const NAV: { href: Route; label: string }[] = [
   { href: "/audit", label: "Audit" },
   { href: "/queue", label: "Queue" },
   { href: "/alerts", label: "Alerts" },
+  { href: "/pipeline", label: "Pipeline" },
   { href: "/templates", label: "Templates" },
   { href: "/mailboxes", label: "Mailboxes" },
   { href: "/suppressions", label: "Suppressions" },

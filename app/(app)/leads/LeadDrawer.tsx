@@ -9,8 +9,17 @@ import { suppressLead } from "../suppressions/actions";
 // proxy whose .map throws at hydration. See suppressions/reasons.ts.
 import { SUPPRESSION_REASONS, type SuppressionReason } from "../suppressions/reasons";
 import { IN_FLIGHT } from "@/lib/queue/blockers";
+import {
+  COLUMN_LABEL,
+  dealValue,
+  formatMoney,
+  isOverdue,
+  PIPELINE_STAGES,
+  type PipelineStage,
+} from "@/lib/pipeline/stages";
 
-import { BUTTON, BUTTON_QUIET, INPUT, STATUS_TONE } from "../ui";
+import { addNote, setDealValue, setNextAction, setStage } from "../pipeline/actions";
+import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
 import {
   closeLead,
   queueWithoutAudit,
@@ -40,12 +49,18 @@ export interface LeadDetail {
   claimed_by: string | null;
   terminal_outcome: string | null;
   halt_reason: string | null;
+  stage: string;
+  deal_value: number | string | null;
+  next_action: string | null;
+  next_action_at: string | null;
 }
 
 export interface EventRow {
   id: string;
   type: string;
   occurred_at: string;
+  /** Notes carry their body here, and stage moves their from/to. */
+  payload: Record<string, unknown> | null;
 }
 
 export interface EvidenceRow {
@@ -72,6 +87,43 @@ const ZONES: string[] =
     ? Intl.supportedValuesOf("timeZone")
     : [];
 
+/**
+ * An instant, rendered for a `datetime-local` input in the operator's own zone.
+ *
+ * Deliberately not prospect-local. A follow-up is a reminder for the person
+ * reading this screen, so it belongs in their day; the prospect-local rule
+ * governs when an email leaves, which is bookSlot's business, not this one's.
+ */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const at = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}` +
+    `T${pad(at.getHours())}:${pad(at.getMinutes())}`
+  );
+}
+
+/**
+ * The part of an event worth reading, for the three types that carry one.
+ *
+ * Every other entry in the log is a state change whose name says all there is
+ * to say, which is how the timeline got away with rendering only the type until
+ * notes existed.
+ */
+function eventDetail(event: EventRow): string {
+  const payload = event.payload ?? {};
+  const note = payload.note ? ` — ${String(payload.note)}` : "";
+
+  if (event.type === "note") return String(payload.body ?? "");
+  if (event.type === "closed") return `${String(payload.outcome ?? "")}${note}`;
+  if (event.type === "stage_changed") {
+    const from = payload.from ? `${String(payload.from)} → ` : "";
+    return `${from}${String(payload.to ?? "")}${note}`;
+  }
+  return "";
+}
+
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex gap-2">
@@ -93,12 +145,14 @@ export function LeadDrawer({
   evidence,
   screenshotUrls,
   currentUserId,
+  defaultDealValue,
 }: {
   lead: LeadDetail;
   events: EventRow[];
   evidence: EvidenceRow[];
   screenshotUrls: Record<string, string>;
   currentUserId: string;
+  defaultDealValue: number;
 }) {
   const router = useRouter();
   const [zone, setZone] = useState(lead.timezone ?? "");
@@ -106,6 +160,12 @@ export function LeadDrawer({
   const [outcome, setOutcome] = useState<TerminalOutcome>("closed_lost");
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [note, setNote] = useState("");
+  const [action, setAction] = useState(lead.next_action ?? "");
+  const [actionAt, setActionAt] = useState(toLocalInput(lead.next_action_at));
+  const [value, setValue] = useState(
+    lead.deal_value === null ? "" : String(lead.deal_value),
+  );
+  const [noteBody, setNoteBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -258,6 +318,140 @@ export function LeadDrawer({
         </section>
 
         <section>
+          <h3 className="mb-2 text-[var(--color-ink-3)]">Deal</h3>
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-28 shrink-0 text-[var(--color-ink-3)]">Stage</span>
+              {lead.terminal_outcome ? (
+                <span className={STAGE_TONE[lead.terminal_outcome] ?? ""}>
+                  {COLUMN_LABEL[
+                    lead.terminal_outcome as keyof typeof COLUMN_LABEL
+                  ] ?? lead.terminal_outcome}{" "}
+                  <span className="text-[var(--color-ink-3)]">
+                    — closed, so the stage is final
+                  </span>
+                </span>
+              ) : (
+                <>
+                  {/* Not gated on `editable`, unlike the two fields below.
+                      set_lead_stage() checks ownership with app.same_operator,
+                      which resolves an operator's second address; a strict
+                      claimed_by === currentUserId here would grey the control
+                      out on every lead madhav owns. The RPC arbitrates. */}
+                  <select
+                    value={lead.stage}
+                    disabled={pending}
+                    onChange={(event) =>
+                      run(() =>
+                        setStage(lead.id, event.target.value as PipelineStage),
+                      )
+                    }
+                    className={INPUT}
+                  >
+                    {PIPELINE_STAGES.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {COLUMN_LABEL[stage]}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={STAGE_TONE[lead.stage] ?? ""}>
+                    {lead.stage === "prospect"
+                      ? "the sequence still owns this one"
+                      : ""}
+                  </span>
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-28 shrink-0 text-[var(--color-ink-3)]">Value</span>
+              <input
+                inputMode="decimal"
+                value={value}
+                disabled={!editable || pending}
+                onChange={(event) => setValue(event.target.value)}
+                placeholder={String(defaultDealValue)}
+                className={INPUT + " w-28"}
+              />
+              <button
+                type="button"
+                disabled={!editable || pending}
+                onClick={() =>
+                  run(() =>
+                    setDealValue(
+                      lead.id,
+                      value.trim() === "" ? null : Number(value),
+                    ),
+                  )
+                }
+                className={BUTTON}
+              >
+                Save
+              </button>
+              <span className="text-[var(--color-ink-3)]">
+                {lead.deal_value === null
+                  ? `on the org default, ${formatMoney(defaultDealValue)}`
+                  : `overridden — ${formatMoney(dealValue(lead, defaultDealValue))}`}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-28 shrink-0 text-[var(--color-ink-3)]">
+                Next action
+              </span>
+              <input
+                value={action}
+                disabled={!editable || pending}
+                onChange={(event) => setAction(event.target.value)}
+                placeholder="call back about the Thursday quote"
+                className={INPUT + " w-60"}
+              />
+              <input
+                type="datetime-local"
+                value={actionAt}
+                disabled={!editable || pending}
+                onChange={(event) => setActionAt(event.target.value)}
+                className={INPUT}
+              />
+              <button
+                type="button"
+                disabled={!editable || pending}
+                onClick={() =>
+                  run(() =>
+                    setNextAction(
+                      lead.id,
+                      action,
+                      actionAt ? new Date(actionAt).toISOString() : null,
+                    ),
+                  )
+                }
+                className={BUTTON}
+              >
+                Save
+              </button>
+              {lead.next_action && (
+                <button
+                  type="button"
+                  disabled={!editable || pending}
+                  onClick={() => {
+                    setAction("");
+                    setActionAt("");
+                    run(() => setNextAction(lead.id, "", null));
+                  }}
+                  className={BUTTON_QUIET}
+                >
+                  done
+                </button>
+              )}
+              {isOverdue(lead) && (
+                <span className="text-[var(--color-danger)]">overdue</span>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section>
           <h3 className="mb-2 text-[var(--color-ink-3)]">
             Audits <span className="tabular">{evidence.length}</span>
           </h3>
@@ -334,6 +528,33 @@ export function LeadDrawer({
 
         <section>
           <h3 className="mb-2 text-[var(--color-ink-3)]">Timeline</h3>
+
+          {/* `note` has been in the event enum since 0001 and permitted to
+              authenticated users since 0005, and nothing has ever written one.
+              It ranks 0 in app.lead_status_from_events, so writing one cannot
+              move status — which is exactly what commentary should do. */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <input
+              value={noteBody}
+              disabled={pending}
+              onChange={(event) => setNoteBody(event.target.value)}
+              placeholder="what happened on the call"
+              className={INPUT + " w-80"}
+            />
+            <button
+              type="button"
+              disabled={pending || noteBody.trim() === ""}
+              onClick={() => {
+                const body = noteBody;
+                setNoteBody("");
+                run(() => addNote(lead.id, body));
+              }}
+              className={BUTTON}
+            >
+              Add note
+            </button>
+          </div>
+
           {events.length === 0 ? (
             <p className="text-[var(--color-ink-3)]">No events yet.</p>
           ) : (
@@ -350,6 +571,9 @@ export function LeadDrawer({
                   </span>
                   <span className={STATUS_TONE[event.type] ?? ""}>
                     {event.type.replace(/_/g, " ")}
+                  </span>
+                  <span className="min-w-0 break-words text-[var(--color-ink-2)]">
+                    {eventDetail(event)}
                   </span>
                 </li>
               ))}

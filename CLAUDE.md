@@ -428,6 +428,92 @@ the way regardless: `org_settings.dry_run` gates `claim_due_sends()`. The sheet
 leads used to be blocked by `is_qualified = false` as well — the sheet carries
 no rating column — which is a large part of why `0031` removed the rating floor.
 
+## The pipeline, which is a second dimension (`0035`/`0036`)
+
+Everything up to `replied` was built. Past it there was nothing: no way to
+record that a call is booked, no note, no follow-up date, no screen showing
+which conversations are open. `close_lead()` was the only remaining move.
+
+`leads.stage` is that missing half, and it is **not** more `lead_status` values.
+
+|  | `leads.status` | `leads.stage` |
+|---|---|---|
+| means | what the machine did | where the human thinks the deal is |
+| derived from | `lead_events`, **rank-ordered** | `lead_events`, **last write wins** |
+| direction | forward only | any |
+| written by | the send path | `set_lead_stage()` |
+
+`app.lead_status_from_events` takes the maximum rank so a late `delivered`
+webhook cannot walk a replied lead backwards. A sales stage is the opposite: a
+no-show sends `meeting` back to `engaged`. Ranking stages would break that
+guarantee for everything or lock every deal forward. Both columns stay derived
+and both stay guarded, so "status is derived, never typed" is unchanged.
+
+- **`app.lead_stage_from_events` falls back to `engaged` on any `replied`
+  event**, which is what makes the board populate itself. The fallback is
+  checked *after* any explicit move, so a lead parked in `nurture` is not
+  yanked back by the next reply — the reply raises an alert and the human
+  decides.
+- **Won / lost / DNC are `terminal_outcome`, not stages.** `columnFor()` in
+  `lib/pipeline/stages.ts` prefers the outcome, so a closed lead keeps the stage
+  it died at and still files under its outcome. One answer to "did we win".
+- **`set_lead_stage()` checks ownership with `app.same_operator`**, not
+  `claimed_by = auth.uid()`. That is the `0032` lesson: a strict comparison
+  refuses all of madhav's leads while working for Ojas. The drawer's stage
+  control is therefore *not* gated on the UI's strict `editable` flag — the RPC
+  arbitrates. `next_action` and `deal_value` still are, because those are plain
+  UPDATEs and `leads_update` itself compares strictly.
+- **`prospect` is excluded from every money figure**, and the board shows it as
+  a count rather than cards. Thousands of unworked leads times the default value
+  is a headline number nobody believes, and a total nobody believes is worth
+  less than no total.
+- **`deal_value` is null on almost every lead and null means
+  `org_settings.default_deal_value`.** A per-lead amount everybody has to
+  maintain is a column that goes stale, and a stale number on a board shown to a
+  client is worse than no number.
+- **`note` finally gets written.** It has been in the enum since `0001` and
+  permitted to authenticated users since `0005`, and nothing ever wrote one. It
+  ranks 0, so commentary cannot move status.
+
+### The `queued` event never reached the database (`0036`)
+
+`0022` designed "send without an audit" around a `queued` event and said the
+leads screen "now writes" one. It did — through the RLS client, against a
+`lead_events_insert` policy that permits only `('audited', 'note',
+'manual_override')`. The button never worked for anybody.
+
+Worth being exact, because the action was written for the wrong failure: **a
+`with check` violation on INSERT raises 42501 outright.** The silent
+204-with-zero-rows case is UPDATE and DELETE, where a `using` clause filters the
+row out before there is anything left to violate. That is why `setLeadTimezone`
+genuinely needs its zero-row check and this never did.
+
+Fixed with `public.queue_lead_without_audit()` rather than by widening the
+policy, which checks `org_id` and nothing else and would have let either
+operator queue the other's leads.
+
+## Demo leads (`0037`)
+
+22 fabricated businesses, seeded through the real machinery — leads, then
+`lead_events` and `sent` `scheduled_sends`, with the triggers deriving status,
+stage and `halted_at`. A fixture that wrote those columns directly would prove
+nothing; this way a broken derivation is visibly broken.
+
+They are **meant to stay**. Three properties keep them safe in a live sender:
+
+1. Every address is on `example.com`, which RFC 2606 reserves so it can never be
+   a real mailbox. This is the one that matters.
+2. `source = 'demo'` on every row — free text, no schema change, one `where`
+   clause from being found or removed.
+3. Every one carries a `replied` event, so all 22 are halted and out of the
+   planner's reach. **There are deliberately no demo leads in `prospect`:** a
+   sendable fake lead would pollute `/queue` and `/settings`, and the Prospect
+   column shows a count anyway, so the demo gained nothing from them.
+
+`public.remove_demo_leads()` is the undo — admin only, dry run by default. It
+has no button on purpose; a "delete the demo data" control next to a live demo
+is a bad thing to be one click away from.
+
 ## Copy constraints (enforced by `lib/templates/lint.ts`)
 
 No em dashes. Loss-framed CTA. Binary-choice close. One ask per email. Only
