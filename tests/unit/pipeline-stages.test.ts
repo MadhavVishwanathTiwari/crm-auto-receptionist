@@ -8,6 +8,10 @@ import {
   dealValue,
   formatMoney,
   isOverdue,
+  isTerminalColumn,
+  isWorked,
+  moveFor,
+  PIPELINE_STAGES,
   pipelineValue,
   weightedValue,
   wonValue,
@@ -132,5 +136,91 @@ describe("formatMoney", () => {
   it("rounds to whole dollars", () => {
     // Cents on a pipeline total are noise.
     expect(formatMoney(2491.4)).toBe("$2,491");
+  });
+});
+
+describe("isTerminalColumn", () => {
+  it("is true for the three outcomes and false for the five stages", () => {
+    for (const column of ["closed_won", "closed_lost", "do_not_contact"] as const) {
+      expect(isTerminalColumn(column)).toBe(true);
+    }
+    for (const stage of PIPELINE_STAGES) {
+      expect(isTerminalColumn(stage)).toBe(false);
+    }
+  });
+});
+
+describe("isWorked", () => {
+  it("is false only for an open prospect", () => {
+    expect(isWorked({ stage: "prospect", terminal_outcome: null })).toBe(false);
+    expect(isWorked({ stage: "engaged", terminal_outcome: null })).toBe(true);
+    // A closed prospect keeps stage='prospect' and files under its outcome, so
+    // it is worked even though its stage never moved.
+    expect(isWorked({ stage: "prospect", terminal_outcome: "closed_lost" })).toBe(true);
+  });
+});
+
+describe("moveFor", () => {
+  it("routes a drop on a terminal column to close_lead", () => {
+    // set_lead_stage takes the five-value enum and structurally cannot carry
+    // this, which is why the board needs two write paths rather than one.
+    expect(moveFor(lead({ stage: "prospect" }), "closed_won")).toEqual({
+      kind: "close",
+      outcome: "closed_won",
+    });
+  });
+
+  it("routes a drop on a stage to set_lead_stage", () => {
+    expect(moveFor(lead({ stage: "prospect" }), "meeting")).toEqual({
+      kind: "stage",
+      stage: "meeting",
+    });
+  });
+
+  it("does nothing when the card is dropped where it already is", () => {
+    expect(moveFor(lead({ stage: "meeting" }), "meeting")).toEqual({
+      kind: "none",
+      reason: "same_column",
+    });
+  });
+
+  it("refuses every column once the lead is closed", () => {
+    // There is no reopen, and Won -> Lost is a second close rather than a move.
+    const closed = lead({ stage: "proposal", terminal_outcome: "closed_won" });
+    for (const column of BOARD_COLUMNS) {
+      expect(moveFor(closed, column)).toEqual({
+        kind: "none",
+        reason: "already_closed",
+      });
+    }
+  });
+});
+
+describe("prospect cards do not reach the money figures", () => {
+  // The regression this guards: the board used to filter prospects out of its
+  // query entirely, so nothing in liveLeads could be one. It now seeds the
+  // Prospect column with real cards, and the day countsTowardPipeline stops
+  // excluding them is the day the headline number silently multiplies by a
+  // thousand unworked leads.
+  const worked = [
+    lead({ stage: "engaged" }),
+    lead({ stage: "meeting", deal_value: 2000 }),
+    lead({ stage: "proposal" }),
+  ];
+  const withProspects = [
+    ...worked,
+    ...Array.from({ length: 50 }, () => lead({ stage: "prospect" })),
+  ];
+
+  it("leaves pipelineValue unchanged", () => {
+    expect(pipelineValue(withProspects, DEFAULT_VALUE)).toBe(
+      pipelineValue(worked, DEFAULT_VALUE),
+    );
+  });
+
+  it("leaves weightedValue unchanged", () => {
+    expect(weightedValue(withProspects, DEFAULT_VALUE)).toBe(
+      weightedValue(worked, DEFAULT_VALUE),
+    );
   });
 });

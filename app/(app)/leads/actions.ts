@@ -219,5 +219,9 @@ export async function closeLead(
   revalidatePath("/leads");
   revalidatePath("/queue");
   revalidatePath("/audit");
+  // The board files this lead under its outcome via columnFor(), and closing is
+  // now reachable from the board itself, so leaving /pipeline out left the
+  // screen that initiated the close showing the card where it used to be.
+  revalidatePath("/pipeline");
   return { ok: true };
 }

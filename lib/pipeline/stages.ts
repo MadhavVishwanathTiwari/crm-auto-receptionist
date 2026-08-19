@@ -183,3 +183,63 @@ const MONEY = new Intl.NumberFormat("en-US", {
 export function formatMoney(value: number): string {
   return MONEY.format(Math.round(value));
 }
+
+/** The three columns that are a terminal_outcome rather than a stage. */
+export function isTerminalColumn(column: BoardColumn): column is TerminalColumn {
+  return (
+    column === "closed_won" || column === "closed_lost" || column === "do_not_contact"
+  );
+}
+
+/**
+ * A lead that has left the sequence: somebody moved it, or it is closed.
+ *
+ * This used to live in PipelineBoard as `qualifies()` and it answered a wider
+ * question than it does now. The board seeds the Prospect column from a bounded
+ * query -- the fifty most recently touched of however many thousand -- so this
+ * no longer decides whether a lead HAS a card. It decides whether a row the
+ * board has never seen deserves one. A prospect does not: it belongs to the
+ * unshown tail, and inserting one per Realtime push would grow that column all
+ * through a dispatch run. A row already on the board is never evicted on stage;
+ * that rule lives in the handler, where the "already on the board" fact is.
+ */
+export function isWorked(lead: {
+  stage: string;
+  terminal_outcome: string | null;
+}): boolean {
+  return lead.stage !== "prospect" || lead.terminal_outcome !== null;
+}
+
+export type BoardMove =
+  | { kind: "stage"; stage: PipelineStage }
+  | { kind: "close"; outcome: TerminalColumn }
+  | { kind: "none"; reason: "same_column" | "already_closed" };
+
+/**
+ * What putting this lead in this column means.
+ *
+ * The board has one gesture and two write paths. A drop on one of the five
+ * stages is set_lead_stage(); a drop on one of the three terminals is
+ * close_lead(), which is a different RPC and not an oversight -- set_lead_stage
+ * takes the five-value pipeline_stage enum from 0035 and structurally cannot
+ * carry `closed_won`.
+ *
+ * A closed lead has no legal move at all. There is no reopen: terminal_outcome
+ * is guarded against every change including clearing it, set_lead_stage raises
+ * 22023 on a closed lead, and 0038 refuses a second close. Won -> Lost is not
+ * "moving out", it is a second close_lead, and it used to succeed silently.
+ *
+ * Pure, and shared by the drag handler and the <select>, so the mouse path and
+ * the keyboard path cannot come to different conclusions about the same drop.
+ */
+export function moveFor(
+  lead: { stage: string; terminal_outcome: string | null },
+  column: BoardColumn,
+): BoardMove {
+  if (lead.terminal_outcome !== null) {
+    return { kind: "none", reason: "already_closed" };
+  }
+  if (columnFor(lead) === column) return { kind: "none", reason: "same_column" };
+  if (isTerminalColumn(column)) return { kind: "close", outcome: column };
+  return { kind: "stage", stage: column };
+}
