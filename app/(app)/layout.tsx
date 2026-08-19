@@ -15,18 +15,29 @@ import { SignOutButton } from "./SignOutButton";
 // Import because it is that step's overflow, and Templates and Mailboxes sit
 // after Queue because they are what the queue turns into an email. Pipeline
 // follows Alerts for the same reason: it is what you DO about what came back.
-// Annotated rather than `as const`: with typed routes, a bare union of ten
+//
+// Contacts sits beside Leads because it is the same table asked a different
+// question -- who is this person, rather than what should the machine do with
+// this row -- and splitting them up the list would make it look like a second
+// source of leads. Dashboard closes the pipeline run: everything to its left is
+// a step, everything to its right is configuration, and it is the summary of
+// the steps. It is deliberately not first and deliberately not the landing
+// page; / still goes to /write, for the reason at the top of this comment.
+//
+// Annotated rather than `as const`: with typed routes, a bare union of a dozen
 // literal hrefs makes Link infer its generic from the wrong member and reject
 // every other one.
 const NAV: { href: Route; label: string }[] = [
   { href: "/write", label: "Write" },
   { href: "/leads", label: "Leads" },
+  { href: "/contacts", label: "Contacts" },
   { href: "/import", label: "Import" },
   { href: "/review", label: "Review" },
   { href: "/audit", label: "Audit" },
   { href: "/queue", label: "Queue" },
   { href: "/alerts", label: "Alerts" },
   { href: "/pipeline", label: "Pipeline" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/templates", label: "Templates" },
   { href: "/mailboxes", label: "Mailboxes" },
   { href: "/suppressions", label: "Suppressions" },
@@ -66,7 +77,7 @@ export default async function AppLayout({
     <div className="flex h-full flex-col">
       <header className="flex h-9 shrink-0 items-center gap-5 border-b border-[var(--color-line)] bg-[var(--color-surface)] px-3">
         <span className="text-[var(--color-ink-3)]">Outreach Ops</span>
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-3">
           {NAV.map((item) => (
             <Link
               key={item.href}
@@ -83,7 +94,11 @@ export default async function AppLayout({
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-3 text-[var(--color-ink-3)]">
-          <span>{email}</span>
+          {/* Local part only. Fourteen nav items in a non-wrapping row
+              under body{overflow:hidden} clips rather than scrolls, and the
+              full address was the widest thing on the right that nobody reads
+              twice. It is still on the title. */}
+          <span title={email ?? undefined}>{email?.split("@")[0] ?? ""}</span>
           {role === "admin" && <span>admin</span>}
           <SignOutButton />
         </div>
