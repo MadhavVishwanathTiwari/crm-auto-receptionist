@@ -32,6 +32,14 @@ export interface SlotRequest {
   maxLookaheadDays: number;
   /** Anything stable per send. Decides the minute, so re-planning must vary it. */
   seed: string;
+  /**
+   * Whether a candidate instant is usable: a mailbox with room, and nothing
+   * already booked too close to it (0041). Optional, and without it only the
+   * hashed minute of each window is considered, exactly as before. With it,
+   * a refused minute moves the send elsewhere in the same window rather than
+   * straight to the next day.
+   */
+  accept?: (at: DateTime) => boolean;
 }
 
 export type SlotResult =
@@ -54,6 +62,26 @@ function hash(seed: string): number {
   return h >>> 0;
 }
 
+function gcd(a: number, b: number): number {
+  while (b !== 0) [a, b] = [b, a % b];
+  return a;
+}
+
+/**
+ * A step through a window's minutes that visits every one exactly once before
+ * repeating, which any stride coprime with the span does. Not 1: when the
+ * hashed minute is refused, the next try should land somewhere else in the
+ * window, not on the neighbouring minute, or every displaced send would sit
+ * exactly one gap after whatever displaced it and the spacing would look
+ * machined.
+ */
+function coprimeStride(span: number): number {
+  for (const candidate of [37, 41, 43, 47, 53, 59, 61, 67, 71, 73]) {
+    if (gcd(candidate, span) === 1) return candidate % span || 1;
+  }
+  return 1;
+}
+
 /**
  * The next sendable slot.
  *
@@ -72,6 +100,7 @@ export function nextSlot(request: SlotRequest): SlotResult {
     allowedWeekdays,
     maxLookaheadDays,
     seed,
+    accept,
   } = request;
 
   if (windows.length === 0) return { ok: false, reason: "lookahead_exhausted" };
@@ -112,20 +141,30 @@ export function nextSlot(request: SlotRequest): SlotResult {
       if (earliestMinute >= windowEnd) continue;
 
       const span = windowEnd - earliestMinute;
-      const minute =
-        earliestMinute + (hash(`${seed}:${day.toISODate()}:${window.startHour}`) % span);
+      const first = hash(`${seed}:${day.toISODate()}:${window.startHour}`) % span;
+      // With nothing to refuse a minute, the hashed one is the only candidate,
+      // which is what every caller and test was written against before 0041.
+      const probes = accept ? span : 1;
+      const stride = coprimeStride(span);
 
-      const at = day.set({
-        hour: Math.floor(minute / 60),
-        minute: minute % 60,
-        second: 0,
-        millisecond: 0,
-      });
+      for (let k = 0; k < probes; k++) {
+        const minute = earliestMinute + ((first + k * stride) % span);
 
-      // A DST spring-forward can land the chosen wall clock on an hour that
-      // does not exist, which Luxon resolves forward. Re-check rather than
-      // trusting the arithmetic.
-      if (at > notBefore) return { ok: true, at };
+        const at = day.set({
+          hour: Math.floor(minute / 60),
+          minute: minute % 60,
+          second: 0,
+          millisecond: 0,
+        });
+
+        // A DST spring-forward can land the chosen wall clock on an hour that
+        // does not exist, which Luxon resolves forward. Re-check rather than
+        // trusting the arithmetic.
+        if (at <= notBefore) continue;
+        if (accept && !accept(at)) continue;
+
+        return { ok: true, at };
+      }
     }
   }
 

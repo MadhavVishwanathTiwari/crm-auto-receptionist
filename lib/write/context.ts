@@ -108,7 +108,7 @@ export async function loadWriteContext(
       // One string literal: concatenating a select list collapses supabase-js's
       // result type to an error type.
       .select(
-        "morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, max_lookahead_days, first_touch_weekdays, followup_weekdays, dry_run",
+        "morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, max_lookahead_days, first_touch_weekdays, followup_weekdays, send_gap_max_minutes, dry_run",
       )
       .maybeSingle(),
     supabase

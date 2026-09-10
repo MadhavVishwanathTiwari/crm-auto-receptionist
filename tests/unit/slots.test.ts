@@ -182,3 +182,61 @@ describe("slot selection", () => {
     expect(+losAngeles.at).toBeGreaterThan(+chicago.at);
   });
 });
+
+describe("slot selection with something to refuse a minute", () => {
+  // bookSlot() passes `accept` so that a minute too close to another booking on
+  // the same mailbox (0041) moves the send within the window instead of
+  // colliding. These pin down that the probing is total and deterministic.
+
+  it("takes the hashed minute when it is accepted, same as with no predicate", () => {
+    const plain = ask();
+    const accepted = ask({ accept: () => true });
+    expect(plain.ok && accepted.ok && +plain.at === +accepted.at).toBe(true);
+  });
+
+  it("moves a refused minute elsewhere in the same day's windows", () => {
+    const first = ask();
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const moved = ask({ accept: (at) => +at !== +first.at });
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+
+    expect(+moved.at).not.toBe(+first.at);
+    expect(moved.at.toISODate()).toBe(first.at.toISODate());
+
+    const minute = minuteOfDay(moved.at);
+    const inMorning = minute >= 7 * 60 && minute < 11 * 60;
+    const inAfternoon = minute >= 13 * 60 && minute < 16 * 60;
+    expect(inMorning || inAfternoon).toBe(true);
+  });
+
+  it("tries every minute of a day before walking to the next", () => {
+    const tried = new Set<number>();
+    const result = ask({
+      accept: (at) => {
+        if (at.toISODate() === "2026-08-10") {
+          tried.add(minuteOfDay(at));
+          return false;
+        }
+        return true;
+      },
+    });
+
+    // 07:00-11:00 and 13:00-16:00: 240 + 180 minutes, each offered once.
+    expect(tried.size).toBe(420);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.at.toISODate()).toBe("2026-08-11");
+  });
+
+  it("is deterministic under the same refusals", () => {
+    const refuseMornings = (at: DateTime) => at.hour >= 13;
+    const one = ask({ accept: refuseMornings });
+    const two = ask({ accept: refuseMornings });
+    expect(one.ok && two.ok && +one.at === +two.at).toBe(true);
+    if (!one.ok) return;
+    expect(one.at.hour).toBeGreaterThanOrEqual(13);
+  });
+});

@@ -164,6 +164,18 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   after Gmail accepted the message is not a failed send: the dispatcher parks
   the row as `stalled` via `mark_send_unrecorded()`, keeping Gmail's ids so the
   follow-up can still thread, and raises an alert.
+- **One send per mailbox at a time, 5 to 15 minutes apart (`0041`).** Before
+  it, hashed minutes could coincide and the five-minute dispatcher sent
+  everything due in one burst, so two emails left one account seconds apart.
+  The gap is enforced in `claim_due_sends()`, the only place that knows when a
+  mailbox last sent: one claim per mailbox per run, then
+  `mailboxes.next_send_not_before` closes for a random
+  `send_gap_min..max_minutes`. It is set at CLAIM, under the advisory lock, not
+  when Gmail answers, because the next run can start before this one reaches
+  Gmail. `bookSlot()` keeps bookings on one mailbox the MAX gap apart, so a
+  booked send is never held past a tick: the time `/write` promises stays true
+  and nothing drifts into `slot_grace_minutes`. The dispatcher runs every
+  minute; at five, "random" would round to 5, 10 or 15.
 - **`mark_send_sent()` is one transaction**: the row, the `sent` event carrying
   Gmail's message id as its `dedupe_token`, and the mailbox stamp.
 - **`claim_due_sends()` takes a TRANSACTION-scoped advisory lock per mailbox**
@@ -559,7 +571,8 @@ npm run verify       # typecheck + lint + test
 The four cron routes take `POST` with `Authorization: Bearer $CRON_SECRET`, and
 each accepts an optional `?org=<uuid>` to scope a run to one org. Cadence, as
 scheduled by `0020`: `resolve-timezones` hourly, `plan-sends` every 15 minutes,
-`dispatch-sends` every 5 (it takes 20 per run by default, `?limit=` to change),
+`dispatch-sends` every minute since `0041` (at most one send per mailbox per
+run, so `?limit=` now only caps how many mailboxes one run serves),
 `poll-replies` every 10.
 
 ```bash

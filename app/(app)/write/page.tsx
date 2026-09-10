@@ -191,7 +191,7 @@ export default async function WritePage() {
 
     // Hold the seat, so the next lead's preview is the time it would really
     // get rather than the same one this lead just took.
-    if (slot?.ok) reserve(write.capacity, slot.mailbox.id, slot.capDate);
+    if (slot?.ok) reserve(write.capacity, slot.mailbox.id, slot.capDate, slot.at);
 
     const leadEvidence = evidence.get(lead.id) ?? null;
 

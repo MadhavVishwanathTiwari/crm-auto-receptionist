@@ -160,7 +160,8 @@ describe("capacity", () => {
       NOW,
     );
 
-    expect(capacity.get(MAILBOX.id)!.size).toBe(0);
+    expect(capacity.days.get(MAILBOX.id)!.size).toBe(0);
+    expect(capacity.instants.get(MAILBOX.id)).toEqual([]);
   });
 
   it("counts a future send against the mailbox-local date it falls on", () => {
@@ -172,7 +173,8 @@ describe("capacity", () => {
     );
 
     const key = at.setZone(MAILBOX.timezone).toISODate()!;
-    expect(capacity.get(MAILBOX.id)!.get(key)).toBe(1);
+    expect(capacity.days.get(MAILBOX.id)!.get(key)).toBe(1);
+    expect(capacity.instants.get(MAILBOX.id)).toEqual([at.toMillis()]);
   });
 
   it("deals the next send to the emptier of two mailboxes", () => {
@@ -198,5 +200,88 @@ describe("capacity", () => {
     reserve(capacity, other.id, capDate);
 
     expect(pickMailbox(capacity, [one, other], at)).toBeNull();
+  });
+});
+
+describe("spacing (0041)", () => {
+  // The dispatcher enforces the gap between two sends from one mailbox. Booking
+  // keeps its promise honest: bookings sit at least the maximum gap apart, so a
+  // booked send is never held behind another one and the time /write showed is
+  // the time it leaves.
+  const SPACED: BookingSettings = { ...SETTINGS, send_gap_max_minutes: 15 };
+  const GAP = 15 * 60_000;
+
+  it("without a gap, two sends with the same seed land on the same minute", () => {
+    // What happened before 0041: nothing kept two bookings apart.
+    const capacity = buildCapacity([MAILBOX], [], NOW);
+    const first = book({ capacity });
+    if (!first.ok) throw new Error("first booking failed");
+    reserve(capacity, first.mailbox.id, first.capDate, first.at);
+
+    const second = book({ capacity });
+    expect(second.ok && +second.at === +first.at).toBe(true);
+  });
+
+  it("with a gap, moves the second at least the gap away", () => {
+    const capacity = buildCapacity([MAILBOX], [], NOW);
+    const first = book({ settings: SPACED, capacity });
+    if (!first.ok) throw new Error("first booking failed");
+    reserve(capacity, first.mailbox.id, first.capDate, first.at);
+
+    const second = book({ settings: SPACED, capacity });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(Math.abs(+second.at - +first.at)).toBeGreaterThanOrEqual(GAP);
+  });
+
+  it("keeps a whole day's worth of bookings on one mailbox the gap apart", () => {
+    const capacity = buildCapacity([MAILBOX], [], NOW);
+    const booked: number[] = [];
+
+    for (let i = 0; i < MAILBOX.daily_cap; i++) {
+      const result = book({ settings: SPACED, capacity, seed: `lead-${i}:1:0` });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      reserve(capacity, result.mailbox.id, result.capDate, result.at);
+      booked.push(+result.at);
+    }
+
+    booked.sort((a, b) => a - b);
+    for (let i = 1; i < booked.length; i++) {
+      expect(booked[i]! - booked[i - 1]!).toBeGreaterThanOrEqual(GAP);
+    }
+  });
+
+  it("steers clear of a send already in the table, not only of reservations", () => {
+    const first = book({ settings: SPACED });
+    if (!first.ok) throw new Error("first booking failed");
+
+    const capacity = buildCapacity(
+      [MAILBOX],
+      [{ mailbox_id: MAILBOX.id, scheduled_at: first.at.toUTC().toISO()! }],
+      NOW,
+    );
+
+    const again = book({ settings: SPACED, capacity });
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(Math.abs(+again.at - +first.at)).toBeGreaterThanOrEqual(GAP);
+  });
+
+  it("passes over the emptier mailbox when it has a send too close", () => {
+    const other: BookingMailbox = { ...MAILBOX, id: "mailbox-b" };
+    const capacity = buildCapacity([MAILBOX, other], [], NOW);
+
+    const at = NOW.plus({ days: 1 });
+    const capDate = at.setZone(MAILBOX.timezone).toISODate()!;
+
+    // MAILBOX has one booking, five minutes from `at`. `other` has two, hours
+    // away. Emptiest-first alone would pick MAILBOX.
+    reserve(capacity, MAILBOX.id, capDate, at.plus({ minutes: 5 }));
+    reserve(capacity, other.id, capDate, at.plus({ hours: 3 }));
+    reserve(capacity, other.id, capDate, at.plus({ hours: 4 }));
+
+    expect(pickMailbox(capacity, [MAILBOX, other], at)?.mailbox.id).toBe(MAILBOX.id);
+    expect(pickMailbox(capacity, [MAILBOX, other], at, 15)?.mailbox.id).toBe(other.id);
   });
 });

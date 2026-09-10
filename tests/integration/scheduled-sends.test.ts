@@ -328,12 +328,72 @@ describe("claiming", () => {
     expect(second).toHaveLength(0);
   }, 180_000);
 
-  it("hands two concurrent callers disjoint sets", async () => {
-    const org = await makeOrg("claim-race");
+  it("sends one per mailbox per run, then waits out a random gap", async () => {
+    // Before 0041 all three of these left in one dispatcher run, seconds apart,
+    // from the same account.
+    const org = await makeOrg("claim-gap", {
+      send_gap_min_minutes: 5,
+      send_gap_max_minutes: 15,
+    });
     const mailboxId = await makeMailbox(org.id, { daily_cap: 20 });
     const templateId = await makeTemplate(org.id);
 
+    for (let i = 0; i < 3; i++) {
+      const lead = await makeLead(org.id);
+      await makeDueSend({ orgId: org.id, leadId: lead.id, mailboxId, templateId });
+    }
+
+    const before = Date.now();
+    const { data: first, error } = await admin().rpc("claim_due_sends", {
+      p_org_id: org.id,
+      p_limit: 10,
+    });
+    expect(error).toBeNull();
+    expect(first).toHaveLength(1);
+
+    // The gate is closed: the next run gets nothing from this mailbox.
+    const { data: second } = await admin().rpc("claim_due_sends", {
+      p_org_id: org.id,
+      p_limit: 10,
+    });
+    expect(second).toHaveLength(0);
+
+    const { data: mailbox } = await admin()
+      .from("mailboxes")
+      .select("next_send_not_before")
+      .eq("id", mailboxId)
+      .single();
+    const gate = Date.parse(mailbox!.next_send_not_before as string);
+
+    // now() + 5 to 15 minutes, by the database's clock. A minute of slack either
+    // way, the same skew the other claim tests already tolerate.
+    expect(gate).toBeGreaterThanOrEqual(before + 4 * 60_000);
+    expect(gate).toBeLessThanOrEqual(Date.now() + 16 * 60_000);
+
+    // Once the gap has passed, the next one goes. The service role may write
+    // the gate; the guard refuses anyone else.
+    await admin()
+      .from("mailboxes")
+      .update({ next_send_not_before: new Date(Date.now() - 10 * 60_000).toISOString() })
+      .eq("id", mailboxId);
+
+    const { data: third } = await admin().rpc("claim_due_sends", {
+      p_org_id: org.id,
+      p_limit: 10,
+    });
+    expect(third).toHaveLength(1);
+    expect(third![0]!.id).not.toBe(first![0]!.id);
+  }, 180_000);
+
+  it("hands two concurrent callers disjoint sets", async () => {
+    // Six mailboxes with one due send each. Since 0041 a mailbox yields at most
+    // one send per claim, so a single mailbox would give the race nothing to
+    // divide.
+    const org = await makeOrg("claim-race");
+    const templateId = await makeTemplate(org.id);
+
     for (let i = 0; i < 6; i++) {
+      const mailboxId = await makeMailbox(org.id, { daily_cap: 20 });
       const lead = await makeLead(org.id);
       await makeDueSend({ orgId: org.id, leadId: lead.id, mailboxId, templateId });
     }

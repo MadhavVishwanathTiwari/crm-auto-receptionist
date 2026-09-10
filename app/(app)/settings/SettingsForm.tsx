@@ -17,6 +17,8 @@ export interface OrgSettingsRow {
   max_lookahead_days: number;
   slot_grace_minutes: number;
   stall_minutes: number;
+  send_gap_min_minutes: number;
+  send_gap_max_minutes: number;
 }
 
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -40,6 +42,8 @@ function toInput(row: OrgSettingsRow): OrgSettingsInput {
     maxLookaheadDays: row.max_lookahead_days,
     slotGraceMinutes: row.slot_grace_minutes,
     stallMinutes: row.stall_minutes,
+    sendGapMinMinutes: row.send_gap_min_minutes,
+    sendGapMaxMinutes: row.send_gap_max_minutes,
   };
 }
 
@@ -299,6 +303,31 @@ export function SettingsForm({
             hint="Minutes in 'sending' before a killed dispatcher's row is failed."
             value={form.stallMinutes}
             onChange={(v) => set("stallMinutes", v)}
+          />
+        </div>
+      </div>
+
+      <div className={PANEL}>
+        <h2 className="text-[var(--color-ink)]">Spacing between sends</h2>
+        <p className="mt-1 mb-3 text-[var(--color-ink-3)]">
+          After a mailbox sends, it waits a random number of minutes between these
+          two before it sends again, and never sends two in one run. Bookings on
+          one mailbox are kept the longer gap apart, so the time the composer
+          shows is the time the email leaves.
+        </p>
+
+        <div className="flex flex-wrap items-start gap-6">
+          <Number_
+            label="Shortest gap"
+            hint="Minutes. Two sends from one mailbox are never closer."
+            value={form.sendGapMinMinutes}
+            onChange={(v) => set("sendGapMinMinutes", v)}
+          />
+          <Number_
+            label="Longest gap"
+            hint="Minutes. Also how far apart bookings are kept."
+            value={form.sendGapMaxMinutes}
+            onChange={(v) => set("sendGapMaxMinutes", v)}
           />
         </div>
       </div>

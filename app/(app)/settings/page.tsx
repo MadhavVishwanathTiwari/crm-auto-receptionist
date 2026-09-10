@@ -64,7 +64,7 @@ export default async function SettingsPage() {
     supabase
       .from("org_settings")
       .select(
-        "dry_run, operator_timezone, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, first_touch_weekdays, followup_weekdays, max_lookahead_days, slot_grace_minutes, stall_minutes",
+        "dry_run, operator_timezone, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, first_touch_weekdays, followup_weekdays, max_lookahead_days, slot_grace_minutes, stall_minutes, send_gap_min_minutes, send_gap_max_minutes",
       )
       .eq("org_id", orgId)
       .maybeSingle(),

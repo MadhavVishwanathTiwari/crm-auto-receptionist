@@ -19,10 +19,9 @@ import { DateTime } from "luxon";
 import { requireBearer } from "@/lib/cronAuth";
 import { serverEnv } from "@/lib/env";
 import {
+  bookSlot,
   buildCapacity,
-  pickMailbox,
   reserve,
-  type BookingMailbox,
   type Capacity,
 } from "@/lib/scheduler/book";
 import {
@@ -30,12 +29,7 @@ import {
   mailboxesForSend,
   pinnedMailboxIdFor,
 } from "@/lib/scheduler/routing";
-import {
-  CADENCE_BUSINESS_DAYS,
-  MAX_STEP,
-  nextSlot,
-  windowsFromSettings,
-} from "@/lib/scheduler/slots";
+import { CADENCE_BUSINESS_DAYS, MAX_STEP } from "@/lib/scheduler/slots";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { addBusinessDays } from "@/lib/timezone/businessDays";
 import { holidaySet } from "@/lib/timezone/holidays";
@@ -71,6 +65,8 @@ interface Settings {
   slot_grace_minutes: number;
   first_touch_weekdays: number[];
   followup_weekdays: number[];
+  /** Bookings on one mailbox are kept this far apart (0041). */
+  send_gap_max_minutes: number;
 }
 
 interface Mailbox {
@@ -345,7 +341,6 @@ async function planOrg(
 
   const holidays = holidaySet(now.year, now.year + 2);
   const graceCutoff = now.minus({ minutes: settings.slot_grace_minutes });
-  const windows = windowsFromSettings(settings);
 
   const unresolvedLeads = new Set(
     (unresolvedRows ?? []).map((row) => row.lead_id as string),
@@ -482,9 +477,6 @@ async function planOrg(
       );
     }
 
-    const allowedWeekdays =
-      step === 1 ? settings.first_touch_weekdays : settings.followup_weekdays;
-
     const attempt = (rollingForward?.plan_attempt ?? -1) + 1;
 
     // Whose mailbox this touch may use. The lead's owner, or -- once a touch has
@@ -513,37 +505,23 @@ async function planOrg(
       continue;
     }
 
-    // Walk forward until a day has both a slot and a mailbox with room on it.
-    let cursor: DateTime = earliestDay;
-    // BookingMailbox, not Mailbox: pickMailbox returns what book.ts knows about
-    // a mailbox, and only the id is read from it here.
-    let placed: { at: DateTime; mailbox: BookingMailbox; capDate: string } | null =
-      null;
-
-    for (let tries = 0; tries <= settings.max_lookahead_days; tries++) {
-      const slot = nextSlot({
-        notBefore: now,
-        earliestDay: cursor,
-        zone,
-        windows,
-        holidays,
-        allowedWeekdays: allowedWeekdays ?? [],
-        maxLookaheadDays: settings.max_lookahead_days,
-        seed: `${lead.id}:${step}:${attempt}`,
-      });
-
-      if (!slot.ok) break;
-
-      const chosen = pickMailbox(capacity, routed.mailboxes, slot.at);
-      if (chosen) {
-        placed = { at: slot.at, mailbox: chosen.mailbox, capDate: chosen.capDate };
-        break;
-      }
-
-      // Every mailbox is full on this day. Try the next one.
-      cursor = slot.at.plus({ days: 1 }).startOf("day");
-      if (cursor.diff(earliestDay, "days").days > settings.max_lookahead_days) break;
-    }
+    // The slot and the mailbox together, from the same function the composer
+    // books with, so the planner and /write can never disagree about whether a
+    // mailbox has room or whether two sends sit too close on it. This used to
+    // be an inline copy of that walk, which is exactly how spacing (0041) would
+    // have landed in one path and not the other.
+    const booking = bookSlot({
+      now,
+      zone,
+      earliestDay,
+      step,
+      seed: `${lead.id}:${step}:${attempt}`,
+      settings,
+      mailboxes: routed.mailboxes,
+      capacity,
+      holidays,
+    });
+    const placed = booking.ok ? booking : null;
 
     if (!placed) {
       report.blocked += 1;
@@ -613,7 +591,7 @@ async function planOrg(
         .select("id");
       if (updated && updated.length > 0) {
         report.rolled_forward += 1;
-        reserve(capacity, placed.mailbox.id, placed.capDate);
+        reserve(capacity, placed.mailbox.id, placed.capDate, placed.at);
       }
     } else {
       const { data: inserted, error } = await supabase
@@ -631,7 +609,7 @@ async function planOrg(
       // step between our read and our write. That is the index doing its job.
       if (!error && inserted && inserted.length > 0) {
         report.planned += 1;
-        reserve(capacity, placed.mailbox.id, placed.capDate);
+        reserve(capacity, placed.mailbox.id, placed.capDate, placed.at);
       }
     }
   }
@@ -657,7 +635,7 @@ export async function POST(request: Request) {
     // One string literal: concatenating a select list collapses supabase-js's
     // result type to an error type.
     .select(
-      "org_id, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, max_lookahead_days, slot_grace_minutes, first_touch_weekdays, followup_weekdays",
+      "org_id, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, max_lookahead_days, slot_grace_minutes, first_touch_weekdays, followup_weekdays, send_gap_max_minutes",
     );
 
   if (onlyOrg) query = query.eq("org_id", onlyOrg);

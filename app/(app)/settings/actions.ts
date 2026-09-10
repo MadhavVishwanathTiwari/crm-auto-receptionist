@@ -24,6 +24,9 @@ export interface OrgSettingsInput {
   maxLookaheadDays: number;
   slotGraceMinutes: number;
   stallMinutes: number;
+  /** The random gap between two sends from one mailbox, min to max (0041). */
+  sendGapMinMinutes: number;
+  sendGapMaxMinutes: number;
 }
 
 const HOUR = (value: number) => Number.isInteger(value) && value >= 0 && value <= 23;
@@ -89,6 +92,21 @@ export async function updateOrgSettings(
   if (!Number.isInteger(input.stallMinutes) || input.stallMinutes < 1) {
     return { ok: false, error: "The stall timeout has to be at least a minute." };
   }
+  // Mirrors org_settings_send_gap. The upper bound is not arbitrary: bookings
+  // on one mailbox are kept the maximum gap apart, so a two-hour gap would fit
+  // barely three sends into a seven-hour day.
+  if (
+    !Number.isInteger(input.sendGapMinMinutes) ||
+    !Number.isInteger(input.sendGapMaxMinutes) ||
+    input.sendGapMinMinutes < 1 ||
+    input.sendGapMaxMinutes > 120 ||
+    input.sendGapMinMinutes > input.sendGapMaxMinutes
+  ) {
+    return {
+      ok: false,
+      error: "The gap between sends has to be whole minutes, at least 1, at most 120, shortest first.",
+    };
+  }
 
   const { data, error } = await context.supabase
     .from("org_settings")
@@ -104,6 +122,8 @@ export async function updateOrgSettings(
       max_lookahead_days: input.maxLookaheadDays,
       slot_grace_minutes: input.slotGraceMinutes,
       stall_minutes: input.stallMinutes,
+      send_gap_min_minutes: input.sendGapMinMinutes,
+      send_gap_max_minutes: input.sendGapMaxMinutes,
     })
     .eq("org_id", context.orgId)
     .select("org_id");
