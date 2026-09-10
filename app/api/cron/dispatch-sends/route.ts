@@ -73,6 +73,8 @@ interface DispatchReport {
   skipped: number;
   failed: number;
   reaped: number;
+  /** Went out, but recording it failed. Each one holds its lead until settled. */
+  unrecorded: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +133,26 @@ async function raiseAlert(
   );
 }
 
+/**
+ * A state transition whose failure must not vanish. Every one of these used to
+ * be awaited and discarded, which is how mark_send_sent() failed on every call
+ * for three weeks without a line in any log. Returns whether it worked.
+ */
+async function transition(
+  supabase: SupabaseClient,
+  fn: string,
+  args: { p_send_id: string } & Record<string, unknown>,
+): Promise<boolean> {
+  const { error } = await supabase.rpc(fn, args);
+  if (error) {
+    console.error(`dispatch-sends: ${fn} failed`, {
+      send_id: args.p_send_id,
+      error: error.message,
+    });
+  }
+  return !error;
+}
+
 // ---------------------------------------------------------------------------
 
 async function dispatchOrg(
@@ -146,6 +168,7 @@ async function dispatchOrg(
     skipped: 0,
     failed: 0,
     reaped: 0,
+    unrecorded: 0,
   };
 
   const { data: reaped } = await supabase.rpc("reap_stalled_sends", {
@@ -254,7 +277,7 @@ async function dispatchOrg(
       send.composed_body !== null && send.composed_subject !== null;
 
     if (!lead || !mailbox || (!written && !template)) {
-      await supabase.rpc("mark_send_skipped", {
+      await transition(supabase, "mark_send_skipped", {
         p_send_id: send.id,
         p_reason: "the lead, mailbox or template went away after this was claimed",
       });
@@ -263,7 +286,7 @@ async function dispatchOrg(
     }
 
     if (deadMailboxes.has(mailbox.id as string) || !mailbox.is_sendable) {
-      await supabase.rpc("mark_send_failed", {
+      await transition(supabase, "mark_send_failed", {
         p_send_id: send.id,
         p_code: "mailbox_unavailable",
         p_detail: "the mailbox is paused or needs reconnecting",
@@ -274,7 +297,7 @@ async function dispatchOrg(
 
     // work_email, and only work_email.
     if (!lead.work_email) {
-      await supabase.rpc("mark_send_skipped", {
+      await transition(supabase, "mark_send_skipped", {
         p_send_id: send.id,
         p_reason: "the lead has no work_email",
       });
@@ -291,7 +314,7 @@ async function dispatchOrg(
         lead.website_domain as string | null,
       )
     ) {
-      await supabase.rpc("mark_send_skipped", {
+      await transition(supabase, "mark_send_skipped", {
         p_send_id: send.id,
         p_reason: "on the do-not-contact list",
       });
@@ -323,7 +346,7 @@ async function dispatchOrg(
       const missing = [...new Set([...subject.missing, ...body.missing])];
 
       if (missing.length > 0) {
-        await supabase.rpc("mark_send_skipped", {
+        await transition(supabase, "mark_send_skipped", {
           p_send_id: send.id,
           p_reason: `nothing to put in ${missing.join(", ")}`,
         });
@@ -358,7 +381,7 @@ async function dispatchOrg(
         if (error instanceof MailboxDisconnectedError) {
           deadMailboxes.add(mailbox.id as string);
         }
-        await supabase.rpc("mark_send_failed", {
+        await transition(supabase, "mark_send_failed", {
           p_send_id: send.id,
           p_code: "no_access_token",
           p_detail: error instanceof Error ? error.message : String(error),
@@ -384,8 +407,9 @@ async function dispatchOrg(
       continue;
     }
 
+    let result: Awaited<ReturnType<typeof sendMessage>>;
     try {
-      const result = await sendMessage({
+      result = await sendMessage({
         accessToken,
         threadId: prior?.threadId ?? null,
         message: {
@@ -405,24 +429,9 @@ async function dispatchOrg(
           references: prior?.messageIds ?? [],
         },
       });
-
-      // One transaction: the row, the `sent` event carrying Gmail's message id
-      // as its dedupe token, and the mailbox stamp. Nothing here writes
-      // leads.status; the trigger on lead_events derives it.
-      await supabase.rpc("mark_send_sent", {
-        p_send_id: send.id,
-        p_message_id: result.providerMessageId,
-        p_thread_id: result.providerThreadId,
-        p_rfc822_id: result.rfc822MessageId,
-        p_subject: subjectText,
-        p_body: bodyText,
-      });
-
-      report.sent += 1;
-      if (written) report.composed += 1;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      await supabase.rpc("mark_send_failed", {
+      await transition(supabase, "mark_send_failed", {
         p_send_id: send.id,
         p_code: error instanceof GmailSendError ? `gmail_${error.status}` : "send_failed",
         p_detail: detail,
@@ -434,7 +443,61 @@ async function dispatchOrg(
         detail: detail.slice(0, 500),
       });
       report.failed += 1;
+      continue;
     }
+
+    // Gmail has the message. Everything below is bookkeeping about an email
+    // that has already gone out, and it sits outside the try above on purpose:
+    // failing to RECORD a send is not failing to SEND it, and treating the one
+    // as the other is how a prospect gets the same email twice.
+    //
+    // One transaction: the row, the `sent` event carrying Gmail's message id as
+    // its dedupe token, and the mailbox stamp. Nothing here writes leads.status;
+    // the trigger on lead_events derives it.
+    const { error: recordError } = await supabase.rpc("mark_send_sent", {
+      p_send_id: send.id,
+      p_message_id: result.providerMessageId,
+      p_thread_id: result.providerThreadId,
+      p_rfc822_id: result.rfc822MessageId,
+      p_subject: subjectText,
+      p_body: bodyText,
+    });
+
+    if (recordError) {
+      // Until 0040 this error was never read. mark_send_sent() raised on every
+      // call (the mailbox guard refused its own definer function), the row sat
+      // in `sending`, the reaper failed it as stalled and the planner booked
+      // the step again: 247 repeat emails in three weeks. Now the row is parked
+      // as `stalled` with Gmail's ids on it, which holds the lead (0040's
+      // trigger) until a person confirms it on the lead drawer.
+      const parked = await transition(supabase, "mark_send_unrecorded", {
+        p_send_id: send.id,
+        p_message_id: result.providerMessageId,
+        p_thread_id: result.providerThreadId,
+        p_rfc822_id: result.rfc822MessageId,
+        p_subject: subjectText,
+        p_body: bodyText,
+        p_detail: `Gmail accepted message ${result.providerMessageId}; recording it failed: ${recordError.message}`,
+      });
+      console.error("dispatch-sends: an email went out and could not be recorded", {
+        send_id: send.id,
+        provider_message_id: result.providerMessageId,
+        error: recordError.message,
+        parked,
+      });
+      await raiseAlert(supabase, {
+        org_id: orgId,
+        kind: "pre_send_review",
+        lead_id: send.lead_id,
+        message: `An email to this lead went out but could not be recorded (${recordError.message}). Nothing more goes to it until someone confirms it on the lead.`,
+        dedupe_token: `unrecorded:${send.id}`,
+      });
+      report.unrecorded += 1;
+      continue;
+    }
+
+    report.sent += 1;
+    if (written) report.composed += 1;
   }
 
   return report;

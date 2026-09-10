@@ -110,7 +110,7 @@ export async function queueWrittenEmail(input: {
   }
 
   const sends = write.sendsByLead.get(lead.id) ?? [];
-  const step = nextStepFor(sends);
+  const step = nextStepFor(sends, write.unresolvedLeadIds.has(lead.id));
 
   if (!step.ok) {
     return {
@@ -118,7 +118,9 @@ export async function queueWrittenEmail(input: {
       error:
         step.reason === "in_flight"
           ? "That lead already has an email on its way out. Wait for it to land."
-          : "That lead has had all four touches.",
+          : step.reason === "outcome_unknown"
+            ? "An earlier email to this lead may already have gone out. Open the lead and say whether it did before writing another."
+            : "That lead has had all four touches.",
     };
   }
 

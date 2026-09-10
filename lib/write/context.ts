@@ -63,6 +63,11 @@ export interface WriteContext {
   senders: MailboxSenders;
   /** Every live send in the org, grouped by lead. */
   sendsByLead: Map<string, WriteSend[]>;
+  /**
+   * Leads with a send whose outcome is unknown (0040): it reached the Gmail
+   * call and nothing after it was recorded. nextStepFor() refuses them.
+   */
+  unresolvedLeadIds: Set<string>;
   capacity: Capacity;
   holidays: Set<string>;
   suppressedEmails: Set<string>;
@@ -96,6 +101,7 @@ export async function loadWriteContext(
     { data: sendRows },
     { data: bodyRows },
     { data: suppressionRows },
+    { data: unresolvedRows },
   ] = await Promise.all([
     supabase
       .from("org_settings")
@@ -129,6 +135,13 @@ export async function loadWriteContext(
       .in("status", REPLACEABLE_STATUSES)
       .limit(2000),
     supabase.from("suppressions").select("email_norm, domain"),
+    // Leads whose last send reached Gmail and was never recorded (0040). Their
+    // rows are `failed`, so the live-send query above never sees them.
+    supabase
+      .from("scheduled_sends")
+      .select("lead_id")
+      .eq("status", "failed")
+      .eq("error_code", "stalled"),
   ]);
 
   if (!settingsRow) return null;
@@ -172,6 +185,9 @@ export async function loadWriteContext(
       (senderRows ?? []) as { mailbox_id: string; user_id: string }[],
     ),
     sendsByLead,
+    unresolvedLeadIds: new Set(
+      (unresolvedRows ?? []).map((row) => row.lead_id as string),
+    ),
     capacity: buildCapacity(mailboxes, sends, now),
     // Two years, matching the planner. A lookahead cannot reach past that.
     holidays: holidaySet(now.year, now.year + 2),
@@ -211,7 +227,7 @@ export function routingBlockMessage(
 
 export type NextStep =
   | { ok: true; step: number; replaces: WriteSend | null; lastSentAt: string | null }
-  | { ok: false; reason: "in_flight" | "sequence_finished" };
+  | { ok: false; reason: "in_flight" | "sequence_finished" | "outcome_unknown" };
 
 /**
  * Which touch a hand-written email would be, given what this lead already has.
@@ -224,11 +240,18 @@ export type NextStep =
  * A `claimed` or `sending` row is refused. By then the dispatcher may already
  * be inside the Gmail call, and replacing the body under it would mean the
  * timeline says one thing and the prospect's inbox says another.
+ *
+ * So is a lead with an unresolved `stalled` send (0040). The dispatcher reached
+ * the Gmail call for it and nothing afterwards was recorded, so the step may
+ * well have gone out, and writing it again is how a prospect gets the same
+ * email twice. Those rows are `failed`, outside `sends`, so the caller says so.
  */
-export function nextStepFor(sends: WriteSend[]): NextStep {
+export function nextStepFor(sends: WriteSend[], outcomeUnknown = false): NextStep {
   if (sends.some((s) => s.status === "claimed" || s.status === "sending")) {
     return { ok: false, reason: "in_flight" };
   }
+
+  if (outcomeUnknown) return { ok: false, reason: "outcome_unknown" };
 
   const live = sends.find(
     (s) => s.status === "planned" || s.status === "blocked",

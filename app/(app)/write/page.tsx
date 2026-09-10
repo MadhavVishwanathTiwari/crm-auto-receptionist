@@ -156,7 +156,7 @@ export default async function WritePage() {
     }
 
     const sends = write.sendsByLead.get(lead.id) ?? [];
-    const step = nextStepFor(sends);
+    const step = nextStepFor(sends, write.unresolvedLeadIds.has(lead.id));
     if (!step.ok) continue;
 
     // Same call the action makes, so the address shown in the footer is the one

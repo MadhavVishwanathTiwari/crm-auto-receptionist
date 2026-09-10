@@ -132,6 +132,11 @@ export interface PlanReport {
    * stopped, which is invisible if it only shows up as a smaller `planned`.
    */
   skipped_no_mailbox: number;
+  /**
+   * An earlier send reached Gmail and was never recorded (0040). Held until a
+   * person says whether it went out, because booking again is a retry.
+   */
+  skipped_unknown_outcome: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +201,7 @@ async function planOrg(
     skipped_no_demo: 0,
     skipped_suppressed: 0,
     skipped_no_mailbox: 0,
+    skipped_unknown_outcome: 0,
   };
 
   const now = DateTime.now();
@@ -205,6 +211,7 @@ async function planOrg(
     { data: senderRows },
     { data: templateRows },
     { data: suppressionRows },
+    { data: unresolvedRows },
   ] = await Promise.all([
     supabase
       .from("mailboxes")
@@ -222,6 +229,16 @@ async function planOrg(
       .eq("org_id", orgId)
       .eq("is_active", true),
     supabase.from("suppressions").select("email_norm, domain").eq("org_id", orgId),
+    // Leads with a send whose outcome is unknown: the dispatcher reached the
+    // Gmail call and nothing after it was recorded. Booking the step again is a
+    // retry by another name, and before 0040 it is how one business got the
+    // same first touch 41 times. They wait for a person instead.
+    supabase
+      .from("scheduled_sends")
+      .select("lead_id")
+      .eq("org_id", orgId)
+      .eq("status", "failed")
+      .eq("error_code", "stalled"),
   ]);
 
   const mailboxes = (mailboxRows ?? []) as Mailbox[];
@@ -330,12 +347,33 @@ async function planOrg(
   const graceCutoff = now.minus({ minutes: settings.slot_grace_minutes });
   const windows = windowsFromSettings(settings);
 
+  const unresolvedLeads = new Set(
+    (unresolvedRows ?? []).map((row) => row.lead_id as string),
+  );
+
   for (const lead of leads) {
     const zone = lead.timezone!;
     const leadSends = byLead.get(lead.id) ?? [];
 
     // Already on its way. Nothing to decide until it lands.
     if (leadSends.some((s) => s.status === "claimed" || s.status === "sending")) {
+      continue;
+    }
+
+    // An earlier send may have gone out and nobody knows. 0040's trigger would
+    // refuse the insert anyway; skipping here is what makes that visible rather
+    // than one more silently ignored error, and it also keeps a missed slot from
+    // being rolled forward underneath the question.
+    if (unresolvedLeads.has(lead.id)) {
+      report.skipped_unknown_outcome += 1;
+      await raiseAlert(supabase, {
+        org_id: orgId,
+        kind: "pre_send_review",
+        lead_id: lead.id,
+        message:
+          "An earlier email to this lead may already have gone out and was never recorded. Nothing more is sent until someone says whether it did, on the lead.",
+        dedupe_token: `stalled:${lead.id}`,
+      });
       continue;
     }
 

@@ -23,6 +23,7 @@ import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
 import {
   closeLead,
   queueWithoutAudit,
+  resolveStalledSend,
   setLeadTimezone,
   type TerminalOutcome,
 } from "./actions";
@@ -133,6 +134,19 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/** A send that reached Gmail and was never recorded. See 0040. */
+export interface StalledSendRow {
+  id: string;
+  step_number: number;
+  sending_at: string | null;
+  error_detail: string | null;
+  rendered_subject: string | null;
+  composed_subject: string | null;
+}
+
+/** How many stalled attempts to list before summarising the rest. */
+const STALLED_SHOWN = 3;
+
 /**
  * Presentational. Everything it shows is fetched by the server component that
  * renders it, so there is no client-side load and no fetch-in-an-effect.
@@ -143,6 +157,7 @@ export function LeadDrawer({
   lead,
   events,
   evidence,
+  stalledSends,
   screenshotUrls,
   currentUserId,
   defaultDealValue,
@@ -150,6 +165,8 @@ export function LeadDrawer({
   lead: LeadDetail;
   events: EventRow[];
   evidence: EvidenceRow[];
+  /** Newest first. Each one holds the lead until somebody settles it. */
+  stalledSends: StalledSendRow[];
   screenshotUrls: Record<string, string>;
   currentUserId: string;
   defaultDealValue: number;
@@ -210,6 +227,77 @@ export function LeadDrawer({
           <p role="alert" className="text-[var(--color-danger)]">
             {error}
           </p>
+        )}
+
+        {/* A send whose outcome nobody knows holds this lead (0040): the planner
+            books nothing and /write refuses it until a person says what
+            happened. Not gated on `editable`; resolve_stalled_send() checks
+            ownership with app.same_operator, the same as set_lead_stage(). */}
+        {stalledSends.length > 0 && (
+          <section className="space-y-2 border border-[var(--color-warn)] p-3">
+            <h3 className="text-[var(--color-warn)]">
+              {stalledSends.length === 1
+                ? "An email may have gone out without being recorded"
+                : `${stalledSends.length} emails may have gone out without being recorded`}
+            </h3>
+            <p className="text-[var(--color-ink-3)]">
+              Nothing more is sent to this lead until each one is settled. Check the
+              sending mailbox&apos;s Sent folder, then say what happened.
+              {stalledSends.length > STALLED_SHOWN &&
+                " With this many, the repair on Import settles them all at once."}
+            </p>
+            <ul className="space-y-2">
+              {stalledSends.slice(0, STALLED_SHOWN).map((send) => {
+                const subject = send.rendered_subject ?? send.composed_subject;
+                return (
+                  <li key={send.id} className="space-y-1">
+                    <div className="text-[var(--color-ink-2)]">
+                      <span className="tabular">T{send.step_number}</span> reached Gmail{" "}
+                      <span className="tabular">
+                        {send.sending_at
+                          ? new Date(send.sending_at).toLocaleString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                      {subject ? ` — "${subject}"` : ""}
+                    </div>
+                    {send.error_detail && (
+                      <div className="break-words text-[var(--color-ink-3)]">
+                        {send.error_detail}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => run(() => resolveStalledSend(send.id, true))}
+                        className={BUTTON}
+                      >
+                        It went out
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => run(() => resolveStalledSend(send.id, false))}
+                        className={BUTTON}
+                      >
+                        It did not go out
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {stalledSends.length > STALLED_SHOWN && (
+              <p className="text-[var(--color-ink-3)]">
+                and {stalledSends.length - STALLED_SHOWN} more
+              </p>
+            )}
+          </section>
         )}
 
         <section className="space-y-1">

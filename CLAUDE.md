@@ -65,6 +65,15 @@ Full build plan, capacity analysis, and phasing:
   is unchanged. Asserting `error !== null` passes vacuously against a completely
   broken policy. Client code must `.select()` after every write and treat `[]`
   as a denial.
+- **A guard that trusts `current_user = 'service_role'` does not trust
+  `SECURITY DEFINER` functions.** Inside one, `current_user` is the function's
+  owner (`postgres`), not whoever called it. `mark_send_sent()` stamped
+  `mailboxes.last_send_at`, the `0013` guard refused it, and the rollback took
+  the `sent` row and event with it, after Gmail had already accepted the email.
+  For three weeks every send was reaped as stalled and booked again: 247
+  emails, six businesses getting the same first touch ~40 times (`0040`).
+  Every definer function that writes a guarded column sets that guard's bypass
+  flag, and every RPC error on the send path is read, never discarded.
 - **`app.current_org_id()` must be `SECURITY DEFINER`.** As `SECURITY INVOKER`
   the RLS policy on `org_members` re-enters itself while being evaluated →
   infinite recursion. This is the classic Supabase multi-tenant lockup.
@@ -144,6 +153,17 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   mid-request then leaves a visibly stuck row rather than a claimable one.
   `reap_stalled_sends()` fails those; it never retries them, because we cannot
   know whether Gmail accepted the message and a wrong guess is a second email.
+  **Until `0040` that was only half true:** the reaper never retried, but the
+  planner saw no sent touch and booked the step again, which is a retry by
+  another name. A `failed`/`stalled` row now holds its lead everywhere: a
+  trigger refuses new bookings (service role included), `claim_due_sends()`
+  skips anything already booked, and the planner and `/write` say why. Only a
+  person settles it — `resolve_stalled_send()` from the lead drawer, or
+  `repair_stalled_sends()` on `/import` for a backlog.
+- **Every RPC error on the send path is read.** `mark_send_sent()` failing
+  after Gmail accepted the message is not a failed send: the dispatcher parks
+  the row as `stalled` via `mark_send_unrecorded()`, keeping Gmail's ids so the
+  follow-up can still thread, and raises an alert.
 - **`mark_send_sent()` is one transaction**: the row, the `sent` event carrying
   Gmail's message id as its `dedupe_token`, and the mailbox stamp.
 - **`claim_due_sends()` takes a TRANSACTION-scoped advisory lock per mailbox**

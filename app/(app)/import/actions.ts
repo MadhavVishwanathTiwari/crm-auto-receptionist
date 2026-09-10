@@ -200,3 +200,77 @@ export async function repairLeadWebsites(
 
   return { ok: true, dryRun, counts, notable: rows.slice(0, 50) };
 }
+
+/**
+ * The repair for emails that went out and were never recorded.
+ *
+ * Until 0040, mark_send_sent() raised on every call: the mailbox guard refused
+ * its own definer function. Gmail had already accepted each message, the row
+ * was reaped as `stalled`, and the planner booked the same step again. The
+ * result is one `stalled` row per email that actually went out.
+ *
+ * This records each lead's step once, dated from its LATEST attempt so T2's
+ * cadence counts from the most recent email, and marks the rest as repeats.
+ * Dry run first: the tally shows how many emails each business really got, and
+ * which re-booked touches (including hand-written ones) are about to be
+ * cancelled because that step already went out.
+ */
+export interface StalledRepairRow {
+  lead_id: string;
+  company: string | null;
+  step_number: number;
+  attempts: number;
+  recorded_at: string | null;
+  cancelled_planned: number;
+  cancelled_written: number;
+  outcome: string;
+}
+
+export interface StalledRepairResult {
+  ok: boolean;
+  error?: string;
+  dryRun: boolean;
+  counts: Record<string, number>;
+  notable: StalledRepairRow[];
+}
+
+export async function repairStalledSends(
+  dryRun: boolean,
+): Promise<StalledRepairResult> {
+  const context = await getOrgContext();
+  if (!context) {
+    return { ok: false, error: "Not signed in.", dryRun, counts: {}, notable: [] };
+  }
+
+  const { data, error } = await context.supabase.rpc("repair_stalled_sends", {
+    p_dry_run: dryRun,
+  });
+
+  if (error) {
+    return { ok: false, error: error.message, dryRun, counts: {}, notable: [] };
+  }
+
+  const rows = (data ?? []) as StalledRepairRow[];
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    // Errors carry the message in the outcome, so one bucket rather than one
+    // per message. The rows themselves still show the text.
+    const key = row.outcome.startsWith("error:") ? "error" : row.outcome;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+
+  if (!dryRun) {
+    // Status, the queue, the composer's worklist and every mailbox's last send.
+    for (const path of ["/leads", "/queue", "/write", "/mailboxes", "/pipeline"]) {
+      revalidatePath(path);
+    }
+  }
+
+  return {
+    ok: true,
+    dryRun,
+    counts,
+    // Most repeats first: those are the businesses that most need a human look.
+    notable: [...rows].sort((a, b) => b.attempts - a.attempts).slice(0, 50),
+  };
+}

@@ -225,3 +225,41 @@ export async function closeLead(
   revalidatePath("/pipeline");
   return { ok: true };
 }
+
+/**
+ * Settles a send whose outcome nobody knows.
+ *
+ * A `stalled` row means the dispatcher reached the Gmail call and nothing after
+ * it was recorded. Since 0040 that holds the lead: the planner books nothing
+ * and /write refuses it, because booking the step again is how a prospect gets
+ * the same email twice. Only a person can look in the Sent folder and say.
+ *
+ * Went out: recorded as sent, dated when it left, so T2's cadence is right.
+ * Did not: the step is free to be booked again. Ownership is checked in the RPC
+ * with app.same_operator, so this is not gated on the drawer's strict flag.
+ */
+export async function resolveStalledSend(
+  sendId: string,
+  wentOut: boolean,
+): Promise<ActionResult> {
+  const context = await getOrgContext();
+  if (!context) return { ok: false, error: "Not signed in." };
+
+  const { error } = await context.supabase.rpc("resolve_stalled_send", {
+    p_send_id: sendId,
+    p_went_out: wentOut,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error:
+        error.code === "42501" ? "That lead belongs to someone else." : error.message,
+    };
+  }
+
+  for (const path of ["/leads", "/queue", "/write", "/pipeline"]) {
+    revalidatePath(path);
+  }
+  return { ok: true };
+}

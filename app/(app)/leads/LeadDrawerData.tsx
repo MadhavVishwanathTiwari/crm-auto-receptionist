@@ -5,6 +5,7 @@ import {
   type EventRow,
   type EvidenceRow,
   type LeadDetail,
+  type StalledSendRow,
 } from "./LeadDrawer";
 
 /**
@@ -18,7 +19,7 @@ import {
 export async function LeadDrawerData({ leadId }: { leadId: string }) {
   const { supabase, userId } = await requireOrgContext();
 
-  const [detail, log, artifacts, settings] = await Promise.all([
+  const [detail, log, artifacts, settings, stalled] = await Promise.all([
     supabase
       .from("leads")
       .select(
@@ -42,6 +43,15 @@ export async function LeadDrawerData({ leadId }: { leadId: string }) {
       .eq("lead_id", leadId)
       .order("created_at", { ascending: false }),
     supabase.from("org_settings").select("default_deal_value").maybeSingle(),
+    // Sends whose outcome nobody knows. Since 0040 each one holds the lead, and
+    // this drawer is where a person settles it, so it has to know which rows.
+    supabase
+      .from("scheduled_sends")
+      .select("id, step_number, sending_at, error_detail, rendered_subject, composed_subject")
+      .eq("lead_id", leadId)
+      .eq("status", "failed")
+      .eq("error_code", "stalled")
+      .order("sending_at", { ascending: false }),
   ]);
 
   // A lead in another org is invisible under RLS rather than forbidden, so this
@@ -79,6 +89,7 @@ export async function LeadDrawerData({ leadId }: { leadId: string }) {
       lead={detail.data as LeadDetail}
       events={(log.data ?? []) as EventRow[]}
       evidence={evidence}
+      stalledSends={(stalled.data ?? []) as StalledSendRow[]}
       screenshotUrls={screenshotUrls}
       currentUserId={userId}
       defaultDealValue={Number(settings.data?.default_deal_value ?? 997)}
