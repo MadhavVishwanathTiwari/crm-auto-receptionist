@@ -28,6 +28,7 @@ import {
   type RoutingBlock,
 } from "@/lib/scheduler/routing";
 import { CADENCE_BUSINESS_DAYS, MAX_STEP } from "@/lib/scheduler/slots";
+import { selectAll } from "@/lib/supabase/paginate";
 import { addBusinessDays } from "@/lib/timezone/businessDays";
 import { holidaySet } from "@/lib/timezone/holidays";
 
@@ -95,13 +96,13 @@ export async function loadWriteContext(
   const now = DateTime.now();
 
   const [
-    { data: settingsRow },
-    { data: mailboxRows },
-    { data: senderRows },
-    { data: sendRows },
-    { data: bodyRows },
-    { data: suppressionRows },
-    { data: unresolvedRows },
+    { data: settingsRow, error: settingsError },
+    { data: mailboxRows, error: mailboxError },
+    { data: senderRows, error: senderError },
+    { data: sendRows, error: sendError },
+    { data: bodyRows, error: bodyError },
+    { data: suppressionRows, error: suppressionError },
+    { data: unresolvedRows, error: unresolvedError },
   ] = await Promise.all([
     supabase
       .from("org_settings")
@@ -123,26 +124,51 @@ export async function loadWriteContext(
     // bodies: at ~40 sends a day these rows are tiny and the bodies are not.
     // `scheduled_local` is not here either — /queue reads that column from its
     // own query, and nothing on this screen ever did.
-    supabase
-      .from("scheduled_sends")
-      .select("id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at")
-      .in("status", LIVE_STATUSES)
-      .limit(5000),
+    //
+    // In pages: `sent` rows accumulate forever and PostgREST stops at 1000 rows
+    // per response whatever .limit() asks for. A lead whose sent row fell off
+    // the end would be offered a step it already had.
+    selectAll<Omit<WriteSend, "composed_subject" | "composed_body">>(() =>
+      supabase
+        .from("scheduled_sends")
+        .select("id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at")
+        .in("status", LIVE_STATUSES),
+    ),
     // The words, only for the rows a composer could replace.
-    supabase
-      .from("scheduled_sends")
-      .select("id, composed_subject, composed_body")
-      .in("status", REPLACEABLE_STATUSES)
-      .limit(2000),
-    supabase.from("suppressions").select("email_norm, domain"),
+    selectAll<{ id: string; composed_subject: string | null; composed_body: string | null }>(
+      () =>
+        supabase
+          .from("scheduled_sends")
+          .select("id, composed_subject, composed_body")
+          .in("status", REPLACEABLE_STATUSES),
+    ),
+    selectAll<{ id: string; email_norm: string | null; domain: string | null }>(() =>
+      supabase.from("suppressions").select("id, email_norm, domain"),
+    ),
     // Leads whose last send reached Gmail and was never recorded (0040). Their
     // rows are `failed`, so the live-send query above never sees them.
-    supabase
-      .from("scheduled_sends")
-      .select("lead_id")
-      .eq("status", "failed")
-      .eq("error_code", "stalled"),
+    selectAll<{ id: string; lead_id: string }>(() =>
+      supabase
+        .from("scheduled_sends")
+        .select("id, lead_id")
+        .eq("status", "failed")
+        .eq("error_code", "stalled"),
+    ),
   ]);
+
+  const readError =
+    settingsError ??
+    mailboxError ??
+    senderError ??
+    sendError ??
+    bodyError ??
+    suppressionError ??
+    unresolvedError;
+  if (readError) {
+    // Every figure below is arithmetic over these reads. A partial answer is
+    // not a smaller one: a missing `sent` row is a step offered twice.
+    throw new Error(`Could not load the send schedule: ${readError.message}`);
+  }
 
   if (!settingsRow) return null;
 

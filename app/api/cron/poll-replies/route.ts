@@ -46,6 +46,7 @@ import { getMailboxAccessToken, MailboxDisconnectedError } from "@/lib/gmail/tok
 import { normalizeEmail } from "@/lib/normalize";
 import { pushAlert } from "@/lib/notify/push";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { selectAll } from "@/lib/supabase/paginate";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -167,17 +168,31 @@ async function buildLeadIndex(
     Date.now() - THREAD_MEMORY_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const { data: sends } = await supabase
-    .from("scheduled_sends")
-    .select("lead_id, provider_thread_id, rfc822_message_id")
-    .eq("org_id", orgId)
-    .eq("status", "sent")
-    .gte("sent_at", since);
+  // In pages, and a failed read throws. A lead missing from this index cannot
+  // be matched, so its reply is filed as ordinary mail and the cursor moves
+  // past it for good. PostgREST's 1000-row cap would have done exactly that,
+  // silently, once enough had been sent.
+  const { data: sends, error: sendError } = await selectAll<{
+    id: string;
+    lead_id: string;
+    provider_thread_id: string | null;
+    rfc822_message_id: string | null;
+  }>(() =>
+    supabase
+      .from("scheduled_sends")
+      .select("id, lead_id, provider_thread_id, rfc822_message_id")
+      .eq("org_id", orgId)
+      .eq("status", "sent")
+      .gte("sent_at", since),
+  );
+  if (sendError) {
+    throw new Error(`reading sent emails for reply matching failed: ${sendError.message}`);
+  }
 
   const byThread = new Map<string, string>();
   const byMessageId = new Map<string, string>();
 
-  for (const send of sends ?? []) {
+  for (const send of sends) {
     const leadId = send.lead_id as string;
     if (send.provider_thread_id) {
       byThread.set(send.provider_thread_id as string, leadId);
@@ -193,10 +208,13 @@ async function buildLeadIndex(
   // Chunked: PostgREST puts `in` values in the URL, and a few hundred uuids is
   // already a long one.
   for (let i = 0; i < leadIds.length; i += 200) {
-    const { data: leads } = await supabase
+    const { data: leads, error: leadError } = await supabase
       .from("leads")
       .select("id, work_email_norm")
       .in("id", leadIds.slice(i, i + 200));
+    if (leadError) {
+      throw new Error(`reading lead addresses for reply matching failed: ${leadError.message}`);
+    }
     for (const lead of leads ?? []) {
       if (lead.work_email_norm) {
         byEmail.set(lead.work_email_norm as string, lead.id as string);

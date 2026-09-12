@@ -81,7 +81,14 @@ export async function queueWrittenEmail(input: {
     };
   }
 
-  const write = await loadWriteContext(supabase);
+  let write: Awaited<ReturnType<typeof loadWriteContext>>;
+  try {
+    write = await loadWriteContext(supabase);
+  } catch (error) {
+    // A partial read is not a smaller answer: a missing `sent` row offers a
+    // step the prospect already has. Refuse rather than book on it.
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
   if (!write) {
     return { ok: false, error: "This org has no settings row, so nothing can be scheduled." };
   }

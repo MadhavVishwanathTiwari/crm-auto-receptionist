@@ -73,6 +73,16 @@ Full build plan, capacity analysis, and phasing:
   is unchanged. Asserting `error !== null` passes vacuously against a completely
   broken policy. Client code must `.select()` after every write and treat `[]`
   as a denial.
+- **PostgREST returns at most 1000 rows per response, whatever `.limit()`
+  says.** `max_rows` is 1000 on the hosted project and in `config.toml`, and a
+  bigger limit is clamped without an error. The leads grid, the planner's
+  candidate list and every live send read `.limit(2000)` or `.limit(5000)`
+  and would have got 1000. Past that the planner cancels bookings for leads it
+  cannot see and the poller cannot match their replies. Anything that needs a
+  complete answer reads through `selectAll()` in `lib/supabase/paginate.ts`,
+  and on the send path a failed read stops the run instead of acting on half a
+  picture; a screen showing the newest N uses `selectUpTo()`. Neither may be
+  replaced by a bigger `.limit()`.
 - **A guard that trusts `current_user = 'service_role'` does not trust
   `SECURITY DEFINER` functions.** Inside one, `current_user` is the function's
   owner (`postgres`), not whoever called it. `mark_send_sent()` stamped

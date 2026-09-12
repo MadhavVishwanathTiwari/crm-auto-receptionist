@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 
 import { requireOrgContext } from "@/lib/org";
+import { selectUpTo } from "@/lib/supabase/paginate";
 
 import { PAGE, PAGE_HEADER } from "../ui";
 import { LeadDrawerData } from "./LeadDrawerData";
@@ -8,10 +9,12 @@ import { LeadsGrid, type LeadRow } from "./LeadsGrid";
 
 export const dynamic = "force-dynamic";
 
-// Two operators working a few thousand leads: one fetch, filtered and sorted in
+// Two operators working a few thousand leads: one read, filtered and sorted in
 // the browser, is faster than a round trip per keystroke. The virtualizer is
 // what makes rendering that many rows free; when the pool outgrows this, the
-// filters move into the query and this cap becomes the page size.
+// filters move into the query and this cap becomes the page size. Read in
+// pages, because PostgREST returns at most 1000 rows per response however high
+// the .limit(): this cap was quietly 1000 until selectUpTo().
 const MAX_ROWS = 5000;
 
 /** Matches the real drawer's width and chrome so nothing shifts on arrival. */
@@ -36,17 +39,23 @@ export default async function LeadsPage({
   const { supabase, userId } = await requireOrgContext();
   const { lead: selectedLeadId } = await searchParams;
 
-  const { data, error } = await supabase
-    .from("leads")
-    // Kept as one string literal: supabase-js parses the select list as a
-    // template literal type, and concatenating it collapses the result to an
-    // error type.
-    .select(
-      "id, company_name, first_name, last_name, title, work_email, status, claimed_by, city, state, timezone, rating, reviews_count, lead_score, is_qualified, created_at, stage, terminal_outcome, next_action, next_action_at",
-    )
-    .is("archived_at", null)
-    .order("created_at", { ascending: false })
-    .limit(MAX_ROWS);
+  const { data, error } = await selectUpTo<LeadRow>(
+    () =>
+      supabase
+        .from("leads")
+        // Kept as one string literal: supabase-js parses the select list as a
+        // template literal type, and concatenating it collapses the result to
+        // an error type.
+        .select(
+          "id, company_name, first_name, last_name, title, work_email, status, claimed_by, city, state, timezone, rating, reviews_count, lead_score, is_qualified, created_at, stage, terminal_outcome, next_action, next_action_at",
+        )
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        // A tiebreak, so a page boundary between two rows imported in the same
+        // instant cannot show one twice and the other never.
+        .order("id", { ascending: false }),
+    MAX_ROWS,
+  );
 
   return (
     <div className={PAGE}>

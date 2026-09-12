@@ -9,6 +9,7 @@ import {
   IN_FLIGHT,
   suppressionIndex,
 } from "@/lib/queue/blockers";
+import { selectAll } from "@/lib/supabase/paginate";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
 import { QueuedSends, type QueuedSend } from "./QueuedSends";
@@ -68,15 +69,20 @@ export default async function QueuePage() {
     { data: settings },
     { data: scheduledRows },
   ] = await Promise.all([
-      supabase
-        .from("leads")
-        // One string literal on purpose; see the note in leads/page.tsx.
-        .select(
-          "id, company_name, work_email, work_email_norm, website_domain, status, claimed_by, timezone, is_qualified, halted_at, terminal_outcome",
-        )
-        .is("archived_at", null)
-        .limit(5000),
-      supabase.from("suppressions").select("email_norm, domain"),
+      // Every lead, in pages: these are the counts the blockers are built
+      // from, and PostgREST stops at 1000 rows per response.
+      selectAll<QueueLead>(() =>
+        supabase
+          .from("leads")
+          // One string literal on purpose; see the note in leads/page.tsx.
+          .select(
+            "id, company_name, work_email, work_email_norm, website_domain, status, claimed_by, timezone, is_qualified, halted_at, terminal_outcome",
+          )
+          .is("archived_at", null),
+      ),
+      selectAll<{ id: string; email_norm: string | null; domain: string | null }>(() =>
+        supabase.from("suppressions").select("id, email_norm, domain"),
+      ),
       supabase
         .from("org_settings")
         .select(

@@ -31,6 +31,7 @@ import {
 } from "@/lib/scheduler/routing";
 import { CADENCE_BUSINESS_DAYS, MAX_STEP } from "@/lib/scheduler/slots";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { selectAll } from "@/lib/supabase/paginate";
 import { addBusinessDays } from "@/lib/timezone/businessDays";
 import { holidaySet } from "@/lib/timezone/holidays";
 
@@ -231,12 +232,20 @@ async function planOrg(
 
   const now = DateTime.now();
 
+  // Every read below is one the planner cannot do without, and an empty answer
+  // is not a neutral one: no candidate leads reads as "every booked send is
+  // stale" and cancels the whole queue, hand-written emails included. So a
+  // failed read stops this org's run instead of planning on half a picture.
+  const mustRead = (what: string, error: { message: string } | null) => {
+    if (error) throw new Error(`could not read ${what}: ${error.message}`);
+  };
+
   const [
-    { data: mailboxRows },
-    { data: senderRows },
-    { data: templateRows },
-    { data: suppressionRows },
-    { data: unresolvedRows },
+    { data: mailboxRows, error: mailboxError },
+    { data: senderRows, error: senderError },
+    { data: templateRows, error: templateError },
+    { data: suppressionRows, error: suppressionError },
+    { data: unresolvedRows, error: unresolvedError },
   ] = await Promise.all([
     supabase
       .from("mailboxes")
@@ -253,18 +262,30 @@ async function planOrg(
       .select("id, step_number, angle_type, requires_demo")
       .eq("org_id", orgId)
       .eq("is_active", true),
-    supabase.from("suppressions").select("email_norm, domain").eq("org_id", orgId),
+    // In pages, like every read here that grows: PostgREST stops at 1000 rows
+    // per response whatever .limit() asks for.
+    selectAll<{ id: string; email_norm: string | null; domain: string | null }>(() =>
+      supabase.from("suppressions").select("id, email_norm, domain").eq("org_id", orgId),
+    ),
     // Leads with a send whose outcome is unknown: the dispatcher reached the
     // Gmail call and nothing after it was recorded. Booking the step again is a
     // retry by another name, and before 0040 it is how one business got the
     // same first touch 41 times. They wait for a person instead.
-    supabase
-      .from("scheduled_sends")
-      .select("lead_id")
-      .eq("org_id", orgId)
-      .eq("status", "failed")
-      .eq("error_code", "stalled"),
+    selectAll<{ id: string; lead_id: string }>(() =>
+      supabase
+        .from("scheduled_sends")
+        .select("id, lead_id")
+        .eq("org_id", orgId)
+        .eq("status", "failed")
+        .eq("error_code", "stalled"),
+    ),
   ]);
+
+  mustRead("mailboxes", mailboxError);
+  mustRead("mailbox senders", senderError);
+  mustRead("templates", templateError);
+  mustRead("suppressions", suppressionError);
+  mustRead("sends with an unknown outcome", unresolvedError);
 
   const mailboxes = (mailboxRows ?? []) as Mailbox[];
   const senders = buildMailboxSenders(
@@ -280,16 +301,21 @@ async function planOrg(
   );
 
   // --- every live send, and the capacity it already consumes ----------------
+  //
+  // Every `sent` row ever is in here, and the step arithmetic, the thread pin
+  // and the hand-written check all read them. At forty a day that passes 1000
+  // within weeks, and PostgREST would silently have dropped the rest.
 
-  const { data: sendRows } = await supabase
-    .from("scheduled_sends")
-    .select(
-      "id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at, plan_attempt, composed_body, template_id",
-    )
-    .eq("org_id", orgId)
-    .in("status", LIVE_STATUSES);
-
-  const sends = (sendRows ?? []) as Send[];
+  const { data: sends, error: sendError } = await selectAll<Send>(() =>
+    supabase
+      .from("scheduled_sends")
+      .select(
+        "id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at, plan_attempt, composed_body, template_id",
+      )
+      .eq("org_id", orgId)
+      .in("status", LIVE_STATUSES),
+  );
+  mustRead("scheduled sends", sendError);
 
   const byLead = new Map<string, Send[]>();
   for (const send of sends) {
@@ -305,26 +331,31 @@ async function planOrg(
   const capacity: Capacity = buildCapacity(mailboxes, sends, now);
 
   // --- candidate leads ------------------------------------------------------
+  //
+  // Complete or not at all. A lead missing from this list has its booked sends
+  // cancelled just below as no longer sendable, so the old .limit(2000) --
+  // which PostgREST quietly held to 1000 -- would have cancelled real
+  // bookings, written ones included, the day the pool passed it.
 
-  const { data: leadRows } = await supabase
-    .from("leads")
-    .select(
-      "id, angle_type, timezone, work_email_norm, website_domain, demo_ready_at, status, claimed_by",
-    )
-    .eq("org_id", orgId)
-    .eq("is_qualified", true)
-    .is("archived_at", null)
-    .is("halted_at", null)
-    .is("terminal_outcome", null)
-    .not("claimed_by", "is", null)
-    // A lead with no resolvable IANA zone is NEVER scheduled. This is the
-    // filter that enforces it, and the reason there is no state-to-timezone
-    // fallback anywhere in this repo.
-    .not("timezone", "is", null)
-    .in("status", SENDABLE_STATUSES)
-    .limit(2000);
-
-  const leads = (leadRows ?? []) as Lead[];
+  const { data: leads, error: leadError } = await selectAll<Lead>(() =>
+    supabase
+      .from("leads")
+      .select(
+        "id, angle_type, timezone, work_email_norm, website_domain, demo_ready_at, status, claimed_by",
+      )
+      .eq("org_id", orgId)
+      .eq("is_qualified", true)
+      .is("archived_at", null)
+      .is("halted_at", null)
+      .is("terminal_outcome", null)
+      .not("claimed_by", "is", null)
+      // A lead with no resolvable IANA zone is NEVER scheduled. This is the
+      // filter that enforces it, and the reason there is no state-to-timezone
+      // fallback anywhere in this repo.
+      .not("timezone", "is", null)
+      .in("status", SENDABLE_STATUSES),
+  );
+  mustRead("candidate leads", leadError);
 
   // --- cancel what should never go out --------------------------------------
   // A lead that replied, bounced, was closed or got suppressed after its next
@@ -716,9 +747,17 @@ export async function POST(request: Request) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  const reports: PlanReport[] = [];
+  // A failed read stops that org, not the others, and says why in the body
+  // pg_net records. It used to be an empty answer planned on as if true.
+  const reports: (PlanReport | { org_id: string; error: string })[] = [];
   for (const settings of (settingsRows ?? []) as Settings[]) {
-    reports.push(await planOrg(supabase, settings));
+    try {
+      reports.push(await planOrg(supabase, settings));
+    } catch (caught) {
+      const error = caught instanceof Error ? caught.message : String(caught);
+      console.error(`plan-sends: ${settings.org_id}: ${error}`);
+      reports.push({ org_id: settings.org_id, error });
+    }
   }
 
   return Response.json({ orgs: reports.length, reports });

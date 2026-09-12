@@ -9,6 +9,7 @@ import {
   IN_FLIGHT,
   suppressionIndex,
 } from "@/lib/queue/blockers";
+import { selectAll } from "@/lib/supabase/paginate";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
 import { OpsPanel, type ScheduledJob } from "./OpsPanel";
@@ -72,15 +73,20 @@ export default async function SettingsPage() {
       .from("mailboxes")
       .select("email, display_name, is_sendable, disconnected_at, timezone"),
     supabase.from("templates").select("name, step_number, is_active, requires_demo"),
-    supabase
-      .from("leads")
-      // One string literal on purpose; see the note in leads/page.tsx.
-      .select(
-        "status, claimed_by, timezone, is_qualified, halted_at, terminal_outcome, work_email_norm, website_domain",
-      )
-      .is("archived_at", null)
-      .limit(5000),
-    supabase.from("suppressions").select("email_norm, domain"),
+    // Every lead, in pages: PostgREST stops at 1000 rows per response, and
+    // "what is still between you and the first email" is a count.
+    selectAll<BlockerLead & { id: string }>(() =>
+      supabase
+        .from("leads")
+        // One string literal on purpose; see the note in leads/page.tsx.
+        .select(
+          "id, status, claimed_by, timezone, is_qualified, halted_at, terminal_outcome, work_email_norm, website_domain",
+        )
+        .is("archived_at", null),
+    ),
+    selectAll<{ id: string; email_norm: string | null; domain: string | null }>(() =>
+      supabase.from("suppressions").select("id, email_norm, domain"),
+    ),
     // pg_cron's tables are unreadable by `authenticated`; 0020 exposes exactly
     // this summary through a definer function. An empty result means nothing is
     // scheduled, which is a real answer rather than a missing one.

@@ -27,13 +27,12 @@ import {
   type Blocker,
   type BlockerLead,
 } from "@/lib/queue/blockers";
+import { selectAll } from "@/lib/supabase/paginate";
 
 import { PAGE, PAGE_HEADER, PANEL, STAGE_TONE } from "../ui";
 import { Funnel, SendHistory, Stat, type DayCount } from "./Charts";
 
 export const dynamic = "force-dynamic";
-
-const MAX_ROWS = 5000;
 
 /** Everything the RPC answers that TypeScript cannot. */
 interface Activity {
@@ -107,16 +106,22 @@ export default async function DashboardPage() {
   // Four round trips, one Promise.all. Compare /settings at six and /queue at
   // four. mailboxes and alerts are folded into the RPC rather than fetched
   // separately, which is where two of the savings come from.
+  // Every lead and every suppression, not the first 1000 of each: these are
+  // totals, and PostgREST stops at 1000 rows per response. `id` is selected
+  // only because the pages are keyed on it.
   const [leadRows, suppressionRows, settings, activityResult] = await Promise.all([
-    supabase
-      .from("leads")
-      // One string literal on purpose; see the note in leads/page.tsx.
-      .select(
-        "status, claimed_by, timezone, is_qualified, halted_at, terminal_outcome, work_email_norm, website_domain, stage, deal_value, next_action_at",
-      )
-      .is("archived_at", null)
-      .limit(MAX_ROWS),
-    supabase.from("suppressions").select("email_norm, domain"),
+    selectAll<DashboardLead & { id: string }>(() =>
+      supabase
+        .from("leads")
+        // One string literal on purpose; see the note in leads/page.tsx.
+        .select(
+          "id, status, claimed_by, timezone, is_qualified, halted_at, terminal_outcome, work_email_norm, website_domain, stage, deal_value, next_action_at",
+        )
+        .is("archived_at", null),
+    ),
+    selectAll<{ id: string; email_norm: string | null; domain: string | null }>(() =>
+      supabase.from("suppressions").select("id, email_norm, domain"),
+    ),
     supabase.from("org_settings").select("default_deal_value, dry_run").maybeSingle(),
     supabase.rpc("dashboard_activity", { p_days: 14 }),
   ]);
