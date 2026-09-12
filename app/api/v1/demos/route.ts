@@ -147,11 +147,29 @@ export async function POST(request: Request) {
       // legitimately arrive before the lead it belongs to is imported. Park it
       // as an alert so the next import can be reconciled against it by hand
       // rather than dropping a demo somebody paid to build.
-      const { data: orgs } = await supabase.from("orgs").select("id").limit(1);
-      const orgId = orgs?.[0]?.id as string | undefined;
+      //
+      // Which org hears about it. There is no lead to say, so: the org that
+      // actually sends email, by its oldest mailbox. This used to be an
+      // unordered `orgs.limit(1)`, which on the hosted project returned a
+      // leftover test org no operator belongs to, so RLS hid every orphan
+      // alert from the people who could act on it.
+      const { data: sender } = await supabase
+        .from("mailboxes")
+        .select("org_id")
+        .order("created_at", { ascending: true })
+        .limit(1);
+      let orgId = sender?.[0]?.org_id as string | undefined;
+      if (!orgId) {
+        const { data: orgs } = await supabase
+          .from("orgs")
+          .select("id")
+          .order("created_at", { ascending: true })
+          .limit(1);
+        orgId = orgs?.[0]?.id as string | undefined;
+      }
 
       if (orgId) {
-        await supabase.from("alerts").upsert(
+        const { error: alertError } = await supabase.from("alerts").upsert(
           {
             org_id: orgId,
             kind: "orphan_demo",
@@ -161,6 +179,9 @@ export async function POST(request: Request) {
           },
           { onConflict: "org_id,kind,dedupe_token", ignoreDuplicates: true },
         );
+        if (alertError) {
+          console.error(`demos: parking orphan ${demo.slug} failed: ${alertError.message}`);
+        }
       }
 
       outcomes.push({ slug: demo.slug, matched_on: null, lead_id: null, status: "orphaned" });
