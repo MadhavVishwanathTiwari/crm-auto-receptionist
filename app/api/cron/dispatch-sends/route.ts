@@ -72,6 +72,8 @@ interface DispatchReport {
   composed: number;
   skipped: number;
   failed: number;
+  /** Claimed by a run that never reached Gmail; back in the queue (0046). */
+  released: number;
   reaped: number;
   /** Went out, but recording it failed. Each one holds its lead until settled. */
   unrecorded: number;
@@ -167,13 +169,30 @@ async function dispatchOrg(
     composed: 0,
     skipped: 0,
     failed: 0,
+    released: 0,
     reaped: 0,
     unrecorded: 0,
   };
 
-  const { data: reaped } = await supabase.rpc("reap_stalled_sends", {
+  // A claim that never reached the Gmail call goes back to the queue (0046),
+  // before this run claims, so a row freed here can go out in this same run.
+  // Safe because mark_send_sending() is the only way to Gmail and it requires
+  // the very claim this releases.
+  const { data: released, error: releaseError } = await supabase.rpc(
+    "release_expired_claims",
+    { p_org_id: orgId },
+  );
+  if (releaseError) {
+    console.error("dispatch-sends: release_expired_claims failed", releaseError.message);
+  }
+  report.released = (released as number | null) ?? 0;
+
+  const { data: reaped, error: reapError } = await supabase.rpc("reap_stalled_sends", {
     p_org_id: orgId,
   });
+  if (reapError) {
+    console.error("dispatch-sends: reap_stalled_sends failed", reapError.message);
+  }
   report.reaped = (reaped as number | null) ?? 0;
 
   // Caps, the grace window and the dry_run kill switch all live inside this
@@ -397,10 +416,22 @@ async function dispatchOrg(
     // The point of no return. Marked first so a process killed inside the
     // Gmail call leaves a row that is visibly stuck rather than one the next
     // run would claim and send a second time.
-    const { data: locked } = await supabase.rpc("mark_send_sending", {
+    const { data: locked, error: lockError } = await supabase.rpc("mark_send_sending", {
       p_send_id: send.id,
       p_claim_token: send.claim_token,
     });
+
+    if (lockError) {
+      // Not sent, and still `claimed`. release_expired_claims() puts it back
+      // in the queue after stall_minutes (0046). This error used to be
+      // discarded, and with nothing to release a claim the lead then waited
+      // for good.
+      console.error("dispatch-sends: mark_send_sending failed", {
+        send_id: send.id,
+        error: lockError.message,
+      });
+      continue;
+    }
 
     if (locked !== true) {
       // Another dispatcher owns it. Not ours to send.

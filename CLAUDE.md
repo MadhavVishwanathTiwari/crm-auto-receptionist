@@ -178,6 +178,15 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   skips anything already booked, and the planner and `/write` say why. Only a
   person settles it — `resolve_stalled_send()` from the lead drawer, or
   `repair_stalled_sends()` on `/import` for a backlog.
+- **A `claimed` row is released, never reaped (`0046`).** Between
+  `claim_due_sends()` and `mark_send_sending()` nothing has touched Gmail, so a
+  claim older than `stall_minutes` goes back to `planned` through
+  `release_expired_claims()`, which the dispatcher calls before it claims.
+  Until `0046` nothing moved a row out of `claimed` at all: a dispatcher killed
+  in that window, or refused by `mark_send_sending()` with an error nobody
+  read, froze its lead for good while `/write` called it "on its way".
+  Releasing clears the claim token, so a dispatcher still holding it is
+  refused at the point of no return and cannot send it.
 - **Every RPC error on the send path is read.** `mark_send_sent()` failing
   after Gmail accepted the message is not a failed send: the dispatcher parks
   the row as `stalled` via `mark_send_unrecorded()`, keeping Gmail's ids so the
