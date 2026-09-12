@@ -727,6 +727,26 @@ each newly inserted alert also goes to a phone. Unconfigured is a no-op, and a
 push failure never fails the poll: only a genuinely new row notifies, which is
 what stops an overlapping history page buzzing twice for one reply.
 
+**The cursor only moves past what is settled.** From 17 Aug `madhav@`'s poll
+threw on every run and answered a row of zeros under a 200, so pg_cron said
+"succeeded" and nothing said the mailbox was not being read. Now:
+
+- a message deleted before it is read is skipped, not thrown on, so it cannot
+  wedge the cursor behind it;
+- a reply whose event fails to record stops the run *without* moving past it,
+  because the event is what halts the sequence;
+- a run out of time (40s budget) or pages stores the last record it finished,
+  not nothing (the same backlog forever) and not Gmail's current history id
+  (skipping every unread page);
+- the error is in the response body, which `net._http_response` keeps for a
+  few hours, and `last_polled_at` only moves on a run with no error;
+- a mailbox with no complete poll for an hour raises one `mailbox_auth` alert
+  a day, pushed to a phone.
+
+A cursor Gmail has aged out still rebaselines to "now", and now says which
+window was never read: `scripts/reconcile-mailbox-history.mjs` recovers
+replies, bounces and unsubscribes from it.
+
 ## Where the tests run
 
 `tests/setup/target.ts` runs the suites against the **local** stack, and fails

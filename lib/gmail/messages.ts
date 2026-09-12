@@ -39,16 +39,28 @@ async function get<T>(path: string, accessToken: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export interface HistoryPage {
-  /** Message ids added since the cursor, newest last. */
+export interface HistoryRecord {
+  /** This record's own id. A cursor stored here resumes after it. */
+  id: string;
+  /** Messages it added, oldest first, our own outbound copies already dropped. */
   messageIds: string[];
-  /** The cursor to store for next time. */
+}
+
+export interface HistoryPage {
+  /** In history order. A record whose messages were all ours is kept, empty. */
+  records: HistoryRecord[];
+  /**
+   * The mailbox's CURRENT history id, past every record on every page. Only
+   * safe to store once the last page has been read: stored after an earlier
+   * page, it silently skips every page after it.
+   */
   historyId: string;
   nextPageToken: string | null;
 }
 
 interface RawHistoryResponse {
   history?: {
+    id?: string;
     messagesAdded?: { message?: { id?: string; labelIds?: string[] } }[];
   }[];
   historyId?: string;
@@ -79,20 +91,22 @@ export async function listHistory(input: {
     input.accessToken,
   );
 
-  const ids: string[] = [];
+  const records: HistoryRecord[] = [];
   for (const entry of payload.history ?? []) {
+    if (!entry.id) continue;
+    const ids: string[] = [];
     for (const added of entry.messagesAdded ?? []) {
       const id = added.message?.id;
       // Our own outbound copy shows up here too. Skipping it early saves a
       // messages.get per send we already know about.
       const labels = added.message?.labelIds ?? [];
-      if (id && !labels.includes("SENT")) ids.push(id);
+      if (id && !labels.includes("SENT") && !ids.includes(id)) ids.push(id);
     }
+    records.push({ id: String(entry.id), messageIds: ids });
   }
 
   return {
-    // A page may repeat an id across history records.
-    messageIds: [...new Set(ids)],
+    records,
     historyId: String(payload.historyId ?? input.startHistoryId),
     nextPageToken: payload.nextPageToken ?? null,
   };
