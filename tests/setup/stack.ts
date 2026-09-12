@@ -47,9 +47,11 @@ export async function runSql<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
+  const target = testTarget();
   const client = new pg.Client({
-    connectionString: testTarget().dbUrl,
-    ssl: { rejectUnauthorized: false },
+    connectionString: target.dbUrl,
+    // The hosted pooler requires TLS; the local Postgres does not speak it.
+    ssl: target.isShared ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: 20_000,
   });
   await client.connect();

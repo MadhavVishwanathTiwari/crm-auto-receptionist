@@ -57,6 +57,14 @@ Full build plan, capacity analysis, and phasing:
    it, and `queue_composed_send()` refuses anything else. The one exception is a
    lead whose sequence already started somewhere: that is a Gmail requirement,
    not a preference. See "Whose mailbox" below.
+8. **Every new table and function grants its API roles in its own migration.**
+   Since `0045` no default privilege hands anything to `anon`, `authenticated`
+   or `service_role`, on the hosted project or a fresh stack. Before it, the
+   hosted project's old defaults granted every new object to all three roles
+   *directly*, which is why `0021`'s `revoke ... from public` on `record_demo()`
+   never took effect and anon could call it for months: a revoke from `public`
+   does not undo a direct grant. A security definer RPC revokes from
+   `public, anon, authenticated` and grants exactly who may call it.
 
 ## Things that will bite you
 
@@ -721,10 +729,16 @@ what stops an overlapping history page buzzing twice for one reply.
 
 ## Where the tests run
 
-`tests/setup/target.ts` picks a target: **local** if the stack is up, **cloud**
-otherwise, forced by `TEST_TARGET=local|cloud`. It prints a warning whenever it
-lands on cloud, because a suite that silently changes which database it asserts
-against is worse than one that fails.
+`tests/setup/target.ts` runs the suites against the **local** stack, and fails
+if it is not running. **Cloud only with `TEST_TARGET=cloud`**, and it warns when
+it does. It used to fall back to cloud on its own, which was defensible while
+the project was empty and stopped being so when real leads and a live sender
+arrived.
+
+A fresh local stack only works because of `0045`. Current Supabase stacks give
+the API roles nothing on objects `postgres` creates, and no migration before
+`0045` granted anything, so every suite failed in setup with `permission
+denied for table orgs`.
 
 Local is the preferred home. Not because RLS behaves differently — it doesn't —
 but because `db:reset` drops the database, and that command must never learn to

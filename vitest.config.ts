@@ -18,6 +18,9 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: ["tests/**/*.test.ts"],
+    // Points the app's own env -- every route handler a suite imports -- at the
+    // same database as the fixtures. See the file for what happened without it.
+    globalSetup: ["tests/setup/global.ts"],
     setupFiles: ["tests/setup/env.ts"],
     // RLS tests talk to a real local Postgres and deliberately race each other
     // (two users claiming the same lead). Running files in parallel against one

@@ -2,17 +2,16 @@
 //
 // Two targets are supported:
 //
-//   local  — `npm run db:start`. Preferred, because `npm run db:reset` DROPS
-//            AND RECREATES the database, and that command must never learn to
-//            point at the project holding real leads.
-//   cloud  — the hosted project, from .env. Used while the local stack is
-//            unavailable. Safe today because the project is empty; it stops
-//            being safe the moment real leads land in it.
+//   local  — `npm run db:start`. The default, and the only one chosen without
+//            being asked for.
+//   cloud  — the hosted project, from .env, and only with TEST_TARGET=cloud.
 //
-// Default is local when reachable, cloud otherwise, and TEST_TARGET forces
-// either. Whichever is chosen is printed once at startup, because a suite that
-// silently changes which database it asserts against is worse than one that
-// fails.
+// Cloud used to be the automatic fallback whenever the local stack was down,
+// on the reasoning that the project was empty. It has held real leads and a
+// live sender since August, so "the stack is not running" now fails loudly
+// instead of quietly pointing the suites at production. They create orgs,
+// auth users and scheduled sends there, and a fixture that escaped its org
+// scoping would be a real email.
 
 import { execFileSync } from "node:child_process";
 import { config } from "dotenv";
@@ -112,26 +111,26 @@ export function testTarget(): TargetConfig {
 
   if (requested === "cloud") {
     cached = cloudConfig();
-  } else if (requested === "local") {
+  } else {
     const local = localConfig();
     if (!local) {
       throw new Error(
-        "TEST_TARGET=local but the local stack is not running. " +
-          "Start Docker Desktop, then `npm run db:start`.",
+        "The local Supabase stack is not running, and the integration suites " +
+          "no longer fall back to the hosted project: it holds real leads. " +
+          "Start Docker, then `npm run db:start`. (TEST_TARGET=cloud forces " +
+          "the hosted project, knowingly.)",
       );
     }
     cached = local;
-  } else {
-    cached = localConfig() ?? cloudConfig();
   }
 
   if (cached.isShared) {
     console.warn(
-      `\n  Integration tests are running against the SHARED cloud project ` +
-        `(${new URL(cached.apiUrl).hostname}).\n` +
-        `  They create and delete orgs and auth users. Safe while the project ` +
-        `is empty.\n` +
-        `  Switch back with \`npm run db:start\` once Docker works.\n`,
+      `\n  Integration tests are running against the HOSTED project ` +
+        `(${new URL(cached.apiUrl).hostname}), which holds real leads and a ` +
+        `live sender.\n` +
+        `  They create and delete orgs, auth users and scheduled sends there.\n` +
+        `  Unset TEST_TARGET to run against the local stack instead.\n`,
     );
   }
 
