@@ -176,6 +176,13 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   booked send is never held past a tick: the time `/write` promises stays true
   and nothing drifts into `slot_grace_minutes`. The dispatcher runs every
   minute; at five, "random" would round to 5, 10 or 15.
+- **Never two emails to one lead inside 20 hours (`0042`).** `claim_due_sends()`
+  skips a send while any other row for that lead reached Gmail in the last 20
+  hours: `sending_at` for the dispatcher's own, `sent_at` for history recorded
+  from a Sent folder, whatever the row's status. The shortest real gap between
+  touches is two business days, so nothing legitimate ever waits on it. It is a
+  ceiling on the next repeat bug, whatever causes it; `0040` fixed the one we
+  know about.
 - **`mark_send_sent()` is one transaction**: the row, the `sent` event carrying
   Gmail's message id as its `dedupe_token`, and the mailbox stamp.
 - **`claim_due_sends()` takes a TRANSACTION-scoped advisory lock per mailbox**
@@ -459,6 +466,53 @@ touch is due immediately. That is the point - T4 is overdue - but read the
 the way regardless: `org_settings.dry_run` gates `claim_due_sends()`. The sheet
 leads used to be blocked by `is_qualified = false` as well — the sheet carries
 no rating column — which is a large part of why `0031` removed the rating floor.
+
+## What the mailboxes already sent (`0042`)
+
+Past the sheet there was a second gap: the Sent folders themselves. On 12 Sep
+`/write` offered 141 of Ojas's leads as T1; 122 had already had a first touch by
+hand from Gmail and 43 had had three. `0027` never recorded them, and even run,
+the sheet is a second-hand account with no thread id to follow up on.
+
+`scripts/reconcile-mailbox-history.mjs` reads every connected mailbox's Sent
+folder (`gmail.readonly`, no new scope) and hands each lead's touches to
+`public.record_mailbox_touches()`. **Dry run unless `--apply`**, and the dry
+run calls the same functions with `p_dry_run`, so its report is what applying
+would do rather than an estimate of it.
+
+- **Gmail is the authority; the sheet fills gaps.** A message whose id matches a
+  row's `provider_message_id` is that row. One within 36 hours of a row with no
+  message id (`0027`'s sheet rows, `0040`'s after-the-fact records) lends it its
+  ids. A sheet cell no message accounts for is recorded as `0027` would have,
+  token and all.
+- **One touch per prospect-local day, the latest.** On Sep 10 the loop sent some
+  leads three different first touches in one afternoon under three subjects, so
+  a subject is no key. No real sequence has ever put two touches on one day, and
+  the latest is the attempt `0040`'s repair recorded.
+- **Recorded rows carry the mailbox and the thread**, which is what pins the
+  follow-up to the account holding the conversation and lets `dispatch-sends`
+  thread it. `template_id` and `composed_body` stay null: nothing says which
+  copy it was.
+- **Steps are renumbered by date.** An earlier email turning up moves the app's
+  own row up a step, highest-first so two live rows never share one. More than
+  four distinct touches is refused (`too_many_touches`), not squeezed in:
+  `step_number` is 1 to 4.
+- **Recorded history means hand-written follow-ups.** `hasRecordedHistory()` in
+  `plan-sends`: a `sent` row with neither a template nor a body is an email a
+  person sent from their own mailbox, so the planner cancels any template
+  booked for that lead and leaves the next touch to `/write`. It still re-times
+  a written send whose slot passed.
+- **`public.close_leads_dnc()`** closes with a `closed` event and a `manual_dnc`
+  suppression, keyed by token. The script uses it for the sheet's `removed` rows
+  (`sheet:removed`, `0027`'s own token) and for every lead the loop sent one
+  email five or more times.
+- **Inbound history too.** Replies, bounces and unsubscribes that arrived before
+  `poll-replies` ran are classified by the app's own `classifyInbound()` and
+  recorded with the poller's event shape and dedupe token, so the poller can
+  never add a second.
+- The script imports `lib/gmail/classify.ts` and `lib/normalize/email.ts`
+  directly; Node 24 strips the types. Keep both free of imports and of
+  non-erasable syntax (enums, parameter properties), or the script stops loading.
 
 ## The pipeline, which is a second dimension (`0035`/`0036`)
 

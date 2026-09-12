@@ -111,6 +111,12 @@ interface Send {
    * template back over the words while doing it.
    */
   composed_body: string | null;
+  /**
+   * NULL on a `sent` row with no composed_body means the touch was recorded
+   * from outside the app -- the sheet, or a mailbox's Sent folder (0027, 0042)
+   * -- and a person owns that sequence. See hasRecordedHistory().
+   */
+  template_id: string | null;
 }
 
 export interface PlanReport {
@@ -133,6 +139,12 @@ export interface PlanReport {
    * person says whether it went out, because booking again is a retry.
    */
   skipped_unknown_outcome: number;
+  /**
+   * The lead's history was recorded from outside the app, so its follow-ups are
+   * written by hand in /write. The planner still re-times a written send whose
+   * slot passed; it no longer puts a template into that conversation.
+   */
+  skipped_hand_written: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +192,22 @@ function templateFor(
   );
 }
 
+/**
+ * A touch recorded from outside the app: `sent`, with neither a template nor
+ * written words. Only 0027's sheet backfill and 0042's Sent-folder
+ * reconciliation write one. Those were emails a person sent from their own
+ * mailbox, so the next one is theirs to write too: a template dropped into a
+ * conversation somebody started by hand reads as a machine, because it is one.
+ *
+ * A template deleted after it was sent also leaves template_id NULL. That lead
+ * then waits for a person as well, which is the safe way to be wrong.
+ */
+function hasRecordedHistory(sends: Send[]): boolean {
+  return sends.some(
+    (s) => s.status === "sent" && s.template_id === null && s.composed_body === null,
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 async function planOrg(
@@ -198,6 +226,7 @@ async function planOrg(
     skipped_suppressed: 0,
     skipped_no_mailbox: 0,
     skipped_unknown_outcome: 0,
+    skipped_hand_written: 0,
   };
 
   const now = DateTime.now();
@@ -255,7 +284,7 @@ async function planOrg(
   const { data: sendRows } = await supabase
     .from("scheduled_sends")
     .select(
-      "id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at, plan_attempt, composed_body",
+      "id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at, plan_attempt, composed_body, template_id",
     )
     .eq("org_id", orgId)
     .in("status", LIVE_STATUSES);
@@ -396,6 +425,47 @@ async function planOrg(
         report.cancelled += booked.length;
       }
       continue;
+    }
+
+    // History recorded from outside the app -- the sheet, or a mailbox's Sent
+    // folder -- is somebody's own correspondence, and its follow-ups are
+    // written by hand in /write. A template booked into it is cancelled. A
+    // written send is left alone, so one whose slot passed is still re-timed
+    // below with its words intact.
+    if (hasRecordedHistory(leadSends)) {
+      const templated = leadSends.filter(
+        (s) =>
+          (s.status === "planned" || s.status === "blocked") && s.composed_body === null,
+      );
+
+      if (templated.length > 0) {
+        const { data: cancelled } = await supabase
+          .from("scheduled_sends")
+          .update({
+            status: "cancelled",
+            outcome_reason:
+              "this lead's earlier touches were sent by hand, so its follow-ups are written in /write",
+          })
+          .in(
+            "id",
+            templated.map((s) => s.id),
+          )
+          .in("status", ["planned", "blocked"])
+          .select("id");
+        report.cancelled += cancelled?.length ?? 0;
+      }
+
+      const written = leadSends.some(
+        (s) =>
+          (s.status === "planned" || s.status === "blocked") && s.composed_body !== null,
+      );
+
+      // With a template just cancelled, leadSends is stale for this run; the
+      // next one sees the written send on its own.
+      if (!written || templated.length > 0) {
+        report.skipped_hand_written += 1;
+        continue;
+      }
     }
 
     // A slot that has already come and gone. Roll it forward rather than
