@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { serverEnv } from "@/lib/env";
 
 /**
- * The four background jobs, and the button that runs one now.
+ * The background jobs, and the button that runs one now.
  *
  * Nothing about the pipeline is event-driven: a lead becomes sendable when a
  * human audits it, and the planner notices on its next tick. That is fine when
@@ -45,8 +45,8 @@ export const JOBS = [
     name: "dispatch-sends",
     label: "Dispatch sends",
     blurb:
-      "Sends what is due, 20 per run. Refuses to do anything while dry run is on.",
-    cadence: "*/5 * * * *",
+      "Sends what is due, one per mailbox per run and 5 to 15 minutes apart. Refuses to do anything while dry run is on.",
+    cadence: "* * * * *",
   },
   {
     name: "poll-replies",
@@ -54,6 +54,13 @@ export const JOBS = [
     blurb:
       "Reads the mailboxes for replies, bounces and unsubscribes, and halts those sequences.",
     cadence: "*/10 * * * *",
+  },
+  {
+    name: "reconcile-mailboxes",
+    label: "Catch up Sent folders",
+    blurb:
+      "Records emails sent straight from Gmail in the last three days, so /write shows the step each lead is really on.",
+    cadence: "30 23 * * *",
   },
 ] as const;
 

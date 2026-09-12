@@ -516,9 +516,19 @@ would do rather than an estimate of it.
   `poll-replies` ran are classified by the app's own `classifyInbound()` and
   recorded with the poller's event shape and dedupe token, so the poller can
   never add a second.
-- The script imports `lib/gmail/classify.ts` and `lib/normalize/email.ts`
-  directly; Node 24 strips the types. Keep both free of imports and of
-  non-erasable syntax (enums, parameter properties), or the script stops loading.
+- **It keeps itself caught up (`0044`).** `reconcile-mailboxes` runs nightly
+  at 23:30 UTC and does the same thing for the last three days of every
+  connected Sent folder, so an email either operator sends straight from Gmail
+  is recorded by morning. It skips replied and closed leads (an operator's
+  email after a reply is a conversation, not a touch), skips the sheet, and
+  raises one `pre_send_review` alert per lead for anything a person must settle:
+  a lead written to from both mailboxes, more than four touches, no timezone.
+  The one-off script is still the tool for anything older than `?days=14`.
+- The script imports `lib/gmail/classify.ts`, `lib/gmail/touches.ts` and
+  `lib/normalize/email.ts` directly; Node 24 strips the types. Keep all three
+  free of imports and of non-erasable syntax (enums, parameter properties), or
+  the script stops loading. `touches.ts` takes the normalizer as an argument
+  for exactly that reason.
 
 ## The pipeline, which is a second dimension (`0035`/`0036`)
 
@@ -628,12 +638,13 @@ npm run db:types     # regenerate types/db.ts (needs Docker)
 npm run verify       # typecheck + lint + test
 ```
 
-The four cron routes take `POST` with `Authorization: Bearer $CRON_SECRET`, and
+The cron routes take `POST` with `Authorization: Bearer $CRON_SECRET`, and
 each accepts an optional `?org=<uuid>` to scope a run to one org. Cadence, as
 scheduled by `0020`: `resolve-timezones` hourly, `plan-sends` every 15 minutes,
 `dispatch-sends` every minute since `0041` (at most one send per mailbox per
 run, so `?limit=` now only caps how many mailboxes one run serves),
-`poll-replies` every 10.
+`poll-replies` every 10, and `reconcile-mailboxes` once a night at 23:30 UTC
+since `0044` (`?days=` widens its three-day lookback, up to 14).
 
 ```bash
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" $SITE/api/cron/plan-sends

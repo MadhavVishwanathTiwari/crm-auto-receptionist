@@ -175,6 +175,74 @@ export async function fetchMessage(
   };
 }
 
+/**
+ * Every message id matching a Gmail search, across pages. The nightly catch-up
+ * asks for `labelIds: SENT` with `q: after:<epoch seconds>`.
+ */
+export async function listMessageIds(
+  accessToken: string,
+  params: Record<string, string>,
+  maxPages = 20,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken: string | null = null;
+
+  for (let page = 0; page < maxPages; page++) {
+    const query = new URLSearchParams({ maxResults: "500", ...params });
+    if (pageToken) query.set("pageToken", pageToken);
+
+    const result: { messages?: { id?: string }[]; nextPageToken?: string } = await get(
+      `/messages?${query.toString()}`,
+      accessToken,
+    );
+    for (const message of result.messages ?? []) {
+      if (message.id) ids.push(message.id);
+    }
+
+    pageToken = result.nextPageToken ?? null;
+    if (!pageToken) break;
+  }
+
+  return [...new Set(ids)];
+}
+
+export interface MessageMetadata {
+  id: string;
+  threadId: string;
+  /** Epoch millis as a string, which is how Gmail sends it. */
+  internalDate: string | null;
+  /** Lowercased header names. Duplicates keep the first occurrence. */
+  headers: Record<string, string>;
+}
+
+/** Only the named headers, no body. Reading a Sent folder needs nothing more. */
+export async function fetchMessageMetadata(
+  accessToken: string,
+  messageId: string,
+  headerNames: string[],
+): Promise<MessageMetadata> {
+  const query = new URLSearchParams({ format: "metadata" });
+  for (const name of headerNames) query.append("metadataHeaders", name);
+
+  const raw = await get<RawMessage & { internalDate?: string }>(
+    `/messages/${encodeURIComponent(messageId)}?${query.toString()}`,
+    accessToken,
+  );
+
+  const headers: Record<string, string> = {};
+  for (const header of raw.payload?.headers ?? []) {
+    const name = header.name?.toLowerCase();
+    if (name && headers[name] === undefined) headers[name] = header.value ?? "";
+  }
+
+  return {
+    id: raw.id ?? messageId,
+    threadId: raw.threadId ?? "",
+    internalDate: raw.internalDate ?? null,
+    headers,
+  };
+}
+
 /** Message-IDs referenced by this message, oldest first. */
 export function referencedMessageIds(headers: Record<string, string>): string[] {
   const raw = `${headers["references"] ?? ""} ${headers["in-reply-to"] ?? ""}`;

@@ -37,6 +37,7 @@ import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 
 import { classifyInbound, eventTypeFor } from "../lib/gmail/classify.ts";
+import { addressesIn, collapseToDays } from "../lib/gmail/touches.ts";
 import { normalizeEmail } from "../lib/normalize/email.ts";
 
 config({ path: ".env", quiet: true });
@@ -208,21 +209,8 @@ function collectText(part, out) {
   for (const child of part.parts ?? []) collectText(child, out);
 }
 
-const ADDRESS = /[\w.+'-]+@[\w-]+(?:\.[\w-]+)+/g;
-
-function normalizedAddresses(...values) {
-  const found = values.flatMap((value) => (value ?? "").match(ADDRESS) ?? []);
-  return [...new Set(found.map((address) => normalizeEmail(address)).filter(Boolean))];
-}
-
-function localDate(iso, zone) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: zone ?? "UTC",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso));
-}
+/** Addresses in these values, normalized: lib/gmail/touches.ts, shared with the nightly job. */
+const normalizedAddresses = (...values) => addressesIn(normalizeEmail, ...values);
 
 /** What /write would offer right now. Mirrors nextStepFor(). */
 function writeStep(lead, sends) {
@@ -413,19 +401,11 @@ async function reconcileOrg(orgId, mailboxes) {
 
   await pool(candidates, 4, async (lead) => {
     const row = rowFor(lead);
-    const raw = (touchesByLead.get(lead.id) ?? []).sort((a, b) =>
-      a.sent_at.localeCompare(b.sent_at),
-    );
+    const raw = touchesByLead.get(lead.id) ?? [];
 
-    // One touch per prospect-local day, the LATEST of that day. On Sep 10 the
-    // loop sent some leads three different first touches inside three hours
-    // under three different subjects, so a subject is no key, and no real
-    // sequence ever put two touches on one day. The latest is also the attempt
-    // 0040's repair recorded, so it matches that row instead of lending it
-    // another email's thread.
-    const byDay = new Map();
-    for (const touch of raw) byDay.set(localDate(touch.sent_at, lead.timezone), touch);
-    const touches = [...byDay.values()];
+    // One touch per prospect-local day, the latest. The rule and its reasons
+    // live in lib/gmail/touches.ts, shared with the nightly job.
+    const touches = collapseToDays(raw, lead.timezone);
     row.gmail_touches = touches.length;
     row.collapsed_repeats = raw.length - touches.length;
 
