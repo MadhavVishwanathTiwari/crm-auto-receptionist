@@ -446,6 +446,12 @@ lie about who worked the lead.
   exist, three of them dirty (`31/ 07/26 13:47`, `11/08/26/ 21:40`, stray
   seconds). A parser that only handled the common one would drop a touch and
   restart that lead a step early.
+- **A date from before the sheet existed is a typo, not a touch (`0043`).**
+  Nuvo HVAC's `06/08/25 22:41` meant 2026. Read literally it became a phantom
+  T1 a year before the real email, too far away for `0042`'s 36-hour match, so
+  `/write` ran a step ahead of the prospect. `parse_sheet_timestamp()` now
+  returns NULL before June 2026 or more than a day in the future, which both
+  passes already report as an unreadable cell.
 - **`removed` becomes `do_not_contact` plus a suppression on the work email.**
   Both, because the terminal outcome settles this lead while the suppression
   survives a re-import as a new one, and the dispatcher re-checks suppressions

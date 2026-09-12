@@ -461,3 +461,44 @@ describe("close_leads_dnc", () => {
     expect(again).toMatchObject([{ outcome: "already_closed" }]);
   });
 });
+
+describe("a sheet cell dated before the sheet existed (0043)", () => {
+  it("is reported, not recorded as a touch", async () => {
+    // Nuvo HVAC: `06/08/25 22:41` for 6 Aug 2026. Read literally it was a
+    // phantom T1 a year before the real one, which put /write a step ahead.
+    const { org, operator } = await makeOrg("history-sheet-typo");
+    const mailboxId = await makeMailbox(org.id, operator);
+
+    const { data: lead, error } = await admin()
+      .from("leads")
+      .insert({
+        org_id: org.id,
+        company_name: "Nuvo HVAC",
+        work_email: `owner-${randomUUID().slice(0, 8)}@prospect.test`,
+        website: `https://${randomUUID().slice(0, 8)}.prospect.test`,
+        timezone: ZONE,
+        timezone_source: "import",
+        claimed_by: operator.id,
+        claimed_at: new Date().toISOString(),
+        raw: { status: "first_touch", first_touch: "06/08/25 22:41" },
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(`lead: ${error.message}`);
+
+    const { data, error: rpcError } = await admin().rpc("record_mailbox_touches", {
+      p_lead_id: lead.id,
+      p_touches: [touch(mailboxId, DateTime.now().minus({ days: 20 }))],
+      p_sheet_zone: "Asia/Kolkata",
+      p_dry_run: false,
+    });
+    if (rpcError) throw new Error(`record_mailbox_touches: ${rpcError.message}`);
+
+    const result = (data as Record<string, unknown>[])[0]!;
+    expect(result).toMatchObject({ outcome: "recorded", touches: 1, next_step: 2 });
+    expect(String(result.detail)).toContain("first_touch");
+
+    const rows = await sendsFor(lead.id as string);
+    expect(rows.map((r) => [r.step_number, r.mailbox_id])).toEqual([[1, mailboxId]]);
+  });
+});
