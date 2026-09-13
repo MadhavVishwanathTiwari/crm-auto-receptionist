@@ -187,6 +187,16 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   read, froze its lead for good while `/write` called it "on its way".
   Releasing clears the claim token, so a dispatcher still holding it is
   refused at the point of no return and cannot send it.
+- **Only a 4xx from Gmail is a failure.** A timeout, a dropped connection, a
+  5xx or a 200 without an id may each be an email that went out, so the row is
+  left in `sending` for the reaper to park as `stalled` and an alert says to
+  check the Sent folder. Recording those as `failed` let `/write` offer the step
+  again. Before `mark_send_sending()`, anything that may pass (a paused mailbox,
+  a token that would not refresh, a suppression list or any other read that
+  errored) leaves the row `claimed` for `release_expired_claims()` rather than
+  spending somebody's written email. A suppression read that errors is never
+  "not suppressed". A real failure raises an alert, because otherwise the lead
+  just shows the same step again and its author never learns why.
 - **Every RPC error on the send path is read.** `mark_send_sent()` failing
   after Gmail accepted the message is not a failed send: the dispatcher parks
   the row as `stalled` via `mark_send_unrecorded()`, keeping Gmail's ids so the

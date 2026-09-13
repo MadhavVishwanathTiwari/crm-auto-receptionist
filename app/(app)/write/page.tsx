@@ -15,6 +15,7 @@
 import { requireOrgContext } from "@/lib/org";
 import { bookSlot, reserve } from "@/lib/scheduler/book";
 import { mailboxesForSend, pinnedMailboxIdFor } from "@/lib/scheduler/routing";
+import { selectAll } from "@/lib/supabase/paginate";
 import { buildTemplateValues, type EvidenceForRender } from "@/lib/templates/render";
 import {
   earliestDayFor,
@@ -78,23 +79,55 @@ export default async function WritePage() {
   // Claimed by ME. Two operators sharing one outbox is the collision the claim
   // exists to prevent, and it matters more here than anywhere else: writing a
   // personal email to somebody else's lead wastes the writing, not just a click.
-  const { data: leadRows, error } = await supabase
-    .from("leads")
-    // One string literal on purpose; see the note in leads/page.tsx.
-    .select(
-      "id, company_name, first_name, last_name, title, work_email, work_email_norm, website, website_domain, phone, city, state, industry, rating, reviews_count, timezone, status, angle_type, demo_txt_url, demo_web_url, created_at",
-    )
-    .eq("claimed_by", userId)
-    .eq("is_qualified", true)
-    .is("archived_at", null)
-    .is("halted_at", null)
-    .is("terminal_outcome", null)
-    .not("timezone", "is", null)
-    .not("work_email", "is", null)
-    .order("created_at", { ascending: true })
-    .limit(WORKLIST_LIMIT * 2);
+  //
+  // Every one of them, not the oldest few hundred. A lead whose sequence has
+  // finished stays claimed and live, and those are the oldest, so the
+  // .limit(300) this used to have filled up with them over time and the newest
+  // claims dropped off the worklist without a word.
+  const { data: leadRows, error } = await selectAll<LeadRow>(() =>
+    supabase
+      .from("leads")
+      // One string literal on purpose; see the note in leads/page.tsx.
+      .select(
+        "id, company_name, first_name, last_name, title, work_email, work_email_norm, website, website_domain, phone, city, state, industry, rating, reviews_count, timezone, status, angle_type, demo_txt_url, demo_web_url, created_at",
+      )
+      .eq("claimed_by", userId)
+      .eq("is_qualified", true)
+      .is("archived_at", null)
+      .is("halted_at", null)
+      .is("terminal_outcome", null)
+      .not("timezone", "is", null)
+      .not("work_email", "is", null),
+  );
 
-  const leads = (leadRows ?? []) as LeadRow[];
+  // Oldest claim first, as before. Sorted here because selectAll pages by id.
+  const leads = [...leadRows].sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  // Which of them the worklist offers, decided before the evidence read so that
+  // read names at most WORKLIST_LIMIT leads: PostgREST puts `in` values in the
+  // URL.
+  const worklist: {
+    lead: LeadRow;
+    sends: Parameters<typeof nextStepFor>[0];
+    step: Extract<ReturnType<typeof nextStepFor>, { ok: true }>;
+  }[] = [];
+
+  for (const lead of leads) {
+    if (worklist.length >= WORKLIST_LIMIT) break;
+
+    if (
+      (lead.work_email_norm && write.suppressedEmails.has(lead.work_email_norm)) ||
+      (lead.website_domain && write.suppressedDomains.has(lead.website_domain))
+    ) {
+      continue;
+    }
+
+    const sends = write.sendsByLead.get(lead.id) ?? [];
+    const step = nextStepFor(sends, write.unresolvedLeadIds.has(lead.id));
+    if (!step.ok) continue;
+
+    worklist.push({ lead, sends, step });
+  }
 
   const [{ data: templateRows }, { data: evidenceRows }] = await Promise.all([
     supabase
@@ -102,7 +135,7 @@ export default async function WritePage() {
       .select("id, name, step_number, angle_type, subject, body, requires_demo, is_active")
       .order("step_number", { ascending: true })
       .order("name", { ascending: true }),
-    leads.length > 0
+    worklist.length > 0
       ? supabase
           .from("lead_evidence")
           .select(
@@ -110,7 +143,7 @@ export default async function WritePage() {
           )
           .in(
             "lead_id",
-            leads.map((l) => l.id),
+            worklist.map((item) => item.lead.id),
           )
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
@@ -143,21 +176,8 @@ export default async function WritePage() {
 
   const drafts: Draft[] = [];
 
-  for (const lead of leads) {
-    if (drafts.length >= WORKLIST_LIMIT) break;
-
+  for (const { lead, sends, step } of worklist) {
     const zone = lead.timezone as string;
-
-    if (
-      (lead.work_email_norm && write.suppressedEmails.has(lead.work_email_norm)) ||
-      (lead.website_domain && write.suppressedDomains.has(lead.website_domain))
-    ) {
-      continue;
-    }
-
-    const sends = write.sendsByLead.get(lead.id) ?? [];
-    const step = nextStepFor(sends, write.unresolvedLeadIds.has(lead.id));
-    if (!step.ok) continue;
 
     // Same call the action makes, so the address shown in the footer is the one
     // the send actually leaves from. Every lead here is claimed by the current

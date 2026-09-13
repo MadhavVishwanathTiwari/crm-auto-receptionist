@@ -77,6 +77,14 @@ interface DispatchReport {
   reaped: number;
   /** Went out, but recording it failed. Each one holds its lead until settled. */
   unrecorded: number;
+  /**
+   * Claimed, then left for release_expired_claims(): nothing reached Gmail and
+   * the reason may pass (a paused mailbox, a token endpoint that did not
+   * answer, a suppression list that could not be read). Not spent, so not lost.
+   */
+  deferred: number;
+  /** Gmail did not say whether it took it. Held for a person, never retried. */
+  unknown: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +94,7 @@ async function isSuppressed(
   orgId: string,
   emailNorm: string | null,
   domain: string | null,
-): Promise<boolean> {
+): Promise<boolean | null> {
   // Two parameterized queries rather than one PostgREST `or=(...)` filter. The
   // or-syntax interpolates values into a string, and an address containing a
   // comma or a parenthesis would silently change the meaning of the filter —
@@ -110,6 +118,10 @@ async function isSuppressed(
       : Promise.resolve({ data: [] as { id: string }[] }),
   ]);
 
+  // A read that failed is not a read that found nothing. Taken as "not
+  // suppressed", a database hiccup at the wrong second mailed a do-not-contact
+  // address. Null tells the caller to hold the send instead.
+  if (checks.some((check) => "error" in check && check.error)) return null;
   return checks.some((check) => (check.data?.length ?? 0) > 0);
 }
 
@@ -172,6 +184,8 @@ async function dispatchOrg(
     released: 0,
     reaped: 0,
     unrecorded: 0,
+    deferred: 0,
+    unknown: 0,
   };
 
   // A claim that never reached the Gmail call goes back to the queue (0046),
@@ -215,11 +229,11 @@ async function dispatchOrg(
   const templateIds = [...new Set(claimed.map((s) => s.template_id).filter(Boolean))];
 
   const [
-    { data: leadRows },
-    { data: mailboxRows },
-    { data: templateRows },
-    { data: evidenceRows },
-    { data: priorRows },
+    { data: leadRows, error: leadError },
+    { data: mailboxRows, error: mailboxError },
+    { data: templateRows, error: templateError },
+    { data: evidenceRows, error: evidenceError },
+    { data: priorRows, error: priorError },
   ] = await Promise.all([
     supabase
       .from("leads")
@@ -255,6 +269,16 @@ async function dispatchOrg(
       .eq("status", "sent")
       .order("step_number", { ascending: true }),
   ]);
+
+  // Each of these errors used to be dropped. A failed lead read then skipped
+  // every claimed send as "went away", a written email gone for good, and a
+  // failed thread read sent a follow-up as a new conversation. Nothing has
+  // touched Gmail yet, so stopping costs nothing: the claims are released after
+  // stall_minutes and go out on a later run.
+  const readError = leadError ?? mailboxError ?? templateError ?? evidenceError ?? priorError;
+  if (readError) {
+    throw new Error(`reading what the claimed sends need failed: ${readError.message}`);
+  }
 
   const leads = new Map((leadRows ?? []).map((l) => [l.id as string, l]));
   const mailboxes = new Map((mailboxRows ?? []).map((m) => [m.id as string, m]));
@@ -305,12 +329,11 @@ async function dispatchOrg(
     }
 
     if (deadMailboxes.has(mailbox.id as string) || !mailbox.is_sendable) {
-      await transition(supabase, "mark_send_failed", {
-        p_send_id: send.id,
-        p_code: "mailbox_unavailable",
-        p_detail: "the mailbox is paused or needs reconnecting",
-      });
-      report.failed += 1;
+      // Paused or disconnected since the claim. Nothing has touched Gmail, so
+      // the send is not spent: left `claimed`, release_expired_claims() returns
+      // it to the queue and it waits for the mailbox. Failing it here threw
+      // away an email somebody wrote.
+      report.deferred += 1;
       continue;
     }
 
@@ -325,14 +348,22 @@ async function dispatchOrg(
     }
 
     // Immediately before the send, never at plan time.
-    if (
-      await isSuppressed(
-        supabase,
-        orgId,
-        lead.work_email_norm as string | null,
-        lead.website_domain as string | null,
-      )
-    ) {
+    const suppressed = await isSuppressed(
+      supabase,
+      orgId,
+      lead.work_email_norm as string | null,
+      lead.website_domain as string | null,
+    );
+    if (suppressed === null) {
+      // Could not tell, so not now. Left `claimed`, which nothing sends, and
+      // asked again once release_expired_claims() has put it back.
+      console.error("dispatch-sends: the suppression check failed; holding the send", {
+        send_id: send.id,
+      });
+      report.deferred += 1;
+      continue;
+    }
+    if (suppressed) {
       await transition(supabase, "mark_send_skipped", {
         p_send_id: send.id,
         p_reason: "on the do-not-contact list",
@@ -396,16 +427,20 @@ async function dispatchOrg(
         tokens.set(mailbox.id as string, accessToken);
       } catch (error) {
         // A dead grant fails every send queued behind it. Stop working this
-        // mailbox for the rest of the run rather than failing twenty in a row.
+        // mailbox for the rest of the run rather than trying twenty in a row.
         if (error instanceof MailboxDisconnectedError) {
           deadMailboxes.add(mailbox.id as string);
         }
-        await transition(supabase, "mark_send_failed", {
-          p_send_id: send.id,
-          p_code: "no_access_token",
-          p_detail: error instanceof Error ? error.message : String(error),
+        // Still before Gmail, so the send is not spent. A token endpoint slow
+        // for one minute used to fail it outright. Left `claimed`, it is
+        // released and retried; a grant that stays dead has raised its own
+        // alert in getMailboxAccessToken(), and a poll failing for an hour
+        // raises another.
+        console.error("dispatch-sends: no access token; holding the send", {
+          send_id: send.id,
+          error: error instanceof Error ? error.message : String(error),
         });
-        report.failed += 1;
+        report.deferred += 1;
         continue;
       }
     }
@@ -462,16 +497,46 @@ async function dispatchOrg(
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      await transition(supabase, "mark_send_failed", {
-        p_send_id: send.id,
-        p_code: error instanceof GmailSendError ? `gmail_${error.status}` : "send_failed",
-        p_detail: detail,
-      });
       await supabase.from("mailbox_events").insert({
         org_id: orgId,
         mailbox_id: mailbox.id,
         kind: "send_failure",
         detail: detail.slice(0, 500),
+      });
+
+      // Only a 4xx is Gmail saying no. A dropped connection, a timeout, a 5xx
+      // or a 200 without an id may each be an email that went out, and
+      // recording those as failed let /write offer the step again: a second
+      // email by another name. Left in `sending`, reap_stalled_sends() parks it
+      // as `stalled`, which holds the lead until a person looks (0040).
+      const status = error instanceof GmailSendError ? error.status : null;
+      const refused = status !== null && status >= 400 && status < 500;
+
+      if (!refused) {
+        await raiseAlert(supabase, {
+          org_id: orgId,
+          kind: "pre_send_review",
+          lead_id: send.lead_id,
+          message: `Gmail did not say whether an email to this lead went out (${detail.slice(0, 200)}). Look for it in ${mailbox.email as string}'s Sent folder, then say which on the lead. Nothing more goes to it until then.`,
+          dedupe_token: `send-unknown:${send.id}`,
+        });
+        report.unknown += 1;
+        continue;
+      }
+
+      await transition(supabase, "mark_send_failed", {
+        p_send_id: send.id,
+        p_code: `gmail_${status}`,
+        p_detail: detail,
+      });
+      // Otherwise silent: the lead just shows the same step again on /write,
+      // and whoever wrote the email never learns it did not go.
+      await raiseAlert(supabase, {
+        org_id: orgId,
+        kind: "pre_send_review",
+        lead_id: send.lead_id,
+        message: `Gmail refused an email to this lead, so it did not go out (${detail.slice(0, 200)}).${written ? " Write it again from /write." : ""}`,
+        dedupe_token: `send-failed:${send.id}`,
       });
       report.failed += 1;
       continue;

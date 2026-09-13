@@ -211,7 +211,12 @@ async function buildLeadIndex(
     }
   }
 
-  const leadIds = [...new Set([...byThread.values(), ...byMessageId.values()])];
+  // Every lead emailed in the window, not only those whose sends carry Gmail
+  // ids. A touch recorded from the outreach sheet has neither a thread nor a
+  // Message-ID, and keyed on ids alone its lead could not be matched at all: a
+  // reply from the very address we wrote to was filed as ordinary mail, and the
+  // next touch went to somebody who had answered.
+  const leadIds = [...new Set(sends.map((send) => send.lead_id as string))];
   const byEmail = new Map<string, string>();
 
   // Chunked: PostgREST puts `in` values in the URL, and a few hundred uuids is

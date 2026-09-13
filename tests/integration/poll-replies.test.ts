@@ -142,8 +142,17 @@ async function makeMailbox(
   return data.id as string;
 }
 
-/** A lead that has had a first touch, on a Gmail thread the test names. */
-async function makeContactedLead(orgId: string, operator: TestUser, mailboxId: string) {
+/**
+ * A lead that has had a first touch, on a Gmail thread the test names. With
+ * `fromSheet`, the touch is what 0027 recorded from the outreach sheet: no
+ * thread, no Message-ID, only that an email went.
+ */
+async function makeContactedLead(
+  orgId: string,
+  operator: TestUser,
+  mailboxId: string,
+  options: { fromSheet?: boolean } = {},
+) {
   const email = `owner-${randomUUID().slice(0, 8)}@prospect.test`;
   const { data, error } = await admin()
     .from("leads")
@@ -174,9 +183,13 @@ async function makeContactedLead(orgId: string, operator: TestUser, mailboxId: s
     scheduled_local: now.slice(0, 19),
     prospect_timezone: ZONE,
     sent_at: now,
-    provider_message_id: `gmail-${randomUUID()}`,
-    provider_thread_id: threadId,
-    rfc822_message_id: `<${randomUUID()}@example.test>`,
+    ...(options.fromSheet
+      ? {}
+      : {
+          provider_message_id: `gmail-${randomUUID()}`,
+          provider_thread_id: threadId,
+          rfc822_message_id: `<${randomUUID()}@example.test>`,
+        }),
   });
   if (sendError) throw new Error(`sent row: ${sendError.message}`);
 
@@ -308,6 +321,25 @@ describe("poll-replies", () => {
     expect(leadAfter?.halted_at).not.toBeNull();
 
     expect((await mailboxState(mailboxId)).last_history_id).toBe("9000");
+  }, 180_000);
+
+  it("matches a reply by address when the lead's only touch came from the sheet", async () => {
+    const { org, operator } = await makeOrg("poll-sheet");
+    const mailboxId = await makeMailbox(org.id, operator);
+    const lead = await makeContactedLead(org.id, operator, mailboxId, { fromSheet: true });
+
+    // A new thread, from the very address we wrote to. The index used to hold
+    // addresses only for leads whose sends carried Gmail ids, so this was filed
+    // as ordinary mail and the sequence carried on past the reply.
+    const reply = inbound({ from: lead.email });
+    gmail.history = [{ id: "1001", messageIds: [reply] }];
+
+    const report = await run(org.id);
+
+    expect(report.error).toBeUndefined();
+    expect(report.unmatched).toBe(0);
+    expect(report.replies).toBe(1);
+    expect(await repliedEvents(lead.id)).toHaveLength(1);
   }, 180_000);
 
   it("holds the cursor at the last settled record when a message cannot be read", async () => {

@@ -27,7 +27,7 @@ vi.mock("@/lib/gmail/send", async (importOriginal) => {
 
 import { POST as dispatchSends } from "@/app/api/cron/dispatch-sends/route";
 import { POST as planSends } from "@/app/api/cron/plan-sends/route";
-import { sendMessage } from "@/lib/gmail/send";
+import { GmailSendError, sendMessage } from "@/lib/gmail/send";
 
 import { CLEAN_BODY, CLEAN_SUBJECT } from "../fixtures/template-vectors";
 import {
@@ -330,6 +330,67 @@ describe("recording a send", () => {
     expect(row?.status).toBe("sent");
     expect(row?.provider_message_id).toMatch(/^gmail-/);
     expect(row?.rendered_body).toBe("A short, plain email a person wrote.");
+  }, 180_000);
+
+  it("holds an email Gmail gave no clear answer about, and fails one it refused", async () => {
+    const { org, operator } = await makeOrg("dispatch-gmail-errors");
+    // Two mailboxes, because each one sends at most once per run (0041).
+    const unclear = {
+      mailboxId: await makeMailbox(org.id, operator),
+      leadId: await makeLead(org.id, operator),
+    };
+    const refused = {
+      mailboxId: await makeMailbox(org.id, operator),
+      leadId: await makeLead(org.id, operator),
+    };
+    const unclearSend = await makeDueWrittenSend(org.id, unclear.leadId, unclear.mailboxId);
+    const refusedSend = await makeDueWrittenSend(org.id, refused.leadId, refused.mailboxId);
+
+    const { data: refusedLead } = await admin()
+      .from("leads")
+      .select("work_email")
+      .eq("id", refused.leadId)
+      .single();
+
+    const original = vi.mocked(sendMessage).getMockImplementation();
+    vi.mocked(sendMessage).mockImplementation(async (input) => {
+      if (input.message.to.email === refusedLead?.work_email) {
+        throw new GmailSendError("gmail send failed (400): Invalid To header", 400);
+      }
+      throw new GmailSendError("gmail send failed (503): backendError", 503);
+    });
+
+    try {
+      const response = await dispatchSends(cronRequest("dispatch-sends", org.id));
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        reports: { sent: number; failed: number; unknown: number }[];
+      };
+      expect(body.reports[0]).toMatchObject({ sent: 0, failed: 1, unknown: 1 });
+    } finally {
+      vi.mocked(sendMessage).mockImplementation(original!);
+    }
+
+    // A 503 may be an email that went out. Recorded as failed, /write offered
+    // the step again; left in `sending`, the reaper parks it as `stalled`,
+    // which holds the lead for a person.
+    const [unclearRow] = await sendsFor(unclear.leadId);
+    expect(unclearRow?.status).toBe("sending");
+
+    // A 400 is Gmail saying no. The step is open again.
+    const [refusedRow] = await sendsFor(refused.leadId);
+    expect(refusedRow?.status).toBe("failed");
+    expect(refusedRow?.error_code).toBe("gmail_400");
+
+    // And both say so, rather than the lead quietly showing the same step.
+    const { data: raised } = await admin()
+      .from("alerts")
+      .select("dedupe_token")
+      .eq("org_id", org.id)
+      .in("dedupe_token", [`send-unknown:${unclearSend}`, `send-failed:${refusedSend}`]);
+    expect((raised ?? []).map((a) => a.dedupe_token).sort()).toEqual(
+      [`send-failed:${refusedSend}`, `send-unknown:${unclearSend}`].sort(),
+    );
   }, 180_000);
 });
 
