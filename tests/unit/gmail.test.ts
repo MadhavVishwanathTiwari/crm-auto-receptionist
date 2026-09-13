@@ -182,6 +182,18 @@ describe("classifying what comes back", () => {
     expect(result.hard).toBe(true);
   });
 
+  it("reads a bare 'remove me' as an unsubscribe", () => {
+    // Cool Zone Air's whole reply was "Remove me Thank you", and it was filed
+    // as an ordinary reply with no suppression.
+    for (const text of ["Remove me Thank you, David", "Please remove us."]) {
+      expect(
+        classifyInbound(
+          inbound({ headers: { from: "david@coolzone.test", subject: "Re: your text" }, text }),
+        ).kind,
+      ).toBe("unsubscribe");
+    }
+  });
+
   it("ignores an out-of-office", () => {
     // Halting a sequence because somebody went on holiday ends an outreach
     // attempt for no reason.

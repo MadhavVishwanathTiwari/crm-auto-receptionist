@@ -41,7 +41,7 @@ const SOFT_PHRASES =
   /(over quota|mailbox full|temporar(y|ily)|try again later|greylist|4\.7\.\d|rate limit)/i;
 
 const UNSUBSCRIBE =
-  /(\bunsubscribe\b|take me off|remove me from|opt(ed)? out|stop (emailing|contacting)|do not (email|contact)|no longer interested in receiving)/i;
+  /(\bunsubscribe\b|take me off|remove (me|us)\b|opt(ed)? out|stop (emailing|contacting)|do not (email|contact)|no longer interested in receiving)/i;
 
 /**
  * Auto-replies are not replies. An out-of-office that halted the sequence would
