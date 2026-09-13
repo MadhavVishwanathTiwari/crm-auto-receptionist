@@ -40,6 +40,18 @@ const HARD_PHRASES =
 const SOFT_PHRASES =
   /(over quota|mailbox full|temporar(y|ily)|try again later|greylist|4\.7\.\d|rate limit)/i;
 
+/**
+ * A delay notice is not a failure. Gmail's "Delivery incomplete ... Gmail will
+ * retry for 47 more hours" carries a 4.x.x status, and read as a soft bounce it
+ * halted the sequence for good, because status derivation halts on any
+ * `bounced` event, hard or soft, for a message that usually arrives an hour
+ * later. If the retries run out a second report follows with `Action: failed`,
+ * and that one is the bounce.
+ */
+const DELAYED =
+  /(\baction:\s*delayed\b|delivery status notification \(delay\)|delivery incomplete|will retry for)/i;
+const FAILED_ACTION = /\baction:\s*failed\b/i;
+
 const UNSUBSCRIBE =
   /(\bunsubscribe\b|take me off|remove (me|us)\b|opt(ed)? out|stop (emailing|contacting)|do not (email|contact)|no longer interested in receiving)/i;
 
@@ -74,6 +86,9 @@ export function classifyInbound(message: InboundMessage): Classification {
     // status is checked before any prose.
     if (HARD_STATUS.test(haystack)) {
       return { kind: "bounce", hard: true, reason: "DSN with a 5.x.x status" };
+    }
+    if (DELAYED.test(haystack) && !FAILED_ACTION.test(haystack)) {
+      return { kind: "ignore", hard: false, reason: "delivery delayed, still being retried" };
     }
     if (SOFT_STATUS.test(haystack)) {
       return { kind: "bounce", hard: false, reason: "DSN with a 4.x.x status" };

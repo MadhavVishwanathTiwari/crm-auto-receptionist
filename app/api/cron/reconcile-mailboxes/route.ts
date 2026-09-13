@@ -72,6 +72,7 @@ interface Lead {
   id: string;
   work_email_norm: string;
   timezone: string | null;
+  claimed_by: string | null;
 }
 
 interface OrgReport {
@@ -156,7 +157,7 @@ async function reconcileOrg(
   for (let i = 0; i < addresses.length; i += 200) {
     const { data, error } = await supabase
       .from("leads")
-      .select("id, work_email_norm, timezone")
+      .select("id, work_email_norm, timezone, claimed_by")
       .eq("org_id", orgId)
       .in("work_email_norm", addresses.slice(i, i + 200))
       .is("archived_at", null)
@@ -204,6 +205,23 @@ async function reconcileOrg(
           // One alert per lead and reason, however many nights it recurs.
           dedupe_token: `reconcile:${lead.id}:${outcome}`,
           payload: { outcome, detail },
+        },
+        { onConflict: "org_id,kind,dedupe_token", ignoreDuplicates: true },
+      );
+    } else if (!lead.claimed_by) {
+      // Recorded, and owned by nobody. /write lists only the leads you have
+      // claimed and the planner leaves a hand-written sequence alone, so its
+      // next touch is offered to no one. Collins Walker sat like that for five
+      // weeks after a T1 from Ojas's mailbox.
+      const sentFrom = mailboxes.find((m) => m.id === raw[0]?.mailbox_id)?.email;
+      await supabase.from("alerts").upsert(
+        {
+          org_id: orgId,
+          kind: "pre_send_review",
+          lead_id: lead.id,
+          message: `An email went to this lead from ${sentFrom ?? "Gmail"}, but nobody has claimed it, so its follow-up will not show on anyone's /write. Claim it.`,
+          dedupe_token: `reconcile:${lead.id}:unclaimed`,
+          payload: { outcome: "unclaimed", mailbox: sentFrom ?? null },
         },
         { onConflict: "org_id,kind,dedupe_token", ignoreDuplicates: true },
       );

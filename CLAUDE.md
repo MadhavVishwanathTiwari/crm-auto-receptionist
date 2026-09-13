@@ -549,7 +549,10 @@ would do rather than an estimate of it.
   is recorded by morning. It skips replied and closed leads (an operator's
   email after a reply is a conversation, not a touch), skips the sheet, and
   raises one `pre_send_review` alert per lead for anything a person must settle:
-  a lead written to from both mailboxes, more than four touches, no timezone.
+  a lead written to from both mailboxes, more than four touches, no timezone,
+  or nobody owning it. An unclaimed lead with recorded history is on nobody's
+  `/write` and the planner leaves hand-written sequences alone, so without that
+  alert its next touch is offered to no one.
   The one-off script is still the tool for anything older than `?days=14`.
 - The script imports `lib/gmail/classify.ts`, `lib/gmail/touches.ts` and
   `lib/normalize/email.ts` directly; Node 24 strips the types. Keep all three

@@ -158,6 +158,37 @@ describe("classifying what comes back", () => {
     expect(result.hard).toBe(false);
   });
 
+  it("ignores a delay notice, and bounces on the failure that may follow it", () => {
+    // Recorded as a bounce, "Gmail will retry" halted the sequence for good
+    // over an email that was still on its way.
+    const dsn = {
+      from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
+      "content-type": 'multipart/report; report-type="delivery-status"',
+    };
+
+    const delayed = classifyInbound(
+      inbound({
+        headers: { ...dsn, subject: "Delivery Status Notification (Delay)" },
+        text:
+          "Delivery incomplete\nThere was a temporary problem delivering your message to " +
+          "dana@brightsmile.test. Gmail will retry for 47 more hours.\n" +
+          "Final-Recipient: rfc822; dana@brightsmile.test\nAction: delayed\nStatus: 4.4.1\n",
+      }),
+    );
+    expect(delayed.kind).toBe("ignore");
+
+    const gaveUp = classifyInbound(
+      inbound({
+        headers: { ...dsn, subject: "Delivery Status Notification (Failure)" },
+        text:
+          "Message not delivered\nThe response from the remote server was: 451 4.4.1\n" +
+          "Final-Recipient: rfc822; dana@brightsmile.test\nAction: failed\nStatus: 4.4.1\n",
+      }),
+    );
+    expect(gaveUp.kind).toBe("bounce");
+    expect(gaveUp.hard).toBe(false);
+  });
+
   it("grades an unreadable delivery report as soft rather than guessing", () => {
     const result = classifyInbound(
       inbound({
