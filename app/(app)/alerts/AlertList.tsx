@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 
-import { createBrowserSupabase } from "@/lib/supabase/client";
+import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
 
 import { BUTTON_QUIET, PANEL } from "../ui";
 import { acknowledgeAlert, acknowledgeAllAlerts } from "./actions";
@@ -140,12 +140,9 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
             return next;
           });
         },
-      )
-      .subscribe();
+      );
 
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return subscribeAsUser(supabase, channel);
   }, []);
 
   function acknowledge(id: string) {

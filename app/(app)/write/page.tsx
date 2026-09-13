@@ -12,6 +12,8 @@
 // walked, so the twentieth lead does not claim the same seat as the first: what
 // the operator sees is what would happen if they wrote to all of them in order.
 
+import { DateTime } from "luxon";
+
 import { requireOrgContext } from "@/lib/org";
 import { bookSlot, reserve } from "@/lib/scheduler/book";
 import { mailboxesForSend, pinnedMailboxIdFor } from "@/lib/scheduler/routing";
@@ -189,25 +191,36 @@ export default async function WritePage() {
       senders: write.senders,
     });
 
-    const slot = routed.ok
-      ? bookSlot({
-          now: write.now,
-          zone,
-          earliestDay: earliestDayFor(
-            step.step,
-            step.lastSentAt,
+    // A written email already booked keeps its slot, because revising never
+    // re-times it. So the worklist shows that slot and reserves nothing: the
+    // booked row is already in the capacity index. Booking a fresh preview for
+    // it showed every queued lead at a time it was not leaving at, and held a
+    // second seat that pushed every later lead's preview back.
+    const kept =
+      step.replaces?.status === "planned" && step.replaces.composed_body != null
+        ? step.replaces
+        : null;
+
+    const slot =
+      routed.ok && !kept
+        ? bookSlot({
+            now: write.now,
             zone,
-            write.now,
-            write.holidays,
-          ),
-          step: step.step,
-          seed: `${lead.id}:${step.step}:${(step.replaces?.step_number ?? 0) + sends.length}`,
-          settings: write.settings,
-          mailboxes: routed.mailboxes,
-          capacity: write.capacity,
-          holidays: write.holidays,
-        })
-      : null;
+            earliestDay: earliestDayFor(
+              step.step,
+              step.lastSentAt,
+              zone,
+              write.now,
+              write.holidays,
+            ),
+            step: step.step,
+            seed: `${lead.id}:${step.step}:${(step.replaces?.step_number ?? 0) + sends.length}`,
+            settings: write.settings,
+            mailboxes: routed.mailboxes,
+            capacity: write.capacity,
+            holidays: write.holidays,
+          })
+        : null;
 
     // Hold the seat, so the next lead's preview is the time it would really
     // get rather than the same one this lead just took.
@@ -239,8 +252,18 @@ export default async function WritePage() {
       replacesWasWritten: step.replaces?.composed_body != null,
       existingSubject: step.replaces?.composed_subject ?? null,
       existingBody: step.replaces?.composed_body ?? null,
-      slot:
-        slot?.ok && routed.ok
+      slot: kept
+        ? {
+            at: kept.scheduled_at,
+            local: DateTime.fromISO(kept.scheduled_at, { zone }).toFormat(
+              "yyyy-MM-dd'T'HH:mm:ss",
+            ),
+            mailbox: kept.mailbox_id ?? "",
+            mailboxEmail:
+              write.mailboxes.find((m) => m.id === kept.mailbox_id)?.email ?? "",
+            pinned: routed.ok && routed.reason === "pinned",
+          }
+        : slot?.ok && routed.ok
           ? {
               at: slot.at.toUTC().toISO()!,
               local: slot.scheduledLocal,
@@ -254,7 +277,7 @@ export default async function WritePage() {
           : null,
       slotProblem: !routed.ok
         ? routingBlockMessage(routed.blocked, null)
-        : slot?.ok
+        : kept || slot?.ok
           ? null
           : slot?.reason === "no_mailbox"
             ? "No sendable mailbox is connected."

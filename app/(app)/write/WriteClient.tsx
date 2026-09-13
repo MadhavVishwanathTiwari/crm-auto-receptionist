@@ -471,7 +471,14 @@ export function WriteClient({
 
                 <span className="tabular text-[var(--color-ink-2)]">
                   {draft.replacesWasWritten ? (
-                    "keeps the time it already has"
+                    draft.slot ? (
+                      <>
+                        keeps its time: {theirTime(draft.slot.local)} in {draft.timezone},
+                        which is {yourTime(draft.slot.at)} for you
+                      </>
+                    ) : (
+                      "keeps the time it already has"
+                    )
                   ) : draft.slot ? (
                     <>
                       leaves {theirTime(draft.slot.local)} in {draft.timezone}, which
@@ -496,7 +503,7 @@ export function WriteClient({
                 line after pressing Ctrl+Enter -- which is how an operator sent
                 three emails from a colleague's mailbox without noticing.
               */}
-              {draft.slot && !draft.replacesWasWritten && (
+              {draft.slot?.mailboxEmail && (
                 <p className="mt-1 text-[var(--color-ink-2)]">
                   from {draft.slot.mailboxEmail}
                   {draft.slot.pinned ? (

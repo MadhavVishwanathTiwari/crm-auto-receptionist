@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { displayName } from "@/lib/contacts/links";
-import { createBrowserSupabase } from "@/lib/supabase/client";
+import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
 
 import { INPUT } from "../ui";
 
@@ -104,12 +104,9 @@ export function ContactDirectory({
             return next;
           });
         },
-      )
-      .subscribe();
+      );
 
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return subscribeAsUser(supabase, channel);
   }, []);
 
   const rows = useMemo(() => {

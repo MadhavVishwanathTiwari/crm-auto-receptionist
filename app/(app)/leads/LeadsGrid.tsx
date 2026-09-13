@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { COLUMN_LABEL, columnFor, isOverdue } from "@/lib/pipeline/stages";
-import { createBrowserSupabase } from "@/lib/supabase/client";
+import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
 
 import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
 import { claimFromPool, claimLead, releaseLead } from "./actions";
@@ -311,12 +311,9 @@ export function LeadsGrid({
             return next;
           });
         },
-      )
-      .subscribe();
+      );
 
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return subscribeAsUser(supabase, channel);
   }, []);
 
   const filtered = useMemo(() => {

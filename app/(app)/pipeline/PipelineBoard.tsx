@@ -19,7 +19,7 @@ import {
   weightedValue,
   wonValue,
 } from "@/lib/pipeline/stages";
-import { createBrowserSupabase } from "@/lib/supabase/client";
+import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
 
 import { closeLead } from "../leads/actions";
 import { BUTTON, BUTTON_QUIET, STAGE_TONE } from "../ui";
@@ -144,12 +144,9 @@ export function PipelineBoard({
             return isWorked(row) ? [row, ...current] : current;
           });
         },
-      )
-      .subscribe();
+      );
 
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return subscribeAsUser(supabase, channel);
   }, []);
 
   // Escape cancels a pending close. Listener only, no state set in the effect

@@ -95,6 +95,12 @@ Full build plan, capacity analysis, and phasing:
 - **`app.current_org_id()` must be `SECURITY DEFINER`.** As `SECURITY INVOKER`
   the RLS policy on `org_members` re-enters itself while being evaluated →
   infinite recursion. This is the classic Supabase multi-tenant lockup.
+- **A Realtime join made before the session is read goes out as `anon`.**
+  `subscribe()` sends the token the socket holds at that instant, which on a
+  fresh page is none, and anon can select nothing since `0045`, so every
+  change is dropped by RLS without an error. Every live screen was like this
+  until `subscribeAsUser()` in `lib/supabase/client.ts`; subscribe through it.
+  `select claims_role from realtime.subscription` shows who each join is.
 - **Supabase Realtime broadcasts tables, not views.** Anything the grid needs
   pushed live must be a real column on a published table. Derived grid columns
   recompute client-side from the pushed row via a shared `deriveRowComputed`.
