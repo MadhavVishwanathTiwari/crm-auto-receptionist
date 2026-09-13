@@ -61,6 +61,15 @@ const MAX_PAGES = 5;
  */
 const RUN_BUDGET_MS = 40_000;
 
+/**
+ * Gmail reads in flight at once, per mailbox. Settling stays strictly in
+ * history order; only the reads run ahead. One at a time was ~200ms a message,
+ * so a four-week backlog of warmup mail on one mailbox took every run's whole
+ * budget and left the other mailbox unread. messages.get is 5 quota units
+ * against a 250/second per-user limit, so 8 is nowhere near it.
+ */
+const FETCH_AHEAD = 8;
+
 /** A mailbox with no complete poll for this long raises an alert. */
 const FAILING_AFTER_MS = 60 * 60 * 1000;
 
@@ -259,6 +268,16 @@ function matchLead(
 
 type Settled = { ok: true } | { ok: false; error: string };
 
+type Fetched = { message: GmailMessage } | { error: unknown };
+
+/** Never rejects, so a read started ahead cannot become an unhandled rejection. */
+function readMessage(accessToken: string, messageId: string): Promise<Fetched> {
+  return fetchMessage(accessToken, messageId).then(
+    (message) => ({ message }),
+    (error: unknown) => ({ error }),
+  );
+}
+
 /**
  * One message, from Gmail to the event log. `ok` means the cursor may move
  * past it: either it is recorded, or there was nothing of ours to record.
@@ -267,14 +286,16 @@ async function settleMessage(
   supabase: SupabaseClient,
   mailbox: Mailbox,
   index: LeadIndex,
-  accessToken: string,
   messageId: string,
+  fetched: Promise<Fetched>,
   report: PollReport,
 ): Promise<Settled> {
+  const read = await fetched;
   let message: GmailMessage;
-  try {
-    message = await fetchMessage(accessToken, messageId);
-  } catch (error) {
+  if ("message" in read) {
+    message = read.message;
+  } else {
+    const error = read.error;
     // Deleted for good between arriving and this run. There is nothing left to
     // classify, and throwing here is what wedged a mailbox: every later run
     // met the same 404 and the cursor never moved past it.
@@ -517,6 +538,13 @@ async function pollMailbox(
   let cursor = mailbox.last_history_id;
   const settled = new Set<string>();
 
+  // Every message once, in the order the loop below settles them, so the
+  // reads can be started FETCH_AHEAD positions early.
+  const order = [...new Set(records.flatMap((record) => record.messageIds))];
+  const reads = new Map<string, Promise<Fetched>>();
+  let started = 0;
+  let position = 0;
+
   history: for (const record of records) {
     for (const messageId of record.messageIds) {
       if (settled.has(messageId)) continue;
@@ -526,14 +554,20 @@ async function pollMailbox(
         break history;
       }
 
+      for (; started < order.length && started < position + FETCH_AHEAD; started++) {
+        reads.set(order[started], readMessage(accessToken, order[started]));
+      }
+
       const outcome = await settleMessage(
         supabase,
         mailbox,
         index,
-        accessToken,
         messageId,
+        reads.get(messageId) ?? readMessage(accessToken, messageId),
         report,
       );
+      reads.delete(messageId);
+      position += 1;
       if (!outcome.ok) {
         report.stopped = "a message could not be settled; the next run retries it";
         report.error = outcome.error;
@@ -632,7 +666,7 @@ export async function POST(request: Request) {
   const indexes = new Map<string, LeadIndex>();
   const reports: PollReport[] = [];
 
-  for (const mailbox of mailboxes) {
+  for (const [i, mailbox] of mailboxes.entries()) {
     if (Date.now() > deadline) {
       reports.push({ ...emptyReport(mailbox.email), stopped: "no time left in this run" });
       continue;
@@ -645,7 +679,11 @@ export async function POST(request: Request) {
         index = await buildLeadIndex(supabase, mailbox.org_id);
         indexes.set(mailbox.org_id, index);
       }
-      report = await pollMailbox(supabase, mailbox, index, deadline);
+      // An even share of what is left. Least-recently-polled-first alone still
+      // let a backlog take a whole run, so the other mailbox was read every
+      // other run at best. Whatever one mailbox leaves unused passes on.
+      const share = Date.now() + (deadline - Date.now()) / (mailboxes.length - i);
+      report = await pollMailbox(supabase, mailbox, index, share);
     } catch (caught) {
       report = { ...emptyReport(mailbox.email), error: errorText(caught) };
       // A dead grant has already disconnected the mailbox and raised its own
