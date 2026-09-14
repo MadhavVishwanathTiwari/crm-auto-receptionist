@@ -16,6 +16,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
 
+import { replySubject } from "@/lib/gmail/thread";
 import {
   buildCapacity,
   type BookingSettings,
@@ -48,6 +49,9 @@ export interface WriteSend {
   status: string;
   scheduled_at: string;
   sent_at: string | null;
+  /** On a sent row: the Gmail thread it lives in, and the subject it went with. */
+  provider_thread_id: string | null;
+  rendered_subject: string | null;
   /** Only ever populated on a `planned` or `blocked` row. See below. */
   composed_body: string | null;
   composed_subject: string | null;
@@ -90,6 +94,31 @@ const LIVE_STATUSES = ["planned", "blocked", "claimed", "sending", "sent"];
  */
 const REPLACEABLE_STATUSES = ["planned", "blocked"];
 
+/**
+ * A follow-up's fixed subject: "Re:" and the opening subject of the thread the
+ * dispatcher will reply into, which is the latest sent row's. Null for a first
+ * touch, or for history with no thread (the sheet's rows). dispatch-sends
+ * derives the same thing the same way, so what /write shows is what goes.
+ */
+export function replySubjectFor(sends: WriteSend[]): string | null {
+  const sent = sends
+    .filter((send) => send.status === "sent")
+    .sort((a, b) => a.step_number - b.step_number);
+
+  let thread: string | null = null;
+  const opening = new Map<string, string>();
+  for (const send of sent) {
+    if (!send.provider_thread_id) continue;
+    thread = send.provider_thread_id;
+    if (send.rendered_subject && !opening.has(thread)) {
+      opening.set(thread, send.rendered_subject);
+    }
+  }
+
+  const subject = thread ? opening.get(thread) : undefined;
+  return subject ? replySubject(subject) : null;
+}
+
 export async function loadWriteContext(
   supabase: SupabaseClient,
 ): Promise<WriteContext | null> {
@@ -131,7 +160,9 @@ export async function loadWriteContext(
     selectAll<Omit<WriteSend, "composed_subject" | "composed_body">>(() =>
       supabase
         .from("scheduled_sends")
-        .select("id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at")
+        .select(
+          "id, lead_id, mailbox_id, step_number, status, scheduled_at, sent_at, provider_thread_id, rendered_subject",
+        )
         .in("status", LIVE_STATUSES),
     ),
     // The words, only for the rows a composer could replace.

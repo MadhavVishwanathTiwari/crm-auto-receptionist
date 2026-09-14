@@ -4,6 +4,7 @@ import { DateTime } from "luxon";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 
 // A plain module, never through the "use server" actions file.
+import { brokenLinks } from "@/lib/gmail/body";
 import { renderTemplate, type TemplateValues } from "@/lib/templates/render";
 
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
@@ -42,6 +43,11 @@ export interface Draft {
   replacesWasWritten: boolean;
   existingSubject: string | null;
   existingBody: string | null;
+  /**
+   * A follow-up's subject, fixed: "Re:" and its thread's. The dispatcher sends
+   * this whatever is typed, because Gmail starts a new thread on any other.
+   */
+  replySubject: string | null;
   slot: {
     at: string;
     local: string;
@@ -145,10 +151,11 @@ export function WriteClient({
   const editing: Editing = draft
     ? (edits[draft.leadId] ?? { subject: "", body: "", templateId: null })
     : { subject: "", body: "", templateId: null };
+  const subjectLine = draft?.replySubject ?? editing.subject;
 
   const holes = useMemo(
-    () => [...new Set([...leftovers(editing.subject), ...leftovers(editing.body)])],
-    [editing.subject, editing.body],
+    () => [...new Set([...leftovers(subjectLine), ...leftovers(editing.body)])],
+    [subjectLine, editing.body],
   );
 
   const setEditing = useCallback(
@@ -188,13 +195,20 @@ export function WriteClient({
     setError(null);
     setFlash(null);
 
-    if (!editing.subject.trim() || !editing.body.trim()) {
+    if (!subjectLine.trim() || !editing.body.trim()) {
       setError("Write a subject and a body first.");
       return;
     }
-    if (LEFTOVER_VARIABLE.test(editing.subject) || LEFTOVER_VARIABLE.test(editing.body)) {
+    if (LEFTOVER_VARIABLE.test(subjectLine) || LEFTOVER_VARIABLE.test(editing.body)) {
       setError(
         `This still has ${holes.join(", ")} in it. A written email is sent exactly as typed, so that would go out with the braces showing.`,
+      );
+      return;
+    }
+    const unlinked = brokenLinks(editing.body);
+    if (unlinked.length > 0) {
+      setError(
+        `${unlinked[0]} would not become a link, so it would go out with the brackets showing. The address has to start with https://.`,
       );
       return;
     }
@@ -215,7 +229,7 @@ export function WriteClient({
       if (revising) {
         const result = await reviseWrittenEmail(
           draft.replacesSendId!,
-          editing.subject,
+          subjectLine,
           editing.body,
         );
         if (!result.ok) {
@@ -228,7 +242,7 @@ export function WriteClient({
       } else {
         const result = await queueWrittenEmail({
           leadId,
-          subject: editing.subject,
+          subject: subjectLine,
           body: editing.body,
           templateId: editing.templateId,
         });
@@ -425,12 +439,23 @@ export function WriteClient({
               <input
                 className={INPUT + " w-full"}
                 placeholder="Subject"
-                value={editing.subject}
+                value={subjectLine}
+                readOnly={draft.replySubject !== null}
+                title={
+                  draft.replySubject !== null
+                    ? "A follow-up keeps its thread's subject, or Gmail starts a new conversation."
+                    : undefined
+                }
                 onChange={(event) =>
                   setEditing(draft.leadId, { subject: event.target.value })
                 }
                 onKeyDown={onBodyKeyDown}
               />
+              {draft.replySubject !== null && (
+                <p className="text-[var(--color-ink-3)]">
+                  Goes into the same thread as your last email, so the subject is theirs.
+                </p>
+              )}
               <textarea
                 ref={bodyRef}
                 className={INPUT + " min-h-0 w-full flex-1 resize-none leading-relaxed"}
@@ -441,6 +466,10 @@ export function WriteClient({
                 }
                 onKeyDown={onBodyKeyDown}
               />
+              <p className="text-[var(--color-ink-3)]">
+                A link with words on it: [hear it for yourself](https://…). They see
+                the words; a mail app showing plain text shows the address beside them.
+              </p>
             </div>
 
             {/* ---------------------------------------------- the footer */}

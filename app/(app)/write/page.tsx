@@ -24,6 +24,7 @@ import {
   loadWriteContext,
   nextStepFor,
   routingBlockMessage,
+  replySubjectFor,
 } from "@/lib/write/context";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
@@ -252,6 +253,7 @@ export default async function WritePage() {
       replacesWasWritten: step.replaces?.composed_body != null,
       existingSubject: step.replaces?.composed_subject ?? null,
       existingBody: step.replaces?.composed_body ?? null,
+      replySubject: replySubjectFor(sends),
       slot: kept
         ? {
             at: kept.scheduled_at,

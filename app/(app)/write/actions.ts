@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { brokenLinks } from "@/lib/gmail/body";
 import { getOrgContext } from "@/lib/org";
 import { bookSlot } from "@/lib/scheduler/book";
 import {
@@ -24,6 +25,14 @@ import {
  * the composer is a browser and a browser can be wrong.
  */
 const LEFTOVER_VARIABLE = /\{\{\s*[a-z_]+\s*\}\}/i;
+
+/** The same bargain for a link: `[words](not-a-url)` would go out as typed. */
+function unlinkedError(body: string): string | null {
+  const broken = brokenLinks(body);
+  return broken.length > 0
+    ? `${broken[0]} would not become a link. The address has to start with https://.`
+    : null;
+}
 
 export interface QueueResult {
   ok: boolean;
@@ -80,6 +89,8 @@ export async function queueWrittenEmail(input: {
         "That still has a {{variable}} in it, and a written email is sent exactly as typed.",
     };
   }
+  const unlinked = unlinkedError(body);
+  if (unlinked) return { ok: false, error: unlinked };
 
   let write: Awaited<ReturnType<typeof loadWriteContext>>;
   try {
@@ -250,6 +261,8 @@ export async function reviseWrittenEmail(
         "That still has a {{variable}} in it, and a written email is sent exactly as typed.",
     };
   }
+  const unlinked = unlinkedError(body);
+  if (unlinked) return { ok: false, error: unlinked };
 
   const { error } = await context.supabase.rpc("revise_composed_send", {
     p_send_id: sendId,

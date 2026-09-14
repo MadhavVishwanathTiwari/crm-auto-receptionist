@@ -226,6 +226,19 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   touches is two business days, so nothing legitimate ever waits on it. It is a
   ceiling on the next repeat bug, whatever causes it; `0040` fixed the one we
   know about.
+- **A body is plain text plus one piece of markup, `[words](https://…)`.**
+  `lib/gmail/body.ts` sends it as multipart/alternative: the text, with each
+  link written as `words (address)`, and bare HTML where the words are the
+  link. The HTML part has no styling, images, tracking pixel or redirects. An
+  address that is not whole `http(s)` is never linked, and `/write` refuses
+  one rather than letting the brackets go out. The stored body stays the source.
+- **A follow-up's subject is its thread's, `Re:` and all.** Gmail ignores
+  `threadId` when the subject differs and starts a new conversation. The T2–T4
+  templates carried their own `Re:` subject, which matched only a templated T1,
+  so all 14 app-sent follow-ups to hand-written T1s landed as new threads
+  (Sep 2026). The dispatcher now overrides the subject from the thread's first
+  `rendered_subject` via `replySubject()`, and `/write` shows that subject
+  locked.
 - **`mark_send_sent()` is one transaction**: the row, the `sent` event carrying
   Gmail's message id as its `dedupe_token`, and the mailbox stamp.
 - **`claim_due_sends()` takes a TRANSACTION-scoped advisory lock per mailbox**

@@ -31,6 +31,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireBearer } from "@/lib/cronAuth";
 import { serverEnv } from "@/lib/env";
 import { GmailSendError, generateMessageId, sendMessage } from "@/lib/gmail/send";
+import { replySubject } from "@/lib/gmail/thread";
 import { getMailboxAccessToken, MailboxDisconnectedError } from "@/lib/gmail/token";
 import {
   buildTemplateValues,
@@ -264,7 +265,7 @@ async function dispatchOrg(
     // first touch established.
     supabase
       .from("scheduled_sends")
-      .select("lead_id, step_number, provider_thread_id, rfc822_message_id")
+      .select("lead_id, step_number, provider_thread_id, rfc822_message_id, rendered_subject")
       .in("lead_id", leadIds)
       .eq("status", "sent")
       .order("step_number", { ascending: true }),
@@ -294,12 +295,27 @@ async function dispatchOrg(
 
   const priorByLead = new Map<
     string,
-    { threadId: string | null; messageIds: string[] }
+    {
+      threadId: string | null;
+      messageIds: string[];
+      /** Each thread's opening subject, which Gmail requires a reply to match. */
+      subjectByThread: Map<string, string>;
+    }
   >();
   for (const row of priorRows ?? []) {
     const key = row.lead_id as string;
-    const entry = priorByLead.get(key) ?? { threadId: null, messageIds: [] };
-    if (row.provider_thread_id) entry.threadId = row.provider_thread_id as string;
+    const entry = priorByLead.get(key) ?? {
+      threadId: null,
+      messageIds: [],
+      subjectByThread: new Map<string, string>(),
+    };
+    const thread = row.provider_thread_id as string | null;
+    if (thread) {
+      entry.threadId = thread;
+      if (row.rendered_subject && !entry.subjectByThread.has(thread)) {
+        entry.subjectByThread.set(thread, row.rendered_subject as string);
+      }
+    }
     if (row.rfc822_message_id) entry.messageIds.push(row.rfc822_message_id as string);
     priorByLead.set(key, entry);
   }
@@ -447,6 +463,15 @@ async function dispatchOrg(
 
     const prior = priorByLead.get(send.lead_id);
     const messageId = generateMessageId(mailbox.email as string);
+
+    // A follow-up takes its thread's subject, written or templated alike, the
+    // way pressing Reply in Gmail does. Gmail ignores threadId on a subject that
+    // does not match, and every templated follow-up to a hand-written T1 went
+    // out as a new conversation that way. /write shows this same subject.
+    const threadSubject = prior?.threadId
+      ? prior.subjectByThread.get(prior.threadId)
+      : undefined;
+    if (threadSubject) subjectText = replySubject(threadSubject);
 
     // The point of no return. Marked first so a process killed inside the
     // Gmail call leaves a row that is visibly stuck rather than one the next

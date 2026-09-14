@@ -72,17 +72,52 @@ describe("building a message", () => {
     messageId: "<abc@tryautoreceptionist.com>",
   };
 
-  it("uses CRLF and base64 for the body", () => {
+  /** Each part's decoded text, keyed by its content type. */
+  function parts(raw: string): Record<string, string> {
+    const boundary = raw.match(/boundary="([^"]+)"/)![1]!;
+    const out: Record<string, string> = {};
+    for (const chunk of raw.split(`--${boundary}`).slice(1, -1)) {
+      const [head, encoded] = chunk.split("\r\n\r\n");
+      const type = head!.match(/Content-Type: ([^;]+)/)![1]!;
+      out[type] = Buffer.from(encoded!.replace(/\r\n/g, ""), "base64").toString("utf8");
+    }
+    return out;
+  }
+
+  it("sends plain text and HTML, both base64, the plain text first", () => {
     const raw = buildMimeMessage(base);
-    const [headers, body] = raw.split("\r\n\r\n");
+    const [headers] = raw.split("\r\n\r\n");
 
     // The display name is quoted, so a comma or a full stop in it cannot be
     // read as an address separator.
     expect(headers).toContain('To: "Dana Reyes" <dana@brightsmile.test>');
-    expect(headers).toContain("Content-Transfer-Encoding: base64");
-    expect(Buffer.from(body!.replace(/\r\n/g, ""), "base64").toString("utf8")).toContain(
-      "Worth a look, or should I close the file?",
+    expect(headers).toContain("Content-Type: multipart/alternative;");
+    expect(raw).not.toMatch(/\r\n(?!\r\n)[^\r]*\n/); // no bare LF anywhere
+
+    const decoded = parts(raw);
+    expect(Object.keys(decoded)).toEqual(["text/plain", "text/html"]);
+    expect(decoded["text/plain"]).toContain("Worth a look, or should I close the file?");
+    expect(decoded["text/html"]).toContain("<div>Worth a look, or should I close the file?</div>");
+  });
+
+  it("gives a link its words in HTML and keeps the address beside them in plain text", () => {
+    const decoded = parts(
+      buildMimeMessage({
+        ...base,
+        body: "You can [hear it for yourself](https://demo.test/brightsmile) now.",
+      }),
     );
+    expect(decoded["text/html"]).toContain(
+      '<a href="https://demo.test/brightsmile">hear it for yourself</a>',
+    );
+    expect(decoded["text/plain"]).toBe(
+      "You can hear it for yourself (https://demo.test/brightsmile) now.",
+    );
+  });
+
+  it("carries no image, style or tracking of any kind", () => {
+    const html = parts(buildMimeMessage(base))["text/html"]!;
+    expect(html).not.toMatch(/<img|<style|style=|<script/i);
   });
 
   it("RFC 2047 encodes a subject that is not plain ASCII", () => {

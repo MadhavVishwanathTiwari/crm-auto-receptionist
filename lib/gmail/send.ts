@@ -1,11 +1,15 @@
 // Building an RFC 5322 message and handing it to Gmail.
 //
-// Plain text, one part, no HTML alternative and no tracking pixel. That is a
-// deliverability decision rather than a simplification: a cold first touch that
-// looks like a newsletter gets filed like one, and the reply rate is the only
-// metric this pipeline has.
+// multipart/alternative: the plain text, and the same words as bare HTML so a
+// link can carry words instead of its address (./body.ts). That is the shape
+// Gmail's own composer gives an email somebody typed. What stays out is the
+// deliverability decision: no styling, no images, no tracking pixel and no
+// redirect on a link. A cold first touch that looks like a newsletter gets filed
+// like one, and the reply rate is the only metric this pipeline has.
 
 import { randomUUID } from "node:crypto";
+
+import { toHtml, toPlainText } from "./body";
 
 const SEND_ENDPOINT =
   "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
@@ -65,13 +69,23 @@ export function generateMessageId(senderEmail: string): string {
   return `<${randomUUID()}@${domain}>`;
 }
 
+/** CRLF, then base64 in 76-column lines. */
+function encodeBody(text: string): string {
+  return Buffer.from(text.replace(/\r?\n/g, "\r\n"), "utf8")
+    .toString("base64")
+    .replace(/(.{76})/g, "$1\r\n");
+}
+
 /**
  * The raw message.
  *
- * CRLF line endings throughout, and the body is base64 so a long line, a stray
+ * CRLF line endings throughout, and each part is base64 so a long line, a stray
  * bare newline or a leading "From " in the copy cannot corrupt the message.
+ * Plain text first: in multipart/alternative the last part is the preferred
+ * one, and a client that cannot show HTML falls back to the first.
  */
 export function buildMimeMessage(input: MessageInput): string {
+  const boundary = `=_ar_${randomUUID()}`;
   const headers: string[] = [
     `From: ${formatAddress(input.from)}`,
     `To: ${formatAddress(input.to)}`,
@@ -79,8 +93,7 @@ export function buildMimeMessage(input: MessageInput): string {
     `Message-ID: ${input.messageId}`,
     `Date: ${new Date().toUTCString()}`,
     "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
   ];
 
   if (input.inReplyTo) {
@@ -91,11 +104,23 @@ export function buildMimeMessage(input: MessageInput): string {
     headers.push(`References: ${[...new Set(chain)].join(" ")}`);
   }
 
-  const encoded = Buffer.from(input.body.replace(/\r?\n/g, "\r\n"), "utf8")
-    .toString("base64")
-    .replace(/(.{76})/g, "$1\r\n");
+  const part = (type: string, text: string) =>
+    [
+      `--${boundary}`,
+      `Content-Type: ${type}; charset="UTF-8"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      encodeBody(text),
+    ].join("\r\n");
 
-  return `${headers.join("\r\n")}\r\n\r\n${encoded}\r\n`;
+  return [
+    headers.join("\r\n"),
+    "",
+    part("text/plain", toPlainText(input.body)),
+    part("text/html", toHtml(input.body)),
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
 }
 
 export interface SendResult {
