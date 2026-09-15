@@ -53,42 +53,67 @@ describe("realtime", () => {
     await cleanup([org.id, other.id], [user.id, outsider.id]);
   }, 60_000);
 
-  /** Subscribes and resolves once the socket is actually live. */
+  /**
+   * Subscribes and resolves once changes will actually arrive.
+   *
+   * SUBSCRIBED is not that moment. It means the channel joined; the server then
+   * registers the postgres_changes subscription and says so with a `system`
+   * message, "Subscribed to PostgreSQL". A row written in between is never
+   * delivered. On a warm server the gap is too short to hit, which is why this
+   * test passed nine runs in ten; on a Realtime that had just started it was
+   * long enough to miss both the insert and the update, every time (Sep 2026).
+   */
   function subscribe(
     person: TestUser,
     name: string,
     onRow: (row: Record<string, unknown>) => void,
   ) {
+    let live: () => void = () => undefined;
+    let failed: (error: Error) => void = () => undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      live = resolve;
+      failed = reject;
+    });
+
     const channel = person.client
       .channel(name)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "leads" },
         (payload) => onRow(payload.new as Record<string, unknown>),
-      );
-
-    return new Promise<typeof channel>((resolve, reject) => {
-      const timer = setTimeout(
-        () =>
-          reject(
-            new Error(
-              "Realtime never reached SUBSCRIBED. Is Realtime enabled for this project?",
-            ),
-          ),
-        SUBSCRIBE_TIMEOUT,
-      );
-
-      channel.subscribe((status, error) => {
-        if (status === "SUBSCRIBED") {
-          clearTimeout(timer);
-          resolve(channel);
-        }
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          clearTimeout(timer);
-          reject(new Error(`Realtime subscription failed: ${status} ${error ?? ""}`));
-        }
+      )
+      .on("system", {}, (payload: { extension?: string; status?: string; message?: string }) => {
+        if (payload?.extension !== "postgres_changes") return;
+        if (payload.status === "ok") live();
+        else failed(new Error(`Realtime could not listen: ${payload.message ?? payload.status}`));
       });
+
+    const timer = setTimeout(
+      () =>
+        failed(
+          new Error(
+            "Realtime never confirmed the postgres_changes subscription. Is Realtime enabled for this project?",
+          ),
+        ),
+      SUBSCRIBE_TIMEOUT,
+    );
+
+    channel.subscribe((status, error) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        failed(new Error(`Realtime subscription failed: ${status} ${error ?? ""}`));
+      }
     });
+
+    return ready.then(
+      () => {
+        clearTimeout(timer);
+        return channel;
+      },
+      (error: Error) => {
+        clearTimeout(timer);
+        throw error;
+      },
+    );
   }
 
   it("pushes an insert and an update to a member of the org", async () => {

@@ -559,6 +559,14 @@ would do rather than an estimate of it.
   leads three different first touches in one afternoon under three subjects, so
   a subject is no key. No real sequence has ever put two touches on one day, and
   the latest is the attempt `0040`'s repair recorded.
+- **A Gmail id's embedded time is when the message was created, not when it
+  left.** The top bits of a hex message id are a millisecond timestamp, and for
+  a Gmail scheduled send that is the moment it was scheduled. About twenty
+  follow-ups were scheduled at once on 6 Aug 20:30 UTC and went out between 7
+  and 13 Aug. TI Mechanical's T3 has an id reading 7 Aug (IST); its
+  `internalDate`, its Date header and the sheet cell all say 13 Aug 21:49 IST,
+  which is what the app records. `touchFrom()` takes `internalDate`; never read
+  a date off an id.
 - **Recorded rows carry the mailbox and the thread**, which is what pins the
   follow-up to the account holding the conversation and lets `dispatch-sends`
   thread it. `template_id` and `composed_body` stay null: nothing says which
