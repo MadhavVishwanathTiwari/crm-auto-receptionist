@@ -1,14 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, Fragment, useContext, useEffect } from "react";
+import {
+  createContext,
+  Fragment,
+  useContext,
+  useEffect,
+  useSyncExternalStore,
+} from "react";
 
 import { ZONE_COOKIE } from "@/lib/time/format";
 
 interface ViewerZoneValue {
   /** The operator's IANA zone, or null until their browser has said. */
   zone: string | null;
-  /** When the server rendered this page. relativeTo() measures from it. */
+  /**
+   * The moment relativeTo() measures from: the server's render while the page
+   * hydrates, so both sides write the same words, and the browser's clock
+   * after that.
+   */
   renderedAt: string;
 }
 
@@ -16,6 +26,27 @@ const ViewerZoneContext = createContext<ViewerZoneValue>({
   zone: null,
   renderedAt: new Date(0).toISOString(),
 });
+
+/**
+ * "Now", in steps of half a minute, rounded UP so an event that has just
+ * happened is never measured from a moment before it ("in 20 seconds").
+ *
+ * A layout is not re-rendered when the operator moves between pages, so the
+ * server's renderedAt is the moment the TAB was first loaded, not the page. A
+ * pipeline opened in the morning and returned to in the afternoon measured a
+ * reply from the morning: "in 5 hours" (Sep 2026). Hydration still uses the
+ * server's value (the third argument), which is what keeps #418 away.
+ */
+const CLOCK_STEP_MS = 30_000;
+
+function subscribeClock(onChange: () => void): () => void {
+  const id = setInterval(onChange, CLOCK_STEP_MS);
+  return () => clearInterval(id);
+}
+
+function clockNow(): string {
+  return new Date(Math.ceil(Date.now() / CLOCK_STEP_MS) * CLOCK_STEP_MS).toISOString();
+}
 
 /**
  * Hands every client component the zone the server rendered with, and keeps
@@ -37,6 +68,7 @@ export function ViewerZone({
   children,
 }: ViewerZoneValue & { children: React.ReactNode }) {
   const router = useRouter();
+  const now = useSyncExternalStore(subscribeClock, clockNow, () => renderedAt);
 
   useEffect(() => {
     const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -49,7 +81,7 @@ export function ViewerZone({
   }, [zone, router]);
 
   return (
-    <ViewerZoneContext.Provider value={{ zone, renderedAt }}>
+    <ViewerZoneContext.Provider value={{ zone, renderedAt: now }}>
       <Fragment key={zone ?? "unknown"}>{children}</Fragment>
     </ViewerZoneContext.Provider>
   );
