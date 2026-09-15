@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { describeRun } from "@/lib/ops/describeRun";
 import { formatYours } from "@/lib/time/format";
 
 import { BUTTON, PANEL } from "../ui";
@@ -142,10 +143,11 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
 
 /** What a run did, as a sentence, with the route's own JSON a click away. */
 function JobResult({ result }: { result: JobRunResult }) {
+  const { text, problem } = describeRun(result);
   return (
     <div className="basis-full pl-[11.75rem]">
-      <p className={result.ok ? "text-[var(--color-ok)]" : "text-[var(--color-danger)]"}>
-        {describeRun(result)}
+      <p className={problem ? "text-[var(--color-danger)]" : "text-[var(--color-ok)]"}>
+        {text}
       </p>
       {result.body != null && (
         <details className="mt-1">
@@ -163,51 +165,3 @@ function JobResult({ result }: { result: JobRunResult }) {
   );
 }
 
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-/**
- * The run in words. Each route answers with its own counts; the ones worth a
- * sentence get one, and the rest say they finished and leave the detail to
- * the JSON underneath.
- */
-function describeRun(result: JobRunResult): string {
-  const body =
-    result.body && typeof result.body === "object"
-      ? (result.body as Record<string, unknown>)
-      : null;
-
-  if (!result.ok) {
-    const reason = result.error ?? (typeof body?.error === "string" ? body.error : null);
-    return `Failed${result.status ? ` (${result.status})` : ""}.${reason ? ` ${reason}` : ""}`;
-  }
-
-  const count = (key: string) => Number(body?.[key] ?? 0) || 0;
-
-  if (result.job === "resolve-timezones" && body) {
-    const fromCoordinates = count("resolved");
-    const fromPlace = count("placed");
-    const stillMissing = count("unresolved") + count("unplaced");
-    const fixed = fromCoordinates + fromPlace;
-
-    const parts = [
-      fixed === 0
-        ? stillMissing === 0
-          ? "Nothing was waiting on a timezone."
-          : "No lead could be given a timezone this time."
-        : `Gave ${plural(fixed, "lead")} a timezone: ${fromCoordinates} from coordinates, ${fromPlace} from their city.`,
-    ];
-    if (stillMissing > 0) {
-      parts.push(
-        `${plural(stillMissing, "lead")} still ${stillMissing === 1 ? "needs" : "need"} one set by hand on the lead, and ${stillMissing === 1 ? "is" : "are"} never scheduled until then.`,
-      );
-    }
-    if (body.more) {
-      parts.push(`Ran out of time with ${count("deferred")} untried; run it again.`);
-    }
-    return parts.join(" ");
-  }
-
-  return "Done.";
-}
