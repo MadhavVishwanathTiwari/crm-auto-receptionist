@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 // A plain module, never through the "use server" actions file.
 import { brokenLinks } from "@/lib/gmail/body";
 import { renderTemplate, type TemplateValues } from "@/lib/templates/render";
+import { placeholderWords } from "@/lib/write/placeholders";
 
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
 import { queueWrittenEmail, reviseWrittenEmail } from "./actions";
@@ -158,6 +159,16 @@ export function WriteClient({
     [subjectLine, editing.body],
   );
 
+  // "Hey Name": a placeholder written as a word, which the {{ }} check cannot
+  // see. A guess, so it asks for a second press instead of refusing.
+  const standIns = useMemo(
+    () => placeholderWords(`${subjectLine}\n${editing.body}`),
+    [subjectLine, editing.body],
+  );
+  // Which set of stand-ins the operator already chose to send, per lead. Any
+  // edit that changes what was found asks again.
+  const [standInsAccepted, setStandInsAccepted] = useState<string | null>(null);
+
   const setEditing = useCallback(
     (leadId: string, patch: Partial<Editing>) => {
       setEdits((current) => {
@@ -214,6 +225,14 @@ export function WriteClient({
     }
     if (!draft.slot && !draft.replacesWasWritten) {
       setError(draft.slotProblem ?? "There is no slot available for this one.");
+      return;
+    }
+    const standInKey = `${draft.leadId}:${standIns.join("|")}`;
+    if (standIns.length > 0 && standInsAccepted !== standInKey) {
+      setStandInsAccepted(standInKey);
+      setError(
+        `${standIns.map((w) => `“${w}”`).join(", ")} reads like a placeholder rather than something you meant to send. Press Ctrl+Enter again to send it exactly as it is.`,
+      );
       return;
     }
 
@@ -485,6 +504,11 @@ export function WriteClient({
               {holes.length > 0 && !error && (
                 <p className="mb-1 text-[var(--color-warn)]">
                   Still to fill in: {holes.join(", ")}
+                </p>
+              )}
+              {standIns.length > 0 && !error && (
+                <p className="mb-1 text-[var(--color-warn)]">
+                  Looks like a placeholder: {standIns.map((w) => `“${w}”`).join(", ")}
                 </p>
               )}
 

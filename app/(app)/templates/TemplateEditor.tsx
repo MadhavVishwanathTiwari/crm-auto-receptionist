@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 
 // Both come from a plain module, never through the "use server" actions file.
 import { lintTemplate, TEMPLATE_VARIABLES } from "@/lib/templates/lint";
+import { placeholderWords } from "@/lib/write/placeholders";
 
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
 import { deleteTemplate, saveTemplate, setTemplateActive } from "./actions";
@@ -53,6 +54,14 @@ export function TemplateEditor({
   // the guarantee; this is so nobody discovers the rule by being refused.
   const violations = useMemo(
     () => lintTemplate(draft.subject, draft.body),
+    [draft.subject, draft.body],
+  );
+
+  // Not a lint rule: lint.ts has to match app.template_lint() exactly, and this
+  // is a guess about wording. A hint, so the next starter uses {{first_name}}
+  // rather than "Name" and /write can tell it was never filled in.
+  const standIns = useMemo(
+    () => placeholderWords(`${draft.subject}\n${draft.body}`),
     [draft.subject, draft.body],
   );
 
@@ -223,6 +232,13 @@ export function TemplateEditor({
                 </li>
               ))}
             </ul>
+          )}
+          {standIns.length > 0 && (
+            <p className="mt-1 text-[var(--color-warn)]">
+              {standIns.map((w) => `“${w}”`).join(", ")} reads like a placeholder.
+              Use {"{{first_name}}"} or {"{{company_name}}"} instead, so the Write
+              screen fills it in, or flags it when it cannot.
+            </p>
           )}
         </div>
 
