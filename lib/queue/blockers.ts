@@ -25,6 +25,13 @@ export const IN_FLIGHT = new Set([
 
 export type Blocker =
   | "ready"
+  /**
+   * Nothing is holding it back and an email is already booked or on its way.
+   * Not "ready": ready means the planner still has something to decide, and a
+   * list of leads to act on that includes the ones already acted on is how the
+   * queue came to show booked leads under "Ready to send".
+   */
+  | "booked"
   | "halted"
   | "suppressed"
   | "no_timezone"
@@ -35,6 +42,7 @@ export type Blocker =
 /** Most blocking first, which is also the order the queue lists them in. */
 export const BLOCKER_ORDER: Blocker[] = [
   "ready",
+  "booked",
   "not_audited",
   "not_claimed",
   "no_timezone",
@@ -81,6 +89,8 @@ export function suppressionIndex(
 export function classifyLead(
   lead: BlockerLead,
   suppressions: SuppressionIndex,
+  /** Has a planned, blocked, claimed or sending scheduled_sends row. */
+  booked = false,
 ): Blocker {
   if (lead.halted_at || lead.terminal_outcome) return "halted";
   if (
@@ -89,6 +99,10 @@ export function classifyLead(
   ) {
     return "suppressed";
   }
+  // After the two that stop a send outright, before everything else: a lead
+  // with an email already booked is not waiting on anything. A hand-written
+  // one may never have been audited at all, and saying so would be wrong.
+  if (booked) return "booked";
   if (!lead.timezone) return "no_timezone";
   if (!lead.is_qualified) return "not_qualified";
   if (!lead.claimed_by) return "not_claimed";

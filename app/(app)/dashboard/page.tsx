@@ -76,6 +76,7 @@ interface DashboardLead extends BlockerLead, BoardLead {
 
 const BLOCKER_LABEL: Record<Blocker, string> = {
   ready: "Ready to send",
+  booked: "Booked, not yet sent",
   not_audited: "Not audited or queued",
   not_claimed: "Nobody has claimed it",
   no_timezone: "No timezone",
@@ -86,6 +87,7 @@ const BLOCKER_LABEL: Record<Blocker, string> = {
 
 const BLOCKER_TONE: Record<Blocker, string> = {
   ready: "text-[var(--color-ok)]",
+  booked: "text-[var(--color-info)]",
   not_audited: "text-[var(--color-info)]",
   not_claimed: "text-[var(--color-info)]",
   no_timezone: "text-[var(--color-warn)]",

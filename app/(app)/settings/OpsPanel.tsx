@@ -111,6 +111,18 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
                 <span className="text-[var(--color-warn)]">manual only</span>
               )}
             </span>
+
+            {/* Under the button that was pressed, not at the foot of the
+                panel: a result five rows below the click, as a JSON dump,
+                read as no result at all. */}
+            {running === job.name && (
+              <p className="basis-full pl-[11.75rem] text-[var(--color-ink-3)]">
+                Running. This can take up to a minute.
+              </p>
+            )}
+            {result?.job === job.name && running !== job.name && (
+              <JobResult result={result} />
+            )}
           </div>
         ))}
       </div>
@@ -124,27 +136,78 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
         </p>
       )}
 
-      {result && (
-        <div className="mt-3 border-t border-[var(--color-line)] pt-3">
-          <p
-            className={
-              result.ok
-                ? "text-[var(--color-ok)]"
-                : "text-[var(--color-danger)]"
-            }
-          >
-            {result.job}: {result.ok ? "ok" : `failed (${result.status})`}
-            {result.error ? ` ${result.error}` : ""}
-          </p>
-          {result.body != null && (
-            <pre className="mt-2 max-h-64 overflow-auto text-[var(--color-ink-2)]">
-              {typeof result.body === "string"
-                ? result.body
-                : JSON.stringify(result.body, null, 1)}
-            </pre>
-          )}
-        </div>
+    </div>
+  );
+}
+
+/** What a run did, as a sentence, with the route's own JSON a click away. */
+function JobResult({ result }: { result: JobRunResult }) {
+  return (
+    <div className="basis-full pl-[11.75rem]">
+      <p className={result.ok ? "text-[var(--color-ok)]" : "text-[var(--color-danger)]"}>
+        {describeRun(result)}
+      </p>
+      {result.body != null && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-[var(--color-ink-3)]">
+            what the job returned
+          </summary>
+          <pre className="mt-1 max-h-64 overflow-auto text-[var(--color-ink-2)]">
+            {typeof result.body === "string"
+              ? result.body
+              : JSON.stringify(result.body, null, 1)}
+          </pre>
+        </details>
       )}
     </div>
   );
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * The run in words. Each route answers with its own counts; the ones worth a
+ * sentence get one, and the rest say they finished and leave the detail to
+ * the JSON underneath.
+ */
+function describeRun(result: JobRunResult): string {
+  const body =
+    result.body && typeof result.body === "object"
+      ? (result.body as Record<string, unknown>)
+      : null;
+
+  if (!result.ok) {
+    const reason = result.error ?? (typeof body?.error === "string" ? body.error : null);
+    return `Failed${result.status ? ` (${result.status})` : ""}.${reason ? ` ${reason}` : ""}`;
+  }
+
+  const count = (key: string) => Number(body?.[key] ?? 0) || 0;
+
+  if (result.job === "resolve-timezones" && body) {
+    const fromCoordinates = count("resolved");
+    const fromPlace = count("placed");
+    const stillMissing = count("unresolved") + count("unplaced");
+    const fixed = fromCoordinates + fromPlace;
+
+    const parts = [
+      fixed === 0
+        ? stillMissing === 0
+          ? "Nothing was waiting on a timezone."
+          : "No lead could be given a timezone this time."
+        : `Gave ${plural(fixed, "lead")} a timezone: ${fromCoordinates} from coordinates, ${fromPlace} from their city.`,
+    ];
+    if (stillMissing > 0) {
+      parts.push(
+        `${plural(stillMissing, "lead")} still ${stillMissing === 1 ? "needs" : "need"} one set by hand on the lead, and ${stillMissing === 1 ? "is" : "are"} never scheduled until then.`,
+      );
+    }
+    if (body.more) {
+      parts.push(`Ran out of time with ${count("deferred")} untried; run it again.`);
+    }
+    return parts.join(" ");
+  }
+
+  return "Done.";
 }

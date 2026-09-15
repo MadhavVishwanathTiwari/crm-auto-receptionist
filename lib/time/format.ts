@@ -86,6 +86,17 @@ export function relativeTo(iso: string | null | undefined, base: string): string
   return at.toRelative({ base: DateTime.fromISO(base), locale: LOCALE }) ?? "";
 }
 
+/**
+ * A prospect-local wall clock, stored with no offset ("2026-09-16T09:42:00"),
+ * as it reads on their side. Read as UTC only so that no zone's DST can move
+ * it: the digits are the answer, not an instant to convert.
+ */
+export function formatWallClock(local: string | null | undefined): string {
+  if (!local) return "";
+  const at = DateTime.fromISO(local, { zone: "UTC", locale: LOCALE });
+  return at.isValid ? at.toFormat(FORMATS.datetime) : "";
+}
+
 /** A count, grouped the same way on both sides. */
 export function formatCount(value: number): string {
   return value.toLocaleString(LOCALE);

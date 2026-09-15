@@ -15,7 +15,7 @@
 import { DateTime } from "luxon";
 
 import { accountsOf, type OperatorGroup } from "@/lib/dashboard/operators";
-import { requireOrgContext } from "@/lib/org";
+import { requireOrgContext, type OrgContext } from "@/lib/org";
 import { bookSlot, reserve } from "@/lib/scheduler/book";
 import { mailboxesForSend, pinnedMailboxIdFor } from "@/lib/scheduler/routing";
 import { selectAll } from "@/lib/supabase/paginate";
@@ -29,7 +29,12 @@ import {
 } from "@/lib/write/context";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
-import { WriteClient, type Draft, type StarterTemplate } from "./WriteClient";
+import {
+  WriteClient,
+  type Draft,
+  type StarterTemplate,
+  type WriteNotice,
+} from "./WriteClient";
 
 export const dynamic = "force-dynamic";
 
@@ -62,8 +67,15 @@ interface LeadRow {
   claimed_by: string | null;
 }
 
-export default async function WritePage() {
+export default async function WritePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lead?: string }>;
+}) {
   const { supabase, userId } = await requireOrgContext();
+  // A deep link from the lead drawer: open on that lead, or say why it is not
+  // here. Silently opening a different one read as the app losing it.
+  const { lead: requestedLeadId = null } = await searchParams;
 
   // The roster rides along with the schedule read rather than after it, so
   // resolving "which accounts are me" costs no extra round trip.
@@ -129,22 +141,48 @@ export default async function WritePage() {
     step: Extract<ReturnType<typeof nextStepFor>, { ok: true }>;
   }[] = [];
 
-  for (const lead of leads) {
+  // A lead asked for by ?lead= goes first, so the worklist limit is never the
+  // reason it is missing.
+  const requested = requestedLeadId
+    ? leads.find((lead) => lead.id === requestedLeadId)
+    : undefined;
+  const ordered = requested
+    ? [requested, ...leads.filter((lead) => lead !== requested)]
+    : leads;
+  // Why the loop passed the requested lead over, if it did, in its own terms.
+  let requestedSkip: SkipReason | null = null;
+
+  for (const lead of ordered) {
     if (worklist.length >= WORKLIST_LIMIT) break;
 
     if (
       (lead.work_email_norm && write.suppressedEmails.has(lead.work_email_norm)) ||
       (lead.website_domain && write.suppressedDomains.has(lead.website_domain))
     ) {
+      if (lead === requested) requestedSkip = "suppressed";
       continue;
     }
 
     const sends = write.sendsByLead.get(lead.id) ?? [];
     const step = nextStepFor(sends, write.unresolvedLeadIds.has(lead.id));
-    if (!step.ok) continue;
+    if (!step.ok) {
+      if (lead === requested) requestedSkip = step.reason;
+      continue;
+    }
 
     worklist.push({ lead, sends, step });
   }
+
+  const notice =
+    requestedLeadId && !worklist.some((item) => item.lead.id === requestedLeadId)
+      ? await whyNotOnTheList(
+          supabase,
+          requestedLeadId,
+          requested ?? null,
+          requestedSkip,
+          myAccounts,
+        )
+      : null;
 
   const [{ data: templateRows }, { data: evidenceRows }] = await Promise.all([
     supabase
@@ -344,9 +382,78 @@ export default async function WritePage() {
         myMailboxes.ok ? (myMailboxes.mailboxes[0]?.email ?? null) : null
       }
       senderName={senderName}
+      initialLeadId={requestedLeadId}
+      notice={notice}
       // A roster that failed to load narrows the list to this account's own
       // claims. That hides leads rather than mis-sending any, but say so.
       loadError={error?.message ?? operatorError?.message ?? null}
     />
   );
+}
+
+/** The loop's reasons for passing over a lead that is otherwise yours. */
+type SkipReason = "suppressed" | "in_flight" | "outcome_unknown" | "sequence_finished";
+
+const SKIP_MESSAGE: Record<SkipReason, string> = {
+  suppressed: "is on the do-not-contact list, so nothing more goes to it.",
+  in_flight:
+    "has an email on its way out right now. It comes back here once that one has landed.",
+  outcome_unknown:
+    "has an earlier email that may have gone out without being recorded. Say whether it did on the lead before writing another.",
+  sequence_finished: "has had all four emails.",
+};
+
+/**
+ * Why a lead asked for by ?lead= is not on this operator's list, in words.
+ *
+ * `listed` is the lead when it passed the page's own query and the loop then
+ * skipped it; otherwise it is read once more to find which condition failed.
+ * Only ever reached from a deep link, so the extra read is not on the path of
+ * an ordinary visit.
+ */
+async function whyNotOnTheList(
+  supabase: OrgContext["supabase"],
+  leadId: string,
+  listed: LeadRow | null,
+  skip: SkipReason | null,
+  mine: string[],
+): Promise<WriteNotice> {
+  if (listed) {
+    const name = listed.company_name ?? "That lead";
+    return {
+      leadId,
+      message: `${name} ${skip ? SKIP_MESSAGE[skip] : "is not on your list."}`,
+    };
+  }
+
+  const { data } = await supabase
+    .from("leads")
+    .select(
+      "company_name, claimed_by, is_qualified, archived_at, halted_at, terminal_outcome, timezone, work_email",
+    )
+    .eq("id", leadId)
+    .maybeSingle();
+
+  if (!data) return { leadId, message: "That lead is not available." };
+
+  const name = (data.company_name as string | null) ?? "That lead";
+  const why = data.archived_at
+    ? "is archived."
+    : data.terminal_outcome
+      ? "is closed."
+      : data.halted_at
+        ? "stopped after a reply, a bounce or an unsubscribe, so nothing more is sent to it."
+        : !data.claimed_by
+          ? "is not claimed by anyone. Claim it on the Leads screen to write to it."
+          : !mine.includes(data.claimed_by as string)
+            ? "belongs to the other operator."
+            : !data.work_email
+              ? "has no work email, which is the only address the app sends to."
+              : !data.is_qualified
+                ? "is not qualified."
+                : !data.timezone
+                  ? "has no timezone, so it can never be scheduled. Set one on the lead."
+                  : "is not on your list.";
+
+  return { leadId, message: `${name} ${why}` };
 }

@@ -9,6 +9,7 @@ import {
   IN_FLIGHT,
   suppressionIndex,
 } from "@/lib/queue/blockers";
+import { weekdayLabel } from "@/lib/scheduler/weekdays";
 import { selectAll } from "@/lib/supabase/paginate";
 
 import { PAGE, PAGE_HEADER, PANEL } from "../ui";
@@ -19,8 +20,13 @@ export const dynamic = "force-dynamic";
 const BLOCKER_COPY: Record<Blocker, { label: string; hint: string; tone: string }> = {
   ready: {
     label: "Ready to send",
-    hint: "Claimed, audited, qualified, has a resolvable timezone, not suppressed.",
+    hint: "Claimed, audited, qualified, has a resolvable timezone, not suppressed, and nothing booked yet.",
     tone: "text-[var(--color-ok)]",
+  },
+  booked: {
+    label: "Booked",
+    hint: "An email is already booked or on its way; the times are in the Booked list above. Nothing to decide here.",
+    tone: "text-[var(--color-info)]",
   },
   halted: {
     label: "Halted",
@@ -68,6 +74,7 @@ export default async function QueuePage() {
     { data: suppressionRows },
     { data: settings },
     { data: scheduledRows },
+    { data: bookedRows },
   ] = await Promise.all([
       // Every lead, in pages: these are the counts the blockers are built
       // from, and PostgREST stops at 1000 rows per response.
@@ -86,7 +93,7 @@ export default async function QueuePage() {
       supabase
         .from("org_settings")
         .select(
-          "dry_run, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour",
+          "dry_run, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, first_touch_weekdays, followup_weekdays",
         )
         .maybeSingle(),
       supabase
@@ -97,6 +104,15 @@ export default async function QueuePage() {
         .in("status", ["planned", "blocked"])
         .order("scheduled_at", { ascending: true })
         .limit(200),
+      // Which leads already have an email booked or on its way, all of them.
+      // The panel above shows the next 200; "is this one taken care of" has to
+      // be a complete answer or a booked lead reads as ready.
+      selectAll<{ id: string; lead_id: string }>(() =>
+        supabase
+          .from("scheduled_sends")
+          .select("id, lead_id")
+          .in("status", ["planned", "blocked", "claimed", "sending"]),
+      ),
     ]);
 
   const leads = (leadRows ?? []) as QueueLead[];
@@ -124,13 +140,14 @@ export default async function QueuePage() {
   });
 
   const suppressions = suppressionIndex(suppressionRows);
+  const booked = new Set((bookedRows ?? []).map((row) => row.lead_id));
 
   const inFlight = leads.filter((lead) => IN_FLIGHT.has(lead.status));
   const pending = leads.filter((lead) => !IN_FLIGHT.has(lead.status));
 
   const buckets = new Map<Blocker, QueueLead[]>();
   for (const lead of pending) {
-    const blocker = classifyLead(lead, suppressions);
+    const blocker = classifyLead(lead, suppressions, booked.has(lead.id));
     const bucket = buckets.get(blocker);
     if (bucket) bucket.push(lead);
     else buckets.set(blocker, [lead]);
@@ -141,7 +158,8 @@ export default async function QueuePage() {
       <header className={PAGE_HEADER}>
         <h1 className="text-[var(--color-ink)]">Queue</h1>
         <span className="tabular text-[var(--color-ink-3)]">
-          {buckets.get("ready")?.length ?? 0} ready · {inFlight.length} already
+          {buckets.get("ready")?.length ?? 0} ready ·{" "}
+          {buckets.get("booked")?.length ?? 0} booked · {inFlight.length} already
           out
         </span>
       </header>
@@ -181,7 +199,9 @@ export default async function QueuePage() {
               <p className="mt-2 text-[var(--color-ink-3)]">
                 Send window, prospect-local: {settings.morning_start_hour}:00–
                 {settings.morning_end_hour}:00 and {settings.afternoon_start_hour}
-                :00–{settings.afternoon_end_hour}:00, Mon–Fri.{" "}
+                :00–{settings.afternoon_end_hour}:00. First touches{" "}
+                {weekdayLabel(settings.first_touch_weekdays)}, follow-ups{" "}
+                {weekdayLabel(settings.followup_weekdays)}.{" "}
                 {settings.dry_run ? (
                   <span className="text-[var(--color-warn)]">
                     Dry run is on, so nothing can send.

@@ -1,6 +1,7 @@
 "use client";
 
 import { DateTime } from "luxon";
+import Link from "next/link";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 
 // A plain module, never through the "use server" actions file.
@@ -70,6 +71,12 @@ export interface Draft {
   values: TemplateValues;
 }
 
+/** Why a lead opened by ?lead= is not on the list, said rather than skipped. */
+export interface WriteNotice {
+  leadId: string;
+  message: string;
+}
+
 /**
  * A composed email is dispatched VERBATIM, so a leftover {{variable}} does not
  * get skipped the way a template's would. It goes out with the braces in it.
@@ -110,7 +117,13 @@ export function WriteClient({
   myMailboxEmail,
   senderName,
   loadError,
+  initialLeadId = null,
+  notice = null,
 }: {
+  /** From ?lead=: the lead to open on, when it is on the list. */
+  initialLeadId?: string | null;
+  /** From ?lead=: why that lead is not on the list, when it is not. */
+  notice?: WriteNotice | null;
   drafts: Draft[];
   templates: StarterTemplate[];
   dryRun: boolean;
@@ -125,7 +138,9 @@ export function WriteClient({
   // runtime's: the server runs in UTC, and the two used to disagree (#418).
   const { zone } = useViewerZone();
   const [drafts, setDrafts] = useState(initialDrafts);
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(() =>
+    Math.max(0, initialDrafts.findIndex((draft) => draft.leadId === initialLeadId)),
+  );
 
   // Keyed by lead, so flicking between two businesses to compare them does not
   // throw away either half-written email.
@@ -395,8 +410,25 @@ export function WriteClient({
           </p>
         )}
 
+        {notice && (
+          <p
+            role="status"
+            className="border-b border-[var(--color-line)] px-4 py-2 text-[var(--color-warn)]"
+          >
+            {notice.message}{" "}
+            <Link href={`/leads?lead=${notice.leadId}`} className="underline">
+              Open the lead
+            </Link>
+          </p>
+        )}
+
         {!draft ? (
-          <div className="p-4">
+          <div className="space-y-3 p-4">
+            {/* The confirmation for the lead that just emptied the list. It
+                used to live only in the composer's footer, which is gone by
+                the time the last one is queued, so the last send of a session
+                was the one send nobody saw confirmed. */}
+            {flash && <p className="text-[var(--color-ok)]">{flash}</p>}
             <div className={PANEL}>
               <p className="text-[var(--color-ink-2)]">
                 Nothing to write. This list holds leads you have claimed that are

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
@@ -9,7 +10,7 @@ import { suppressLead } from "../suppressions/actions";
 // proxy whose .map throws at hydration. See suppressions/reasons.ts.
 import { SUPPRESSION_REASONS, type SuppressionReason } from "../suppressions/reasons";
 import { IN_FLIGHT } from "@/lib/queue/blockers";
-import { formatYours, fromYourInput } from "@/lib/time/format";
+import { formatWallClock, formatYours, fromYourInput } from "@/lib/time/format";
 import {
   COLUMN_LABEL,
   dealValue,
@@ -22,6 +23,7 @@ import {
 import { addNote, setDealValue, setNextAction, setStage } from "../pipeline/actions";
 import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
 import { useViewerZone } from "../ViewerZone";
+import { cancelSend } from "../write/actions";
 import {
   closeLead,
   queueWithoutAudit,
@@ -64,6 +66,36 @@ export interface EventRow {
   occurred_at: string;
   /** Notes carry their body here, and stage moves their from/to. */
   payload: Record<string, unknown> | null;
+  /** Who did it. Null for the machine: the dispatcher, the poller, a trigger. */
+  actor_id: string | null;
+}
+
+/** An email booked for this lead and not yet gone. */
+export interface NextSendRow {
+  id: string;
+  step_number: number;
+  status: string;
+  scheduled_at: string;
+  /** Prospect-local wall clock, frozen at plan time. No offset. */
+  scheduled_local: string;
+  prospect_timezone: string;
+  outcome_reason: string | null;
+  /** Set when a person wrote it. */
+  composed_subject: string | null;
+  mailbox_email: string | null;
+}
+
+/** Where the lead came from, rebuilt from its import rather than an event. */
+export interface ImportedInfo {
+  at: string;
+  filename: string | null;
+  by: string | null;
+}
+
+/** "by madhav", or "by the app" when no person did it. */
+function whoDid(actorId: string | null, names: Record<string, string>): string {
+  if (!actorId) return "by the app";
+  return `by ${names[actorId] ?? "a former member"}`;
 }
 
 export interface EvidenceRow {
@@ -154,6 +186,9 @@ export function LeadDrawer({
   events,
   evidence,
   stalledSends,
+  nextSends,
+  imported,
+  actorNames,
   screenshotUrls,
   currentUserId,
   defaultDealValue,
@@ -163,6 +198,11 @@ export function LeadDrawer({
   evidence: EvidenceRow[];
   /** Newest first. Each one holds the lead until somebody settles it. */
   stalledSends: StalledSendRow[];
+  /** Booked, blocked or on its way. Lowest step first. */
+  nextSends: NextSendRow[];
+  imported: ImportedInfo | null;
+  /** user id -> operator name, both of madhav's accounts included. */
+  actorNames: Record<string, string>;
   screenshotUrls: Record<string, string>;
   currentUserId: string;
   defaultDealValue: number;
@@ -216,7 +256,20 @@ export function LeadDrawer({
         <span className={STATUS_TONE[lead.status] ?? ""}>
           {lead.status.replace(/_/g, " ")}
         </span>
-        <button type="button" onClick={close} className={BUTTON_QUIET + " ml-auto"}>
+        {/* Always offered while the lead is open. /write says in words why a
+            lead is not on your list, which beats a link that is not there. */}
+        {!lead.terminal_outcome && !lead.halt_reason && (
+          <Link href={`/write?lead=${lead.id}`} className={BUTTON_QUIET + " ml-auto"}>
+            write
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={close}
+          className={
+            BUTTON_QUIET + (lead.terminal_outcome || lead.halt_reason ? " ml-auto" : "")
+          }
+        >
           close
         </button>
       </header>
@@ -289,6 +342,69 @@ export function LeadDrawer({
                 and {stalledSends.length - STALLED_SHOWN} more
               </p>
             )}
+          </section>
+        )}
+
+        {nextSends.length > 0 && (
+          <section className="space-y-2 border border-[var(--color-line-2)] p-3">
+            <h3 className="text-[var(--color-ink-3)]">Next email</h3>
+            {nextSends.map((send) => {
+              const editable = send.status === "planned" || send.status === "blocked";
+              return (
+                <div key={send.id} className="space-y-1">
+                  <div className="text-[var(--color-ink-2)]">
+                    <span className="tabular">T{send.step_number}</span>{" "}
+                    {send.status === "blocked" ? (
+                      <span className="text-[var(--color-warn)]">
+                        blocked: {send.outcome_reason ?? "no capacity"}
+                      </span>
+                    ) : send.status === "planned" ? (
+                      <span className="tabular">
+                        leaves {formatWallClock(send.scheduled_local)} their time (
+                        {formatYours(send.scheduled_at, viewerZone)} yours)
+                      </span>
+                    ) : (
+                      <span className="text-[var(--color-info)]">on its way out now</span>
+                    )}
+                  </div>
+                  <div className="break-words text-[var(--color-ink-3)]">
+                    {send.composed_subject ? (
+                      <>
+                        <span className="text-[var(--color-info)]">written</span> &ldquo;
+                        {send.composed_subject}&rdquo;
+                      </>
+                    ) : (
+                      "from a template"
+                    )}
+                    {send.mailbox_email ? ` · from ${send.mailbox_email}` : ""}
+                  </div>
+                  {editable && (
+                    <div className="flex flex-wrap gap-2">
+                      <Link href={`/write?lead=${lead.id}`} className={BUTTON}>
+                        {send.composed_subject ? "Edit on Write" : "Write it instead"}
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        className={BUTTON_QUIET}
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `Cancel T${send.step_number} to ${lead.company_name ?? "this lead"}? The planner may book a template send in its place.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          run(() => cancelSend(send.id));
+                        }}
+                      >
+                        cancel it
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </section>
         )}
 
@@ -635,7 +751,7 @@ export function LeadDrawer({
             </button>
           </div>
 
-          {events.length === 0 ? (
+          {events.length === 0 && !imported ? (
             <p className="text-[var(--color-ink-3)]">No events yet.</p>
           ) : (
             <ul className="space-y-0.5">
@@ -647,11 +763,30 @@ export function LeadDrawer({
                   <span className={STATUS_TONE[event.type] ?? ""}>
                     {event.type.replace(/_/g, " ")}
                   </span>
-                  <span className="min-w-0 break-words text-[var(--color-ink-2)]">
+                  <span className="min-w-0 flex-1 break-words text-[var(--color-ink-2)]">
                     {eventDetail(event)}
+                  </span>
+                  <span className="shrink-0 text-[var(--color-ink-3)]">
+                    {whoDid(event.actor_id, actorNames)}
                   </span>
                 </li>
               ))}
+              {/* The first line of every lead's story, and the one nothing
+                  wrote down: rebuilt from the lead and its import. */}
+              {imported && !events.some((event) => event.type === "imported") && (
+                <li className="flex gap-3">
+                  <span className="tabular w-32 shrink-0 text-[var(--color-ink-3)]">
+                    {formatYours(imported.at, viewerZone)}
+                  </span>
+                  <span>imported</span>
+                  <span className="min-w-0 flex-1 break-words text-[var(--color-ink-2)]">
+                    {imported.filename ? `from ${imported.filename}` : ""}
+                  </span>
+                  <span className="shrink-0 text-[var(--color-ink-3)]">
+                    {whoDid(imported.by, actorNames)}
+                  </span>
+                </li>
+              )}
             </ul>
           )}
         </section>

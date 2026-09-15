@@ -61,6 +61,7 @@ export default async function SettingsPage() {
     { data: leadRows },
     { data: suppressionRows },
     { data: scheduleRows },
+    { data: bookedRows },
   ] = await Promise.all([
     supabase
       .from("org_settings")
@@ -91,12 +92,20 @@ export default async function SettingsPage() {
     // this summary through a definer function. An empty result means nothing is
     // scheduled, which is a real answer rather than a missing one.
     supabase.rpc("background_jobs_status"),
+    // Leads with an email already booked or on its way. They are not "ready"
+    // any more, but they are certainly not a reason to say nothing can send.
+    selectAll<{ id: string; lead_id: string }>(() =>
+      supabase
+        .from("scheduled_sends")
+        .select("id, lead_id")
+        .in("status", ["planned", "blocked", "claimed", "sending"]),
+    ),
   ]);
 
   const settings = settingsRow as OrgSettingsRow | null;
   const mailboxes = mailboxRows ?? [];
   const templates = templateRows ?? [];
-  const leads = (leadRows ?? []) as BlockerLead[];
+  const leads = (leadRows ?? []) as (BlockerLead & { id: string })[];
 
   const schedule = new Map<string, ScheduledJob>(
     ((scheduleRows ?? []) as ScheduledJob[]).map((row) => [row.job, row]),
@@ -104,9 +113,12 @@ export default async function SettingsPage() {
 
   const suppressions = suppressionIndex(suppressionRows);
   const pending = leads.filter((lead) => !IN_FLIGHT.has(lead.status));
-  const ready = pending.filter(
-    (lead) => classifyLead(lead, suppressions) === "ready",
-  ).length;
+  const bookedIds = new Set((bookedRows ?? []).map((row) => row.lead_id));
+  const blockers = pending.map((lead) =>
+    classifyLead(lead, suppressions, bookedIds.has(lead.id)),
+  );
+  const ready = blockers.filter((blocker) => blocker === "ready").length;
+  const booked = blockers.filter((blocker) => blocker === "booked").length;
   const noTimezone = pending.filter((lead) => !lead.timezone).length;
 
   const sendable = mailboxes.filter((m) => m.is_sendable);
@@ -152,11 +164,11 @@ export default async function SettingsPage() {
       linkLabel: "write one",
     },
     {
-      ok: ready > 0,
-      label: "At least one lead ready",
+      ok: ready + booked > 0,
+      label: "At least one lead ready or booked",
       detail:
-        ready > 0
-          ? `${ready} claimed, qualified, zoned, not suppressed, and either audited or queued without one.${noTimezone > 0 ? ` ${noTimezone} more are waiting on a timezone.` : ""}`
+        ready + booked > 0
+          ? `${ready} ready to plan${booked > 0 ? `, ${booked} with a first email already booked` : ""}. Ready means claimed, qualified, zoned, not suppressed, and either audited or queued without one.${noTimezone > 0 ? ` ${noTimezone} more are waiting on a timezone.` : ""}`
           : `Nothing the planner can pick up. It wants a lead that is claimed, zoned, and either audited or explicitly queued without one. The Write screen is looser: anything claimed, qualified and zoned can be written to by hand, and writing it is what queues it.${noTimezone > 0 ? ` ${noTimezone} have no zone.` : ""}`,
       href: "/queue",
       linkLabel: "see why",
