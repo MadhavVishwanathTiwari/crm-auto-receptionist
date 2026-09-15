@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   addMember,
   adminClient,
+  anonClient,
   cleanup,
   createTestOrg,
   createTestUser,
@@ -192,6 +193,48 @@ describe("queue_composed_send: whose mailbox", () => {
     expect(sends[0].mailbox_id).toBe(madhavBox);
   });
 
+  it("accepts a lead claimed by the operator's other account (0048)", async () => {
+    // The other half of the same state. madhav signs in as the account that
+    // connected the mailbox, and the lead was claimed by the other one. Until
+    // 0048 the claim check was strict, so this was refused as "somebody
+    // else's" lead and 30 real leads could not be written to at all.
+    const lead = await makeClaimedLead(madhavLeads);
+
+    const { error } = await queue(madhavMailbox, lead, madhavBox);
+    expect(error).toBeNull();
+
+    const sends = await liveSendsFor(lead);
+    expect(sends).toHaveLength(1);
+    expect(sends[0].composed_by).toBe(madhavMailbox.id);
+  });
+
+  it("still refuses a colleague's lead, and writes nothing", async () => {
+    const lead = await makeClaimedLead(ojas);
+
+    const { error } = await queue(madhavMailbox, lead, madhavBox);
+    expect(error?.message).toMatch(/lead belongs to somebody else/i);
+    expect(await liveSendsFor(lead)).toEqual([]);
+  });
+
+  it("still refuses an unclaimed lead", async () => {
+    const { data, error: insertError } = await admin()
+      .from("leads")
+      .insert({
+        org_id: orgId,
+        company_name: "Nobody's Yet HVAC",
+        work_email: `pool-${randomUUID().slice(0, 8)}@prospect.test`,
+        timezone: "America/Phoenix",
+        timezone_source: "import",
+      })
+      .select("id")
+      .single();
+    expect(insertError).toBeNull();
+
+    const { error } = await queue(madhavMailbox, data!.id as string, madhavBox);
+    expect(error?.message).toMatch(/lead belongs to somebody else/i);
+    expect(await liveSendsFor(data!.id as string)).toEqual([]);
+  });
+
   it("keeps a lead on the mailbox its thread started on", async () => {
     // T1 went out from madhav@ before the lead moved to Ojas. The Gmail
     // threadId dispatch-sends will reuse only exists in that mailbox, so T2 has
@@ -260,6 +303,41 @@ describe("mailbox_senders", () => {
     const { error } = await ojas.client.rpc("mailbox_senders", { p_org: other.id });
     expect(error).not.toBeNull();
     expect(error?.message).toMatch(/not your org/i);
+  });
+});
+
+describe("org_operators", () => {
+  it("groups both of one human's accounts, and nobody else with them", async () => {
+    const { data, error } = await madhavMailbox.client.rpc("org_operators");
+    expect(error).toBeNull();
+
+    const groups = (data ?? []) as { operator: string; user_ids: string[] }[];
+    const madhav = groups.find((g) => g.user_ids.includes(madhavMailbox.id));
+    expect([...(madhav?.user_ids ?? [])].sort()).toEqual(
+      [madhavMailbox.id, madhavLeads.id].sort(),
+    );
+
+    const ojasGroup = groups.find((g) => g.user_ids.includes(ojas.id));
+    expect(ojasGroup?.user_ids).toEqual([ojas.id]);
+  });
+
+  it("reports only the caller's own org", async () => {
+    const stranger = await createTestUser("mbown-stranger");
+    userIds.push(stranger.id);
+    const other = await createTestOrg("mbown-roster");
+    orgIds.push(other.id);
+    await addMember(other.id, stranger.id, "member");
+
+    const { data, error } = await stranger.client.rpc("org_operators");
+    expect(error).toBeNull();
+    const ids = ((data ?? []) as { user_ids: string[] }[]).flatMap((g) => g.user_ids);
+    expect(ids).toEqual([stranger.id]);
+  });
+
+  it("is not callable by anon", async () => {
+    const { data, error } = await anonClient().rpc("org_operators");
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
   });
 });
 

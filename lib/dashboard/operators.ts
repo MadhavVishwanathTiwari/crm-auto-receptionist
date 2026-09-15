@@ -43,6 +43,19 @@ export function operatorFor(
   return index.get(userId) ?? null;
 }
 
+/**
+ * Every account that is the same human as this one, including itself.
+ *
+ * What /write filters `claimed_by` on. madhav signs in as one account and
+ * claimed his sheet leads as the other, so `claimed_by = me` hid 30 of them.
+ * An account in no group is a group of one: the answer is never empty.
+ */
+export function accountsOf(userId: string, groups: OperatorGroup[]): string[] {
+  const mine = groups.find((group) => (group.user_ids ?? []).includes(userId));
+  const ids = new Set([userId, ...(mine?.user_ids ?? [])]);
+  return [...ids].filter(Boolean);
+}
+
 /** Display order: alphabetical, so the same operator is in the same place. */
 export function operatorNames(groups: OperatorGroup[]): string[] {
   return groups.map((group) => group.operator).sort((a, b) => a.localeCompare(b));

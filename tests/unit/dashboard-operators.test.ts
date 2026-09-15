@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  accountsOf,
   operatorFor,
   operatorIndex,
   operatorNames,
@@ -56,6 +57,26 @@ describe("operatorFor", () => {
 
   it("is null for an account in no group", () => {
     expect(operatorFor("user-stranger", index)).toBeNull();
+  });
+});
+
+describe("accountsOf", () => {
+  it("includes the other account of the same human", () => {
+    // /write filters claimed_by on this. Signing in as one madhav account must
+    // list the leads the other one claimed.
+    expect(accountsOf("user-madhav-io", GROUPS).sort()).toEqual(
+      ["user-madhav-io", "user-madhav-try"].sort(),
+    );
+  });
+
+  it("never includes a colleague", () => {
+    expect(accountsOf("user-ojas", GROUPS)).toEqual(["user-ojas"]);
+  });
+
+  it("is the caller alone when the roster does not know them", () => {
+    // Never empty: an empty `in` list would hide every lead rather than none.
+    expect(accountsOf("user-stranger", GROUPS)).toEqual(["user-stranger"]);
+    expect(accountsOf("user-stranger", [])).toEqual(["user-stranger"]);
   });
 });
 

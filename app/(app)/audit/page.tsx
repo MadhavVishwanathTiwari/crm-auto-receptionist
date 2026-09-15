@@ -1,3 +1,4 @@
+import { accountsOf, type OperatorGroup } from "@/lib/dashboard/operators";
 import { requireOrgContext } from "@/lib/org";
 
 import { PAGE, PAGE_HEADER } from "../ui";
@@ -8,6 +9,11 @@ export const dynamic = "force-dynamic";
 export default async function AuditPage() {
   const { supabase, userId, orgId } = await requireOrgContext();
 
+  // Mine means either of my accounts: madhav claimed his sheet leads as one and
+  // signs in as the other (0048).
+  const { data: operatorRows } = await supabase.rpc("org_operators");
+  const mine = accountsOf(userId, (operatorRows ?? []) as OperatorGroup[]);
+
   // The work queue for a human: mine, worth contacting, and placeable on a
   // clock. Leads already past `claimed` have been audited (or further), so
   // filtering on status keeps a row from reappearing after it is done.
@@ -17,7 +23,7 @@ export default async function AuditPage() {
       "id, company_name, first_name, last_name, work_email, phone, website, city, state, timezone, rating, reviews_count",
     )
     .is("archived_at", null)
-    .eq("claimed_by", userId)
+    .in("claimed_by", mine)
     .eq("status", "claimed")
     .eq("is_qualified", true)
     .not("timezone", "is", null)

@@ -14,6 +14,7 @@
 
 import { DateTime } from "luxon";
 
+import { accountsOf, type OperatorGroup } from "@/lib/dashboard/operators";
 import { requireOrgContext } from "@/lib/org";
 import { bookSlot, reserve } from "@/lib/scheduler/book";
 import { mailboxesForSend, pinnedMailboxIdFor } from "@/lib/scheduler/routing";
@@ -57,12 +58,20 @@ interface LeadRow {
   demo_txt_url: string | null;
   demo_web_url: string | null;
   created_at: string;
+  /** Mine, but possibly as my other account. The routing owner. */
+  claimed_by: string | null;
 }
 
 export default async function WritePage() {
   const { supabase, userId } = await requireOrgContext();
 
-  const write = await loadWriteContext(supabase);
+  // The roster rides along with the schedule read rather than after it, so
+  // resolving "which accounts are me" costs no extra round trip.
+  const [write, { data: operatorRows, error: operatorError }] = await Promise.all([
+    loadWriteContext(supabase),
+    supabase.rpc("org_operators"),
+  ]);
+  const myAccounts = accountsOf(userId, (operatorRows ?? []) as OperatorGroup[]);
 
   if (!write) {
     return (
@@ -83,6 +92,11 @@ export default async function WritePage() {
   // exists to prevent, and it matters more here than anywhere else: writing a
   // personal email to somebody else's lead wastes the writing, not just a click.
   //
+  // Me is every account of mine, not the one I signed in with. madhav claimed
+  // the sheet's leads as madhav@tryautoreceptionist.com and signs in as
+  // madhav@autoreceptionist.io, and `claimed_by = userId` hid all 30 of them
+  // from the only screen that writes to them (0048).
+  //
   // Every one of them, not the oldest few hundred. A lead whose sequence has
   // finished stays claimed and live, and those are the oldest, so the
   // .limit(300) this used to have filled up with them over time and the newest
@@ -92,9 +106,9 @@ export default async function WritePage() {
       .from("leads")
       // One string literal on purpose; see the note in leads/page.tsx.
       .select(
-        "id, company_name, first_name, last_name, title, work_email, work_email_norm, website, website_domain, phone, city, state, industry, rating, reviews_count, timezone, status, angle_type, demo_txt_url, demo_web_url, created_at",
+        "id, company_name, first_name, last_name, title, work_email, work_email_norm, website, website_domain, phone, city, state, industry, rating, reviews_count, timezone, status, angle_type, demo_txt_url, demo_web_url, created_at, claimed_by",
       )
-      .eq("claimed_by", userId)
+      .in("claimed_by", myAccounts)
       .eq("is_qualified", true)
       .is("archived_at", null)
       .is("halted_at", null)
@@ -182,12 +196,11 @@ export default async function WritePage() {
   for (const { lead, sends, step } of worklist) {
     const zone = lead.timezone as string;
 
-    // Same call the action makes, so the address shown in the footer is the one
-    // the send actually leaves from. Every lead here is claimed by the current
-    // operator, so the owner is userId by construction -- passed explicitly
-    // rather than assumed, because the action reads it off the lead.
+    // Same call the action makes, with the same owner -- the lead's claimed_by,
+    // which may be the operator's other account -- so the address shown in the
+    // footer is the one the send actually leaves from.
     const routed = mailboxesForSend(write.mailboxes, {
-      ownerId: userId,
+      ownerId: lead.claimed_by,
       pinnedMailboxId: pinnedMailboxIdFor(sends),
       senders: write.senders,
     });
@@ -331,7 +344,9 @@ export default async function WritePage() {
         myMailboxes.ok ? (myMailboxes.mailboxes[0]?.email ?? null) : null
       }
       senderName={senderName}
-      loadError={error?.message ?? null}
+      // A roster that failed to load narrows the list to this account's own
+      // claims. That hides leads rather than mis-sending any, but say so.
+      loadError={error?.message ?? operatorError?.message ?? null}
     />
   );
 }
