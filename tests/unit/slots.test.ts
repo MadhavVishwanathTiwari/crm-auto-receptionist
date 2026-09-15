@@ -36,6 +36,18 @@ function minuteOfDay(at: DateTime) {
 }
 
 describe("slot selection", () => {
+  it("still finds a slot for a follow-up overdue by more than the lookahead", () => {
+    // Sep 2026: T2s whose T1 went out in July had an earliestDay in late July.
+    // The walk started there, spent its 30 days on the past, and every one of
+    // them read "at its cap for the next 30 days" on a mailbox with room.
+    const result = ask({ earliestDay: MONDAY_EARLY.minus({ days: 60 }) });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.at > MONDAY_EARLY).toBe(true);
+    expect(result.at.toISODate()).toBe("2026-08-10");
+  });
+
   it("lands inside a window, in the prospect's zone", () => {
     const result = ask();
     expect(result.ok).toBe(true);

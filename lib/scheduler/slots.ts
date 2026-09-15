@@ -105,8 +105,14 @@ export function nextSlot(request: SlotRequest): SlotResult {
 
   if (windows.length === 0) return { ok: false, reason: "lookahead_exhausted" };
 
-  const start = request.earliestDay.setZone(zone).startOf("day");
+  // The walk starts today at the earliest, whatever earliestDay says. A
+  // follow-up overdue by weeks has an earliestDay in the past, and walking the
+  // lookahead from there spent it on days nothing can be sent on: every T2 due
+  // in July found no slot "for the next 30 days" in September, and both the
+  // composer and the planner called a mailbox with room to spare full.
   const floor = notBefore.setZone(zone);
+  const earliest = request.earliestDay.setZone(zone).startOf("day");
+  const start = earliest < floor.startOf("day") ? floor.startOf("day") : earliest;
 
   for (let dayOffset = 0; dayOffset <= maxLookaheadDays; dayOffset++) {
     const day = start.plus({ days: dayOffset });
