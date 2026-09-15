@@ -9,6 +9,7 @@ import { suppressLead } from "../suppressions/actions";
 // proxy whose .map throws at hydration. See suppressions/reasons.ts.
 import { SUPPRESSION_REASONS, type SuppressionReason } from "../suppressions/reasons";
 import { IN_FLIGHT } from "@/lib/queue/blockers";
+import { formatYours, fromYourInput } from "@/lib/time/format";
 import {
   COLUMN_LABEL,
   dealValue,
@@ -20,6 +21,7 @@ import {
 
 import { addNote, setDealValue, setNextAction, setStage } from "../pipeline/actions";
 import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import {
   closeLead,
   queueWithoutAudit,
@@ -95,14 +97,8 @@ const ZONES: string[] =
  * reading this screen, so it belongs in their day; the prospect-local rule
  * governs when an email leaves, which is bookSlot's business, not this one's.
  */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const at = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return (
-    `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}` +
-    `T${pad(at.getHours())}:${pad(at.getMinutes())}`
-  );
+function toLocalInput(iso: string | null, zone: string | null): string {
+  return formatYours(iso, zone, "input");
 }
 
 /**
@@ -172,13 +168,16 @@ export function LeadDrawer({
   defaultDealValue: number;
 }) {
   const router = useRouter();
+  // The reader's zone, for every "when" on this panel. `zone` below is the
+  // PROSPECT's, which the timezone field edits.
+  const { zone: viewerZone } = useViewerZone();
   const [zone, setZone] = useState(lead.timezone ?? "");
   const [reason, setReason] = useState<SuppressionReason>("manual_dnc");
   const [outcome, setOutcome] = useState<TerminalOutcome>("closed_lost");
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [note, setNote] = useState("");
   const [action, setAction] = useState(lead.next_action ?? "");
-  const [actionAt, setActionAt] = useState(toLocalInput(lead.next_action_at));
+  const [actionAt, setActionAt] = useState(toLocalInput(lead.next_action_at, viewerZone));
   const [value, setValue] = useState(
     lead.deal_value === null ? "" : String(lead.deal_value),
   );
@@ -254,14 +253,7 @@ export function LeadDrawer({
                     <div className="text-[var(--color-ink-2)]">
                       <span className="tabular">T{send.step_number}</span> reached Gmail{" "}
                       <span className="tabular">
-                        {send.sending_at
-                          ? new Date(send.sending_at).toLocaleString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : ""}
+                        {formatYours(send.sending_at, viewerZone)}
                       </span>
                       {subject ? ` — "${subject}"` : ""}
                     </div>
@@ -510,7 +502,7 @@ export function LeadDrawer({
                     setNextAction(
                       lead.id,
                       action,
-                      actionAt ? new Date(actionAt).toISOString() : null,
+                      fromYourInput(actionAt, viewerZone),
                     ),
                   )
                 }
@@ -650,12 +642,7 @@ export function LeadDrawer({
               {events.map((event) => (
                 <li key={event.id} className="flex gap-3">
                   <span className="tabular w-32 shrink-0 text-[var(--color-ink-3)]">
-                    {new Date(event.occurred_at).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatYours(event.occurred_at, viewerZone)}
                   </span>
                   <span className={STATUS_TONE[event.type] ?? ""}>
                     {event.type.replace(/_/g, " ")}

@@ -28,6 +28,36 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // Every time on screen goes through lib/time/format.ts. The runtime's own
+  // zone and locale are UTC/en-US on the server and the operator's in the
+  // browser, so a bare toLocaleString() renders one string on each side:
+  // times flashed in UTC and six screens threw hydration error #418 (Sep 2026).
+  {
+    files: ["app/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/][arguments.length=0]",
+          message:
+            "Use formatYours() or formatCount() from lib/time/format.ts. The runtime's zone and locale differ between server and browser.",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/][arguments.0.name='undefined']",
+          message:
+            "Use formatYours() from lib/time/format.ts. An undefined locale is the runtime's, which differs between server and browser.",
+        },
+        {
+          selector: "CallExpression[callee.property.name='toRelative'][arguments.length=0]",
+          message:
+            "Use relativeTo(iso, renderedAt) from lib/time/format.ts, so server and browser measure from the same moment.",
+        },
+      ],
+    },
+  },
+
   globalIgnores([
     ".next/**",
     "out/**",

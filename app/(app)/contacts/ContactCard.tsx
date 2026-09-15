@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DateTime } from "luxon";
 import { useEffect, useState, useTransition } from "react";
 
 import {
@@ -17,10 +16,12 @@ import {
   PIPELINE_STAGES,
   type PipelineStage,
 } from "@/lib/pipeline/stages";
+import { formatYours, fromYourInput, relativeTo } from "@/lib/time/format";
 
 import { claimLead, releaseLead } from "../leads/actions";
 import { addNote, setNextAction, setStage } from "../pipeline/actions";
 import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 
 export interface ContactDetail {
   id: string;
@@ -61,12 +62,6 @@ export interface NoteRow {
   payload: Record<string, unknown> | null;
 }
 
-/** A datetime-local value from an ISO instant, in the operator's own zone. */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  return DateTime.fromISO(iso).toFormat("yyyy-LL-dd'T'HH:mm");
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-2">
@@ -92,7 +87,12 @@ export function ContactCard({
   const [pending, startTransition] = useTransition();
 
   const [action, setAction] = useState(contact.next_action ?? "");
-  const [actionAt, setActionAt] = useState(toLocalInput(contact.next_action_at));
+  // The operator's own zone, as the server rendered it: a datetime-local value
+  // and the notes' "3 days ago" come out the same on both sides.
+  const { zone, renderedAt } = useViewerZone();
+  const [actionAt, setActionAt] = useState(
+    formatYours(contact.next_action_at, zone, "input"),
+  );
   const [note, setNote] = useState("");
 
   // Listener only, no state set in the effect body.
@@ -304,7 +304,7 @@ export function ContactCard({
                   setNextAction(
                     contact.id,
                     action,
-                    actionAt ? new Date(actionAt).toISOString() : null,
+                    fromYourInput(actionAt, zone),
                   ),
                 )
               }
@@ -366,7 +366,7 @@ export function ContactCard({
                     {String(entry.payload?.body ?? "")}
                   </p>
                   <p className="text-[var(--color-ink-3)]">
-                    {DateTime.fromISO(entry.occurred_at).toRelative()}
+                    {relativeTo(entry.occurred_at, renderedAt)}
                   </p>
                 </li>
               ))}

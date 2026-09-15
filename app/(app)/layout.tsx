@@ -2,8 +2,10 @@ import type { Route } from "next";
 import Link from "next/link";
 
 import { requireOrgContext } from "@/lib/org";
+import { getViewerZone } from "@/lib/time/zone";
 
 import { SignOutButton } from "./SignOutButton";
+import { ViewerZone } from "./ViewerZone";
 
 // Write is first because it is the job. Everything after it is either what
 // feeds the composer or what happens to an email after it leaves, and an
@@ -68,10 +70,20 @@ export default async function AppLayout({
   // head:true asks PostgREST for the count and no rows. The badge is the only
   // reason a reply is worth surfacing outside the alerts screen, so it is the
   // only thing loaded here.
-  const { count: openAlerts } = await supabase
-    .from("alerts")
-    .select("id", { count: "exact", head: true })
-    .is("acknowledged_at", null);
+  //
+  // The viewer's zone rides along: it is a cookie, so it costs nothing, and
+  // every time on every screen is formatted in it (lib/time/format.ts).
+  const [{ count: openAlerts }, zone] = await Promise.all([
+    supabase
+      .from("alerts")
+      .select("id", { count: "exact", head: true })
+      .is("acknowledged_at", null),
+    getViewerZone(),
+  ]);
+
+  // One "now" for the whole render, so a relative time reads the same on the
+  // server and in the browser that hydrates it a moment later.
+  const renderedAt = new Date().toISOString();
 
   return (
     <div className="flex h-full flex-col">
@@ -103,7 +115,11 @@ export default async function AppLayout({
           <SignOutButton />
         </div>
       </header>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="min-h-0 flex-1">
+        <ViewerZone zone={zone} renderedAt={renderedAt}>
+          {children}
+        </ViewerZone>
+      </div>
     </div>
   );
 }

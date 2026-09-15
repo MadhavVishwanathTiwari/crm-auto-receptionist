@@ -6,9 +6,11 @@ import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 // A plain module, never through the "use server" actions file.
 import { brokenLinks } from "@/lib/gmail/body";
 import { renderTemplate, type TemplateValues } from "@/lib/templates/render";
+import { formatYours } from "@/lib/time/format";
 import { placeholderWords } from "@/lib/write/placeholders";
 
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { queueWrittenEmail, reviseWrittenEmail } from "./actions";
 
 export interface StarterTemplate {
@@ -85,11 +87,6 @@ function leftovers(text: string): string[] {
   return [...new Set(text.match(/\{\{\s*[a-z_]+\s*\}\}/gi) ?? [])];
 }
 
-/** "Tue 19 Aug, 09:42" in whatever zone the reader is standing in. */
-function yourTime(iso: string): string {
-  return DateTime.fromISO(iso).toFormat("ccc d LLL, HH:mm");
-}
-
 /** The same instant as the prospect reads it, from the frozen wall clock. */
 function theirTime(local: string): string {
   return DateTime.fromISO(local).toFormat("ccc d LLL, HH:mm");
@@ -124,6 +121,9 @@ export function WriteClient({
   senderName: string | null;
   loadError: string | null;
 }) {
+  // "Yours" is the operator's zone as the server rendered it, never the
+  // runtime's: the server runs in UTC, and the two used to disagree (#418).
+  const { zone } = useViewerZone();
   const [drafts, setDrafts] = useState(initialDrafts);
   const [index, setIndex] = useState(0);
 
@@ -272,7 +272,7 @@ export function WriteClient({
         const booked = result.booked;
         setFlash(
           booked
-            ? `Queued for ${company}: leaves ${theirTime(booked.local)} their time (${yourTime(booked.at)} yours), from ${booked.mailbox}.`
+            ? `Queued for ${company}: leaves ${theirTime(booked.local)} their time (${formatYours(booked.at, zone)} yours), from ${booked.mailbox}.`
             : `Queued for ${company}.`,
         );
       }
@@ -527,7 +527,7 @@ export function WriteClient({
                     draft.slot ? (
                       <>
                         keeps its time: {theirTime(draft.slot.local)} in {draft.timezone},
-                        which is {yourTime(draft.slot.at)} for you
+                        which is {formatYours(draft.slot.at, zone)} for you
                       </>
                     ) : (
                       "keeps the time it already has"
@@ -535,7 +535,7 @@ export function WriteClient({
                   ) : draft.slot ? (
                     <>
                       leaves {theirTime(draft.slot.local)} in {draft.timezone}, which
-                      is {yourTime(draft.slot.at)} for you
+                      is {formatYours(draft.slot.at, zone)} for you
                     </>
                   ) : (
                     <span className="text-[var(--color-warn)]">

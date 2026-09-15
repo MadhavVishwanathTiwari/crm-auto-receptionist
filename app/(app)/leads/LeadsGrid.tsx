@@ -15,8 +15,10 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { COLUMN_LABEL, columnFor, isOverdue } from "@/lib/pipeline/stages";
 import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
+import { formatYours } from "@/lib/time/format";
 
 import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { claimFromPool, claimLead, releaseLead } from "./actions";
 
 export interface LeadRow {
@@ -59,6 +61,7 @@ export function LeadsGrid({
   selectedLeadId?: string | null;
 }) {
   const router = useRouter();
+  const { zone } = useViewerZone();
   // The server prop is the seed; Realtime patches this copy in place.
   const [liveLeads, setLiveLeads] = useState(leads);
   const [prevLeads, setPrevLeads] = useState(leads);
@@ -238,7 +241,7 @@ export function LeadsGrid({
         header: "Added",
         size: 100,
         cell: (info) =>
-          new Date(info.getValue<string>()).toLocaleDateString(),
+          formatYours(info.getValue<string>(), zone, "date"),
       },
       {
         id: "actions",
@@ -275,7 +278,7 @@ export function LeadsGrid({
         },
       },
     ],
-    [currentUserId, pending],
+    [currentUserId, pending, zone],
   );
 
   // Realtime. RLS is enforced per subscriber, so no org filter is needed on the

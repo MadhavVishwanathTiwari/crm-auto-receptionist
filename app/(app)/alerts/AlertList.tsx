@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 
 import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
+import { formatYours } from "@/lib/time/format";
 
 import { BUTTON_QUIET, PANEL } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { acknowledgeAlert, acknowledgeAllAlerts } from "./actions";
 
 export interface AlertRow {
@@ -57,6 +59,7 @@ function AlertLine({
     tone: "text-[var(--color-ink-2)]",
   };
   const seen = alert.acknowledged_at !== null;
+  const { zone } = useViewerZone();
 
   return (
     <li
@@ -67,7 +70,7 @@ function AlertLine({
     >
       <span className={"w-32 shrink-0 " + copy.tone}>{copy.label}</span>
       <span className="tabular w-36 shrink-0 text-[var(--color-ink-3)]">
-        {new Date(alert.created_at).toLocaleString()}
+        {formatYours(alert.created_at, zone)}
       </span>
       <span className="w-52 shrink-0 truncate text-[var(--color-ink)]">
         {alert.lead_id ? (

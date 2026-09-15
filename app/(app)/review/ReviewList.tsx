@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 
+import { formatYours } from "@/lib/time/format";
+
 import { BUTTON, PANEL } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { decideReview, type Decision } from "./actions";
 
 export interface ReviewItem {
@@ -50,6 +53,7 @@ function show(value: unknown): string {
 }
 
 export function ReviewList({ items }: { items: ReviewItem[] }) {
+  const { zone } = useViewerZone();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [working, setWorking] = useState<string | null>(null);
@@ -92,7 +96,7 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
                 {item.match_value}
               </span>
               <span className="ml-auto text-[var(--color-ink-3)]">
-                {new Date(item.created_at).toLocaleString()}
+                {formatYours(item.created_at, zone)}
               </span>
             </div>
 

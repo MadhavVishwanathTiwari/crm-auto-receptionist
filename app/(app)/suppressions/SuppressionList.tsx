@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 
+import { formatYours } from "@/lib/time/format";
+
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { addSuppression, removeSuppression } from "./actions";
 // The array and its type come from a plain module, never through the "use
 // server" actions file — see reasons.ts.
@@ -25,6 +28,7 @@ export function SuppressionList({
   rows: SuppressionRow[];
   isAdmin: boolean;
 }) {
+  const { zone } = useViewerZone();
   const [target, setTarget] = useState("");
   const [reason, setReason] = useState<SuppressionReason>("manual_dnc");
   const [notes, setNotes] = useState("");
@@ -165,7 +169,7 @@ export function SuppressionList({
                       {row.notes ?? "—"}
                     </td>
                     <td className="py-1 text-[var(--color-ink-3)]">
-                      {new Date(row.created_at).toLocaleDateString()}
+                      {formatYours(row.created_at, zone, "date")}
                     </td>
                     <td className="py-1 text-right">
                       {isAdmin && (

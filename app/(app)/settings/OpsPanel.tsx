@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 
+import { formatYours } from "@/lib/time/format";
+
 import { BUTTON, PANEL } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { type JobRunResult, runJobNow } from "./actions";
 
 /** One row of public.background_jobs_status(), or null when unscheduled. */
@@ -30,6 +33,7 @@ export interface JobDescriptor {
  * after auditing a lead rather than waiting fifteen minutes to see it booked.
  */
 export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
+  const { zone } = useViewerZone();
   const [result, setResult] = useState<JobRunResult | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -97,9 +101,10 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
                   }
                 >
                   {job.scheduled.last_run_at
-                    ? `${job.scheduled.last_status ?? "ran"} ${new Date(
+                    ? `${job.scheduled.last_status ?? "ran"} ${formatYours(
                         job.scheduled.last_run_at,
-                      ).toLocaleTimeString()}`
+                        zone,
+                      )}`
                     : "scheduled, never run"}
                 </span>
               ) : (

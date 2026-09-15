@@ -3,7 +3,10 @@
 import { DateTime } from "luxon";
 import { useState, useTransition } from "react";
 
+import { formatYours } from "@/lib/time/format";
+
 import { BUTTON_QUIET } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { cancelSend } from "../write/actions";
 
 export interface QueuedSend {
@@ -29,6 +32,7 @@ export interface QueuedSend {
  * on the composer, which keeps the slot; this only removes the send.
  */
 export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
+  const { zone } = useViewerZone();
   const [rows, setRows] = useState(sends);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -75,7 +79,6 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
         </thead>
         <tbody>
           {rows.map((send) => {
-            const at = DateTime.fromISO(send.scheduled_at);
             const local = DateTime.fromISO(send.scheduled_local);
             const written = send.composed_subject !== null;
 
@@ -96,7 +99,7 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
                   )}
                 </td>
                 <td className="tabular py-1 text-[var(--color-ink-2)]">
-                  {send.status === "blocked" ? "—" : at.toFormat("ccc d LLL, HH:mm")}
+                  {send.status === "blocked" ? "—" : formatYours(send.scheduled_at, zone)}
                 </td>
                 <td className="tabular py-1 text-[var(--color-ink-2)]">
                   {send.status === "blocked"

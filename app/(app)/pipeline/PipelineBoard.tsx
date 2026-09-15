@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { DateTime } from "luxon";
 import { useEffect, useState, useTransition } from "react";
 
 import {
@@ -20,9 +19,11 @@ import {
   wonValue,
 } from "@/lib/pipeline/stages";
 import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
+import { formatCount, relativeTo } from "@/lib/time/format";
 
 import { closeLead } from "../leads/actions";
 import { BUTTON, BUTTON_QUIET, STAGE_TONE } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { setStage } from "./actions";
 
 export interface BoardRow {
@@ -43,11 +44,6 @@ export interface BoardRow {
 
 /** What a drag carries. A card is identified by nothing but its id. */
 const DRAG_TYPE = "text/plain";
-
-function relative(iso: string | null): string {
-  if (!iso) return "";
-  return DateTime.fromISO(iso).toRelative() ?? "";
-}
 
 export function PipelineBoard({
   leads,
@@ -252,7 +248,7 @@ export function PipelineBoard({
             column do not change this, because countsTowardPipeline still
             excludes the stage. */}
         <span className="ml-auto">
-          <span className="tabular">{prospectCount.toLocaleString()}</span> not yet
+          <span className="tabular">{formatCount(prospectCount)}</span> not yet
           replied
         </span>
       </div>
@@ -336,7 +332,7 @@ export function PipelineBoard({
                   </span>
                   <span className="tabular ml-auto text-[var(--color-ink-3)]">
                     {isProspect
-                      ? `${rows.length} / ${prospectCount.toLocaleString()}`
+                      ? `${rows.length} / ${formatCount(prospectCount)}`
                       : rows.length}
                   </span>
                   {/* Prospect must still never show a value, cards or not. */}
@@ -370,7 +366,7 @@ export function PipelineBoard({
                   {isProspect && prospectCount > rows.length && (
                     <p className="px-1 py-2 text-[var(--color-ink-3)]">
                       The {rows.length} most recently touched of{" "}
-                      {prospectCount.toLocaleString()}. The rest are on{" "}
+                      {formatCount(prospectCount)}. The rest are on{" "}
                       <Link href="/leads" className="underline">
                         Leads
                       </Link>
@@ -408,6 +404,9 @@ function Card({
 }) {
   const overdue = isOverdue(lead);
   const closed = lead.terminal_outcome !== null;
+  // "3 days ago" from the moment the server rendered, not from now, so the
+  // browser's hydration a second later reads the same words.
+  const { renderedAt } = useViewerZone();
   const owner = !lead.claimed_by
     ? "pool"
     : lead.claimed_by === currentUserId
@@ -450,7 +449,7 @@ function Card({
       </p>
 
       <p className="truncate text-[var(--color-ink-3)]">
-        {lead.status} {relative(lead.status_updated_at)}
+        {lead.status} {relativeTo(lead.status_updated_at, renderedAt)}
       </p>
 
       {lead.next_action && (
@@ -462,7 +461,7 @@ function Card({
         >
           {overdue ? "⚠ " : ""}
           {lead.next_action}
-          {lead.next_action_at ? ` · ${relative(lead.next_action_at)}` : ""}
+          {lead.next_action_at ? ` · ${relativeTo(lead.next_action_at, renderedAt)}` : ""}
         </p>
       )}
 

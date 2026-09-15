@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { formatYours } from "@/lib/time/format";
+
 import { BUTTON, PANEL } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { repairStalledSends, type StalledRepairResult } from "./actions";
 
 const TONE: Record<string, string> = {
@@ -20,16 +23,6 @@ const EXPLAIN: Record<string, string> = {
   error: "see the row below",
 };
 
-function localTime(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 /**
  * Records the emails that went out and were never written down.
  *
@@ -41,6 +34,7 @@ function localTime(iso: string | null): string {
  */
 export function StalledRepair() {
   const router = useRouter();
+  const { zone } = useViewerZone();
   const [result, setResult] = useState<StalledRepairResult | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -127,7 +121,7 @@ export function StalledRepair() {
                     </span>{" "}
                     — T{row.step_number} went out {row.attempts}{" "}
                     {row.attempts === 1 ? "time" : "times"}
-                    {row.recorded_at ? `, last ${localTime(row.recorded_at)}` : ""}
+                    {row.recorded_at ? `, last ${formatYours(row.recorded_at, zone)}` : ""}
                     {row.cancelled_planned > 0
                       ? `; cancels ${row.cancelled_planned} re-booked${
                           row.cancelled_written > 0

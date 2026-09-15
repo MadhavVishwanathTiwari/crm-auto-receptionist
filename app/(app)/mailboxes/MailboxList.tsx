@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 
+import { formatYours } from "@/lib/time/format";
+
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
+import { useViewerZone } from "../ViewerZone";
 import { setMailboxPaused, updateMailboxSettings } from "./actions";
 
 export interface MailboxRow {
@@ -21,6 +24,8 @@ export interface MailboxRow {
 }
 
 function MailboxCard({ row }: { row: MailboxRow }) {
+  // The reader's zone. `timezone` below is the MAILBOX's, which the cap counts in.
+  const { zone: viewerZone } = useViewerZone();
   const [displayName, setDisplayName] = useState(row.display_name ?? "");
   const [dailyCap, setDailyCap] = useState(String(row.daily_cap));
   const [timezone, setTimezone] = useState(row.timezone);
@@ -144,11 +149,11 @@ function MailboxCard({ row }: { row: MailboxRow }) {
 
       <p className="mt-2 text-[var(--color-ink-3)]">
         Last send{" "}
-        {row.last_send_at ? new Date(row.last_send_at).toLocaleString() : "never"}
+        {row.last_send_at ? formatYours(row.last_send_at, viewerZone) : "never"}
         {" · "}
         last polled{" "}
         {row.last_polled_at
-          ? new Date(row.last_polled_at).toLocaleString()
+          ? formatYours(row.last_polled_at, viewerZone)
           : "never"}
         {!row.is_mine && " · connected by the other operator, so it is read-only here"}
       </p>
