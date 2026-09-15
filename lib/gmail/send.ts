@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 
 import { toHtml, toPlainText } from "./body";
+import { fetchMessageMetadata } from "./messages";
 
 const SEND_ENDPOINT =
   "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
@@ -37,7 +38,11 @@ export interface MessageInput {
   to: Address;
   subject: string;
   body: string;
-  /** Our own Message-ID, so a later touch can thread onto this one. */
+  /**
+   * The Message-ID header we write. Gmail replaces it with its own on send, so
+   * this is never what the prospect receives; sendMessage() reads the real one
+   * back and that is the one recorded.
+   */
   messageId: string;
   /** The previous touch's Message-ID, when this is a follow-up. */
   inReplyTo?: string | null;
@@ -126,7 +131,8 @@ export function buildMimeMessage(input: MessageInput): string {
 export interface SendResult {
   providerMessageId: string;
   providerThreadId: string;
-  rfc822MessageId: string;
+  /** Gmail's Message-ID for what went out, or null if it could not be read. */
+  rfc822MessageId: string | null;
 }
 
 export async function sendMessage(input: {
@@ -166,9 +172,23 @@ export async function sendMessage(input: {
     throw new GmailSendError("gmail returned no message id", response.status);
   }
 
+  // Gmail swaps our Message-ID for one of its own (`…@mail.gmail.com`), and
+  // until Sep 2026 this returned ours anyway: every follow-up's In-Reply-To
+  // named a message the prospect never received, which Gmail threads past on
+  // threadId and Outlook or Apple Mail do not. So read back what went out. The
+  // email has left by now, so nothing here may throw: an id we could not read
+  // is null, never the one we know is wrong.
+  let rfc822MessageId: string | null = null;
+  try {
+    const sent = await fetchMessageMetadata(input.accessToken, payload.id, ["Message-ID"]);
+    rfc822MessageId = sent.headers["message-id"]?.trim() || null;
+  } catch {
+    rfc822MessageId = null;
+  }
+
   return {
     providerMessageId: payload.id,
     providerThreadId: payload.threadId ?? "",
-    rfc822MessageId: input.message.messageId,
+    rfc822MessageId,
   };
 }

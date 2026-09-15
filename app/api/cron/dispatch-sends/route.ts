@@ -30,6 +30,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireBearer } from "@/lib/cronAuth";
 import { serverEnv } from "@/lib/env";
+import { fetchMessageMetadata } from "@/lib/gmail/messages";
 import { GmailSendError, generateMessageId, sendMessage } from "@/lib/gmail/send";
 import { replySubject } from "@/lib/gmail/thread";
 import { getMailboxAccessToken, MailboxDisconnectedError } from "@/lib/gmail/token";
@@ -265,7 +266,9 @@ async function dispatchOrg(
     // first touch established.
     supabase
       .from("scheduled_sends")
-      .select("lead_id, step_number, provider_thread_id, rfc822_message_id, rendered_subject")
+      .select(
+        "lead_id, step_number, provider_message_id, provider_thread_id, rfc822_message_id, rendered_subject",
+      )
       .in("lead_id", leadIds)
       .eq("status", "sent")
       .order("step_number", { ascending: true }),
@@ -297,7 +300,8 @@ async function dispatchOrg(
     string,
     {
       threadId: string | null;
-      messageIds: string[];
+      /** Every touch so far, oldest first, for In-Reply-To and References. */
+      touches: PriorTouch[];
       /** Each thread's opening subject, which Gmail requires a reply to match. */
       subjectByThread: Map<string, string>;
     }
@@ -306,7 +310,7 @@ async function dispatchOrg(
     const key = row.lead_id as string;
     const entry = priorByLead.get(key) ?? {
       threadId: null,
-      messageIds: [],
+      touches: [],
       subjectByThread: new Map<string, string>(),
     };
     const thread = row.provider_thread_id as string | null;
@@ -316,7 +320,10 @@ async function dispatchOrg(
         entry.subjectByThread.set(thread, row.rendered_subject as string);
       }
     }
-    if (row.rfc822_message_id) entry.messageIds.push(row.rfc822_message_id as string);
+    entry.touches.push({
+      providerMessageId: (row.provider_message_id as string | null) ?? null,
+      rfc822: (row.rfc822_message_id as string | null) ?? null,
+    });
     priorByLead.set(key, entry);
   }
 
@@ -473,6 +480,10 @@ async function dispatchOrg(
       : undefined;
     if (threadSubject) subjectText = replySubject(threadSubject);
 
+    // Before the point of no return, because it reads Gmail. It never holds
+    // the send: a touch it cannot read falls back to the stored id.
+    const references = prior ? await resolveReferences(accessToken, prior.touches) : [];
+
     // The point of no return. Marked first so a process killed inside the
     // Gmail call leaves a row that is visibly stuck rather than one the next
     // run would claim and send a second time.
@@ -516,8 +527,8 @@ async function dispatchOrg(
           subject: subjectText,
           body: bodyText,
           messageId,
-          inReplyTo: prior?.messageIds.at(-1) ?? null,
-          references: prior?.messageIds ?? [],
+          inReplyTo: references.at(-1) ?? null,
+          references,
         },
       });
     } catch (error) {
@@ -622,6 +633,45 @@ async function dispatchOrg(
   }
 
   return report;
+}
+
+interface PriorTouch {
+  /** Gmail's id for it, in the mailbox that sent it. Null for a sheet row. */
+  providerMessageId: string | null;
+  /** The Message-ID as recorded, which before Sep 2026 was never the real one. */
+  rfc822: string | null;
+}
+
+/**
+ * The Message-IDs a follow-up replies to, oldest first.
+ *
+ * Asked of Gmail by message id rather than taken from rfc822_message_id. Gmail
+ * replaces the Message-ID of everything it sends, and the dispatcher recorded
+ * the one it had minted until Sep 2026, so every stored id from before then
+ * names a message nobody received. Reading them back here covers that history
+ * without rewriting it. A lead is pinned to the mailbox that sent to it, so the
+ * messages are in this account. A read that fails falls back to what is
+ * stored: threadId and the subject still thread the follow-up in Gmail, so a
+ * slow read is no reason to hold it.
+ */
+async function resolveReferences(
+  accessToken: string,
+  touches: PriorTouch[],
+): Promise<string[]> {
+  const ids = await Promise.all(
+    touches.map(async (touch) => {
+      if (!touch.providerMessageId) return touch.rfc822;
+      try {
+        const sent = await fetchMessageMetadata(accessToken, touch.providerMessageId, [
+          "Message-ID",
+        ]);
+        return sent.headers["message-id"]?.trim() || touch.rfc822;
+      } catch {
+        return touch.rfc822;
+      }
+    }),
+  );
+  return ids.filter((id): id is string => Boolean(id));
 }
 
 // ---------------------------------------------------------------------------

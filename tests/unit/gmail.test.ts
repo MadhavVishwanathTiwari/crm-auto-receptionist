@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { classifyInbound } from "@/lib/gmail/classify";
 import {
@@ -6,7 +6,7 @@ import {
   referencedMessageIds,
 } from "@/lib/gmail/messages";
 import { buildAuthUrl, GMAIL_SCOPES, grantIsComplete } from "@/lib/gmail/oauth";
-import { buildMimeMessage, generateMessageId } from "@/lib/gmail/send";
+import { buildMimeMessage, generateMessageId, sendMessage } from "@/lib/gmail/send";
 
 function inbound(overrides: {
   headers?: Record<string, string>;
@@ -145,6 +145,60 @@ describe("building a message", () => {
   it("mints a Message-ID on the sending mailbox's own domain", () => {
     const id = generateMessageId("ojas@tryautoreceptionist.com");
     expect(id).toMatch(/^<[0-9a-f-]+@tryautoreceptionist\.com>$/);
+  });
+});
+
+describe("what a send records", () => {
+  const message = {
+    from: { name: "Madhav", email: "madhav@tryautoreceptionist.com" },
+    to: { name: null, email: "dana@brightsmile.test" },
+    subject: "E2E 1 happy path",
+    body: "Hi Dana",
+    messageId: "<113dcac6-b1c5-451a-9e65-fc817326f08d@tryautoreceptionist.com>",
+  };
+  // What Gmail actually put on lead 1's T1 on 15 Sep.
+  const gmails = "<CAPvWn2D2HFtFQCydF9v0R+z1qwfuk1ee9+t7ePjcdOJV1dzvGw@mail.gmail.com>";
+
+  function gmail(metadata: () => Response) {
+    const fetchMock = vi.fn(async (url: string) =>
+      url.endsWith("/messages/send")
+        ? Response.json({ id: "1a0a4ded1050bad5", threadId: "1a0a4ded1050bad5" })
+        : metadata(),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("is the Message-ID Gmail sent, not the one we wrote", () => {
+    // Gmail replaces it. Recording ours made every follow-up's In-Reply-To name
+    // a message the prospect never received.
+    const fetchMock = gmail(() =>
+      Response.json({
+        id: "1a0a4ded1050bad5",
+        payload: { headers: [{ name: "Message-ID", value: gmails }] },
+      }),
+    );
+
+    return sendMessage({ accessToken: "t", message }).then((result) => {
+      expect(result.rfc822MessageId).toBe(gmails);
+      expect(String(fetchMock.mock.calls[1]![0])).toContain(
+        "/messages/1a0a4ded1050bad5?format=metadata&metadataHeaders=Message-ID",
+      );
+    });
+  });
+
+  it("is null, and the send still succeeds, when Gmail cannot say", async () => {
+    // The email has already gone. Throwing here would park it as unknown, and
+    // falling back to ours would record the id we know is wrong.
+    gmail(() => new Response("backend error", { status: 500 }));
+
+    const result = await sendMessage({ accessToken: "t", message });
+    expect(result.providerMessageId).toBe("1a0a4ded1050bad5");
+    expect(result.rfc822MessageId).toBeNull();
   });
 });
 

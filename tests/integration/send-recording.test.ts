@@ -25,6 +25,22 @@ vi.mock("@/lib/gmail/send", async (importOriginal) => {
   };
 });
 
+// Reading a sent message back, which is where the real Message-ID comes from:
+// Gmail replaces the one we write. Each message's "real" id is derived from
+// its Gmail id, so a test can say which one a header should carry.
+vi.mock("@/lib/gmail/messages", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gmail/messages")>();
+  return {
+    ...actual,
+    fetchMessageMetadata: vi.fn(async (_token: string, id: string) => ({
+      id,
+      threadId: "",
+      internalDate: null,
+      headers: { "message-id": `<${id}@mail.gmail.com>` },
+    })),
+  };
+});
+
 import { POST as dispatchSends } from "@/app/api/cron/dispatch-sends/route";
 import { POST as planSends } from "@/app/api/cron/plan-sends/route";
 import { GmailSendError, sendMessage } from "@/lib/gmail/send";
@@ -330,6 +346,57 @@ describe("recording a send", () => {
     expect(row?.status).toBe("sent");
     expect(row?.provider_message_id).toMatch(/^gmail-/);
     expect(row?.rendered_body).toBe("A short, plain email a person wrote.");
+  }, 180_000);
+
+  it("replies to the Message-ID Gmail sent, not the one it recorded", async () => {
+    // Every T1 the dispatcher sent before Sep 2026 is stored with the id we
+    // minted, which Gmail replaced. A follow-up naming it in In-Reply-To points
+    // at a message the prospect never received.
+    const { org, operator } = await makeOrg("dispatch-references");
+    const mailboxId = await makeMailbox(org.id, operator);
+    const leadId = await makeLead(org.id, operator);
+
+    const t1Gmail = `t1-${randomUUID().slice(0, 8)}`;
+    const t1At = DateTime.now().minus({ days: 3 });
+    const { error: t1Error } = await admin()
+      .from("scheduled_sends")
+      .insert({
+        ...sendRow({ orgId: org.id, leadId, mailboxId, at: t1At }),
+        status: "sent",
+        sent_at: t1At.toUTC().toISO(),
+        provider_message_id: t1Gmail,
+        provider_thread_id: t1Gmail,
+        rfc822_message_id: `<${randomUUID()}@example.test>`,
+        rendered_subject: "Bright Smile Dental, built you something",
+      });
+    expect(t1Error).toBeNull();
+
+    const { error: t2Error } = await admin()
+      .from("scheduled_sends")
+      .insert({
+        ...sendRow({
+          orgId: org.id,
+          leadId,
+          mailboxId,
+          step: 2,
+          at: DateTime.now().minus({ minutes: 1 }),
+        }),
+        status: "planned",
+        composed_subject: "anything",
+        composed_body: "A follow-up a person wrote.",
+      });
+    expect(t2Error).toBeNull();
+
+    vi.mocked(sendMessage).mockClear();
+    const response = await dispatchSends(cronRequest("dispatch-sends", org.id));
+    expect(response.status).toBe(200);
+    expect(vi.mocked(sendMessage)).toHaveBeenCalledTimes(1);
+
+    const sent = vi.mocked(sendMessage).mock.calls[0]![0];
+    expect(sent.threadId).toBe(t1Gmail);
+    expect(sent.message.subject).toBe("Re: Bright Smile Dental, built you something");
+    expect(sent.message.inReplyTo).toBe(`<${t1Gmail}@mail.gmail.com>`);
+    expect(sent.message.references).toEqual([`<${t1Gmail}@mail.gmail.com>`]);
   }, 180_000);
 
   it("holds an email Gmail gave no clear answer about, and fails one it refused", async () => {

@@ -239,6 +239,14 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   (Sep 2026). The dispatcher now overrides the subject from the thread's first
   `rendered_subject` via `replySubject()`, and `/write` shows that subject
   locked.
+- **Gmail replaces the Message-ID of everything it sends.** The header
+  `buildMimeMessage()` writes never reaches the prospect; theirs says
+  `…@mail.gmail.com`. Until Sep 2026 the dispatcher recorded its own anyway,
+  so every follow-up's In-Reply-To named a message nobody had: Gmail threads
+  past that on `threadId`, Outlook and Apple Mail do not. `sendMessage()` now
+  reads the real one back (null if it cannot, never ours), and a follow-up's
+  In-Reply-To/References are read from Gmail by `provider_message_id` at
+  dispatch, so the wrong ids still stored on older rows never reach a header.
 - **`mark_send_sent()` is one transaction**: the row, the `sent` event carrying
   Gmail's message id as its `dedupe_token`, and the mailbox stamp.
 - **`claim_due_sends()` takes a TRANSACTION-scoped advisory lock per mailbox**
