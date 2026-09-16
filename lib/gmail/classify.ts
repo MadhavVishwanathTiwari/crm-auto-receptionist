@@ -63,6 +63,33 @@ const AUTO_SUBMITTED = /auto-(replied|generated|notified)/i;
 const VACATION_SUBJECT =
   /(out of (the )?office|automatic reply|auto[- ]?reply|away from my|on (vacation|leave|annual leave))/i;
 
+/**
+ * The words this person actually wrote, above whatever their client quoted.
+ *
+ * Needed the moment our own email carries a List-Unsubscribe header: a reply
+ * that quotes the original, headers and all, puts the word "unsubscribe" in the
+ * body of a message that says "sure, send it over", and the match below would
+ * suppress a prospect who had just said yes. Quoting styles differ, so this cuts
+ * at the first of: a ">" line (Gmail, Apple Mail), the "On ... wrote:"
+ * attribution, an "Original message" separator, or Outlook's "From:" header
+ * block.
+ *
+ * Only the reply/unsubscribe path uses it. A bounce is read from the WHOLE
+ * message, because a DSN's status code lives inside the quoted report.
+ */
+export function newText(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const cut = lines.findIndex(
+    (line) =>
+      /^\s*>/.test(line) ||
+      /^\s*On\b.{0,300}(wrote:|<[^>\s]+@[^>\s]+>)\s*$/i.test(line) ||
+      /^\s*wrote:\s*$/i.test(line) ||
+      /^\s*[-_]{2,}\s*(original|forwarded) message/i.test(line) ||
+      /^\s*From:\s*\S+/i.test(line),
+  );
+  return (cut === -1 ? lines : lines.slice(0, cut)).join("\n");
+}
+
 export function classifyInbound(message: InboundMessage): Classification {
   const { headers, labelIds } = message;
   const haystack = `${headers["subject"] ?? ""}\n${message.text}\n${message.snippet}`;
@@ -104,9 +131,18 @@ export function classifyInbound(message: InboundMessage): Classification {
     return { kind: "bounce", hard: false, reason: "ungraded delivery report" };
   }
 
+  // Only what they wrote, never what their client quoted back at us: our own
+  // outbound carries a List-Unsubscribe header, and a reply quoting it is not a
+  // request to be removed. The snippet loses its quoted tail for the same reason.
+  const written = [
+    headers["subject"] ?? "",
+    newText(message.text),
+    message.snippet.split(/\bOn\b.{0,200}\bwrote:/i)[0] ?? "",
+  ].join("\n");
+
   // Checked before the auto-reply test on purpose. "Please unsubscribe me" sent
   // from an account with a vacation responder on is still an unsubscribe.
-  if (UNSUBSCRIBE.test(haystack) || headers["list-unsubscribe"] !== undefined) {
+  if (UNSUBSCRIBE.test(written) || headers["list-unsubscribe"] !== undefined) {
     return { kind: "unsubscribe", hard: true, reason: "asked to be taken off" };
   }
 

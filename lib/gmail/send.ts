@@ -95,6 +95,15 @@ export function buildMimeMessage(input: MessageInput): string {
     `From: ${formatAddress(input.from)}`,
     `To: ${formatAddress(input.to)}`,
     `Subject: ${encodeHeaderValue(input.subject)}`,
+    // An "Unsubscribe" link next to our name, so somebody who wants out presses
+    // that rather than "Report spam". A spam report costs the sending domain's
+    // reputation for every later prospect; an unsubscribe costs one lead. The
+    // address is the sending mailbox itself, so the request lands in the same
+    // inbox poll-replies already reads and classifyInbound() files as an
+    // unsubscribe. No https form, so no List-Unsubscribe-Post: one-click needs
+    // an endpoint that acts without a human, and a mailto Gmail sends for the
+    // reader is the same promise without one.
+    `List-Unsubscribe: <mailto:${input.from.email}?subject=unsubscribe>`,
     `Message-ID: ${input.messageId}`,
     `Date: ${new Date().toUTCString()}`,
     "MIME-Version: 1.0",

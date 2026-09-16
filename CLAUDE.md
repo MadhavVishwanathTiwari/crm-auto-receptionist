@@ -247,6 +247,18 @@ poll-replies → replied/bounced/unsubscribed  halts the sequence via lead_event
   reads the real one back (null if it cannot, never ours), and a follow-up's
   In-Reply-To/References are read from Gmail by `provider_message_id` at
   dispatch, so the wrong ids still stored on older rows never reach a header.
+- **Every email carries `List-Unsubscribe`, pointing at the sending mailbox.**
+  `<mailto:that mailbox?subject=unsubscribe>`, so Gmail shows "Unsubscribe"
+  beside the sender and the request lands in the inbox `poll-replies` already
+  reads; `classifyInbound()` files it as an unsubscribe like any other. A spam
+  report costs the domain's reputation for every later prospect, an unsubscribe
+  costs one lead. No `List-Unsubscribe-Post`: one-click needs an https endpoint
+  that acts with no human, and there is none. **It also forced
+  `classifyInbound()` to read only what the person wrote** (`newText()`, above
+  the quoted original): a reply quoting our headers back contains the word
+  "unsubscribe", and suppressing on that would drop a prospect who just said
+  yes. The bounce path still reads the whole report, because a DSN's status
+  code is inside the quote.
 - **`mark_send_sent()` is one transaction**: the row, the `sent` event carrying
   Gmail's message id as its `dedupe_token`, and the mailbox stamp.
 - **`claim_due_sends()` takes a TRANSACTION-scoped advisory lock per mailbox**

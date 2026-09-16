@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { classifyInbound } from "@/lib/gmail/classify";
+import { classifyInbound, newText } from "@/lib/gmail/classify";
 import {
   addressFromHeader,
   referencedMessageIds,
@@ -375,5 +375,98 @@ describe("header parsing", () => {
     );
     expect(addressFromHeader("dana@brightsmile.test")).toBe("dana@brightsmile.test");
     expect(addressFromHeader("Mail Delivery Subsystem")).toBeNull();
+  });
+});
+
+describe("the unsubscribe header", () => {
+  const base = {
+    from: { name: "Madhav", email: "madhav@tryautoreceptionist.com" },
+    to: { name: null, email: "dana@brightsmile.test" },
+    subject: "Your Tuesday text went unanswered",
+    body: "Hi Dana",
+    messageId: "<abc@tryautoreceptionist.com>",
+  };
+
+  it("offers a way out that lands in the sending mailbox", () => {
+    // So somebody who wants out presses Unsubscribe rather than Report spam,
+    // and the request arrives where poll-replies already reads.
+    expect(buildMimeMessage(base)).toContain(
+      "List-Unsubscribe: <mailto:madhav@tryautoreceptionist.com?subject=unsubscribe>",
+    );
+  });
+
+  it("is not a tracking pixel by another name", () => {
+    const raw = buildMimeMessage(base);
+    expect(raw).not.toContain("List-Unsubscribe-Post");
+    expect(raw).not.toMatch(/<img|https?:\/\/[^\s]*unsub/i);
+  });
+});
+
+describe("a reply that quotes our own email back", () => {
+  // The hazard the List-Unsubscribe header introduces: the quoted original
+  // carries the word "unsubscribe", and suppressing on it would take a prospect
+  // who just said yes off the list.
+  const QUOTED = [
+    "Sure, send it over.",
+    "",
+    "On Tue, 15 Sept 2026 at 23:39, Madhav <madhav@tryautoreceptionist.com> wrote:",
+    "> Hi Dana, worth a look?",
+    "> List-Unsubscribe: <mailto:madhav@tryautoreceptionist.com?subject=unsubscribe>",
+  ].join("\n");
+
+  it("is a reply, not an unsubscribe", () => {
+    expect(
+      classifyInbound({
+        labelIds: ["INBOX"],
+        headers: { from: "Dana <dana@brightsmile.test>", subject: "Re: your text" },
+        text: QUOTED,
+        snippet: "Sure, send it over. On Tue, 15 Sept 2026 at 23:39, Madhav wrote: Hi Dana",
+      }).kind,
+    ).toBe("reply");
+  });
+
+  it("still hears an opt-out written above the quote", () => {
+    expect(
+      classifyInbound({
+        labelIds: ["INBOX"],
+        headers: { from: "Dana <dana@brightsmile.test>", subject: "Re: your text" },
+        text: "remove me\n\n" + QUOTED,
+        snippet: "remove me",
+      }).kind,
+    ).toBe("unsubscribe");
+  });
+
+  it("still reads a bounce that quotes the whole message", () => {
+    // The DSN path reads the WHOLE report on purpose: the status code lives
+    // inside the quoted original.
+    const result = classifyInbound({
+      labelIds: ["INBOX"],
+      headers: {
+        from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
+        "content-type": 'multipart/report; report-type="delivery-status"',
+        subject: "Delivery Status Notification (Failure)",
+      },
+      text:
+        "Address not found\nFinal-Recipient: rfc822; dana@brightsmile.test\nStatus: 5.1.1\n" +
+        "----- Original message -----\nList-Unsubscribe: <mailto:madhav@tryautoreceptionist.com?subject=unsubscribe>\n",
+      snippet: "Address not found",
+    });
+    expect(result.kind).toBe("bounce");
+    expect(result.hard).toBe(true);
+  });
+});
+
+describe("newText", () => {
+  it("keeps what was written and drops what was quoted", () => {
+    expect(newText("Yes please\n\nOn Mon, X <x@y.test> wrote:\n> old")).toBe("Yes please\n");
+    expect(newText("Yes please\n> old")).toBe("Yes please");
+    expect(newText("Yes please\n\nFrom: Madhav <madhav@x.test>\nSent: Tuesday")).toBe(
+      "Yes please\n",
+    );
+    expect(newText("----- Original Message -----\nanything")).toBe("");
+  });
+
+  it("leaves a message with nothing quoted alone", () => {
+    expect(newText("Happy to talk Thursday.")).toBe("Happy to talk Thursday.");
   });
 });
