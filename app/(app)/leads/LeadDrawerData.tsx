@@ -28,7 +28,7 @@ export async function LeadDrawerData({ leadId }: { leadId: string }) {
       // The import rides along on the lead's own foreign key, named because
       // import_rows joins the same two tables a second way.
       .select(
-        "id, company_name, first_name, last_name, title, work_email, phone, website, city, state, postal_code, timezone, timezone_source, industry, rating, reviews_count, is_qualified, status, claimed_by, terminal_outcome, halt_reason, stage, deal_value, next_action, next_action_at, created_at, imports!leads_import_id_fkey(filename, created_by)",
+        "id, company_name, first_name, last_name, title, work_email, phone, website, city, state, postal_code, timezone, timezone_source, industry, rating, reviews_count, is_qualified, status, claimed_by, terminal_outcome, halt_reason, stage, deal_value, next_action, next_action_at, demo_txt_url, demo_ready_at, created_at, imports!leads_import_id_fkey(filename, created_by)",
       )
       .eq("id", leadId)
       .maybeSingle(),

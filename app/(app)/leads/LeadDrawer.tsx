@@ -58,6 +58,8 @@ export interface LeadDetail {
   deal_value: number | string | null;
   next_action: string | null;
   next_action_at: string | null;
+  demo_txt_url: string | null;
+  demo_ready_at: string | null;
 }
 
 export interface EventRow {
@@ -150,6 +152,8 @@ function eventDetail(event: EventRow): string {
     const from = payload.from ? `${String(payload.from)} → ` : "";
     return `${from}${String(payload.to ?? "")}${note}`;
   }
+  if (event.type === "demo_ready") return String(payload.slug ?? "");
+  if (event.type === "demo_failed") return String(payload.reason ?? "");
   return "";
 }
 
@@ -160,6 +164,54 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="min-w-0 break-words">{value || "—"}</span>
     </div>
   );
+}
+
+/**
+ * The demo, or why there is none.
+ *
+ * The builder in the Auto-Receptionist repo posts a refusal as a `demo_failed`
+ * event, and until that existed "no demo" and "the builder has given up on this
+ * site" looked identical from here. The events are already loaded for the
+ * timeline, newest first, so this costs no query.
+ */
+function DemoState({
+  lead,
+  events,
+  zone,
+}: {
+  lead: LeadDetail;
+  events: EventRow[];
+  zone: string | null;
+}) {
+  if (lead.demo_txt_url) {
+    return (
+      <span>
+        <a
+          href={lead.demo_txt_url}
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-[var(--color-line-strong)] underline-offset-2"
+        >
+          {lead.demo_txt_url.replace(/^https?:\/\//, "")}
+        </a>
+        {lead.demo_ready_at && (
+          <span className="text-[var(--color-ink-3)]"> · {formatYours(lead.demo_ready_at, zone)}</span>
+        )}
+      </span>
+    );
+  }
+
+  const failure = events.find((event) => event.type === "demo_failed");
+  if (failure) {
+    return (
+      <span className="text-[var(--color-warn)]">
+        Could not build: {String(failure.payload?.reason ?? "no reason given")}
+        <span className="text-[var(--color-ink-3)]"> · {formatYours(failure.occurred_at, zone)}</span>
+      </span>
+    );
+  }
+
+  return <span className="text-[var(--color-ink-3)]">not built yet</span>;
 }
 
 /** A send that reached Gmail and was never recorded. See 0040. */
@@ -417,6 +469,7 @@ export function LeadDrawer({
           <Field label="Work email" value={lead.work_email} />
           <Field label="Phone" value={lead.phone} />
           <Field label="Website" value={lead.website} />
+          <Field label="Demo" value={<DemoState lead={lead} events={events} zone={viewerZone} />} />
           <Field
             label="Location"
             value={[lead.city, lead.state, lead.postal_code]

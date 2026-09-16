@@ -184,7 +184,13 @@ export default async function WritePage({
         )
       : null;
 
-  const [{ data: templateRows }, { data: evidenceRows }] = await Promise.all([
+  // Leads on the worklist with no demo, whose refusals are worth a line: a
+  // writer about to send T2 should know there is no link to offer, and why.
+  const demoless = worklist
+    .filter((item) => !item.lead.demo_txt_url && !item.lead.demo_web_url)
+    .map((item) => item.lead.id);
+
+  const [{ data: templateRows }, { data: evidenceRows }, { data: demoFailureRows }] = await Promise.all([
     supabase
       .from("templates")
       .select("id, name, step_number, angle_type, subject, body, requires_demo, is_active")
@@ -202,7 +208,29 @@ export default async function WritePage({
           )
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
+    // Only the fields the line shows. The builder posts one per lead per night
+    // at most, so newest-first over a short worklist is a handful of rows.
+    demoless.length > 0
+      ? supabase
+          .from("lead_events")
+          .select("lead_id, payload, occurred_at")
+          .eq("type", "demo_failed")
+          .in("lead_id", demoless)
+          .order("occurred_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
   ]);
+
+  // Newest refusal per lead, same first-wins rule as the evidence below.
+  const demoFailures = new Map<string, { reason: string; at: string }>();
+  for (const row of demoFailureRows ?? []) {
+    const key = row.lead_id as string;
+    if (demoFailures.has(key)) continue;
+    const payload = (row.payload ?? {}) as { reason?: unknown };
+    demoFailures.set(key, {
+      reason: String(payload.reason ?? "no reason given"),
+      at: row.occurred_at as string,
+    });
+  }
 
   // Newest audit per lead: the rows come back newest first, so the first wins.
   const evidence = new Map<string, EvidenceForRender & { notes: string | null }>();
@@ -297,6 +325,7 @@ export default async function WritePage({
       status: lead.status,
       angleType: lead.angle_type,
       demoUrl: lead.demo_txt_url ?? lead.demo_web_url,
+      demoFailure: demoFailures.get(lead.id) ?? null,
       step: step.step,
       // A step the planner had already booked from a template. Saying so is
       // what stops "why is there already an email queued for this one?".

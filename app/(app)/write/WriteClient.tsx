@@ -42,6 +42,8 @@ export interface Draft {
   status: string;
   angleType: string | null;
   demoUrl: string | null;
+  /** The builder's latest refusal, when there is no demo. */
+  demoFailure: { reason: string; at: string } | null;
   step: number;
   replacesSendId: string | null;
   replacesWasWritten: boolean;
@@ -658,6 +660,15 @@ export function WriteClient({
               >
                 {draft.demoUrl}
               </a>
+            </div>
+          )}
+
+          {!draft.demoUrl && draft.demoFailure && (
+            <div>
+              <h3 className="text-[var(--color-ink-3)]">No demo</h3>
+              <p className="text-[var(--color-warn)]">
+                The builder could not make one: {draft.demoFailure.reason}
+              </p>
             </div>
           )}
 

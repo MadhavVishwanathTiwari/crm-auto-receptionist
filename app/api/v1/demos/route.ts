@@ -15,6 +15,16 @@
 // whose semantics lib/normalize/domain.ts deliberately matches. place_id is
 // accepted and preferred when present so the key can be promoted later, but
 // nothing in the AR repo has ever produced one.
+//
+// The same body carries the builds that were REFUSED, as `failures`. Each one
+// becomes a `demo_failed` event, which is what lets the lead drawer and /write
+// say why a lead has no demo, and what /pending reads back as a cooldown. A
+// failure is not a URL, so the builder posts them straight away, on nights when
+// nothing built as much as on any other.
+//
+// `?dry_run=1` matches everything and writes nothing: no record_demo(), no
+// event, no orphan alert. The one-off backfill of demos built before this
+// contract existed reads it before posting for real.
 
 import { z } from "zod";
 
@@ -53,9 +63,31 @@ const DemoPayload = z.object({
   built_at: z.string().trim().optional(),
 });
 
+/**
+ * A build the Auto-Receptionist pipeline refused to publish. Always echoes the
+ * lead_id it was handed by /pending, so there is nothing to match on.
+ */
+const FailurePayload = z.object({
+  lead_id: z.uuid(),
+  website: z.string().trim().optional(),
+  /** The builder's own blockers, e.g. "missing essential fact(s): phone". */
+  reason: z.string().trim().min(1).max(500),
+  /** Where it stopped: scrape, extract, verify, retrieval. Free text. */
+  stage: z.string().trim().max(40).optional(),
+});
+
 const Body = z.union([
   DemoPayload,
-  z.object({ demos: z.array(DemoPayload).max(200) }),
+  z
+    .object({
+      demos: z.array(DemoPayload).max(200).optional(),
+      failures: z.array(FailurePayload).max(200).optional(),
+    })
+    // Without this `{ website }` with no slug parses as an empty batch and
+    // answers 200, which is a refusal the caller would never see.
+    .refine((body) => (body.demos?.length ?? 0) + (body.failures?.length ?? 0) > 0, {
+      message: "nothing to record: send a demo, `demos` or `failures`",
+    }),
 ]);
 
 const SANDBOX_BASE = "https://autoreceptionist.io/sandbox";
@@ -64,13 +96,28 @@ interface Outcome {
   slug: string;
   matched_on: "lead_id" | "place_id" | "domain" | null;
   lead_id: string | null;
-  status: "recorded" | "orphaned" | "failed";
+  /** Where the matched lead is now, so a dry run can say what a demo unblocks. */
+  lead_status?: string;
+  status: "recorded" | "orphaned" | "failed" | "would_record" | "would_orphan";
   detail?: string;
+}
+
+interface FailureOutcome {
+  lead_id: string;
+  status: "recorded" | "already_recorded" | "failed" | "would_record";
+  detail?: string;
+}
+
+interface MatchRow {
+  id: string;
+  status: string;
 }
 
 export async function POST(request: Request) {
   const denied = requireBearer(request, serverEnv().arIngestSecret);
   if (denied) return denied;
+
+  const dryRun = ["1", "true"].includes(new URL(request.url).searchParams.get("dry_run") ?? "");
 
   let raw: unknown;
   try {
@@ -87,7 +134,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const demos = "demos" in parsed.data ? parsed.data.demos : [parsed.data];
+  const batch = "slug" in parsed.data ? { demos: [parsed.data], failures: [] } : parsed.data;
+  const demos = batch.demos ?? [];
+  const failures = batch.failures ?? [];
   const supabase = createAdminSupabase();
   const outcomes: Outcome[] = [];
 
@@ -98,51 +147,56 @@ export async function POST(request: Request) {
     const txtUrl = demo.demo_txt_url ?? `${SANDBOX_BASE}/${demo.slug}`;
     const domain = normalizeDomain(demo.domain ?? demo.website ?? null);
 
-    let leadId: string | null = null;
+    let match: MatchRow | null = null;
     let matchedOn: Outcome["matched_on"] = null;
 
     if (demo.lead_id) {
       const { data } = await supabase
         .from("leads")
-        .select("id")
+        .select("id, status")
         .eq("id", demo.lead_id)
         .maybeSingle();
       if (data) {
-        leadId = data.id as string;
+        match = data as MatchRow;
         matchedOn = "lead_id";
       }
     }
 
-    if (!leadId && demo.place_id) {
+    if (!match && demo.place_id) {
       const { data } = await supabase
         .from("leads")
-        .select("id")
+        .select("id, status")
         .eq("place_id", demo.place_id)
         .is("archived_at", null)
         .limit(1);
       if (data && data.length > 0) {
-        leadId = data[0]!.id as string;
+        match = data[0] as MatchRow;
         matchedOn = "place_id";
       }
     }
 
-    if (!leadId && domain) {
+    if (!match && domain) {
       // Oldest first when a domain has more than one row: the duplicate is the
       // later import, and the original carries the audit and the claim.
       const { data } = await supabase
         .from("leads")
-        .select("id")
+        .select("id, status")
         .eq("website_domain", domain)
         .is("archived_at", null)
         .order("created_at", { ascending: true })
         .limit(1);
       if (data && data.length > 0) {
-        leadId = data[0]!.id as string;
+        match = data[0] as MatchRow;
         matchedOn = "domain";
       }
     }
 
-    if (!leadId) {
+    if (!match) {
+      if (dryRun) {
+        outcomes.push({ slug: demo.slug, matched_on: null, lead_id: null, status: "would_orphan" });
+        continue;
+      }
+
       // Not a failure. The AR repo builds from its own list, and a demo can
       // legitimately arrive before the lead it belongs to is imported. Park it
       // as an alert so the next import can be reconciled against it by hand
@@ -188,11 +242,22 @@ export async function POST(request: Request) {
       continue;
     }
 
+    if (dryRun) {
+      outcomes.push({
+        slug: demo.slug,
+        matched_on: matchedOn,
+        lead_id: match.id,
+        lead_status: match.status,
+        status: "would_record",
+      });
+      continue;
+    }
+
     // record_demo() is the only path past app.leads_guard_protected_columns(),
     // which refuses a direct UPDATE of the demo columns even from the service
     // role. It writes the row and the demo_ready event in one transaction.
     const { data: lead, error } = await supabase.rpc("record_demo", {
-      p_lead_id: leadId,
+      p_lead_id: match.id,
       p_slug: demo.slug,
       p_txt_url: txtUrl,
       p_web_url: demo.demo_web_url ?? null,
@@ -211,7 +276,8 @@ export async function POST(request: Request) {
       outcomes.push({
         slug: demo.slug,
         matched_on: matchedOn,
-        lead_id: leadId,
+        lead_id: match.id,
+        lead_status: match.status,
         status: "failed",
         detail: error.message,
       });
@@ -221,25 +287,90 @@ export async function POST(request: Request) {
     outcomes.push({
       slug: demo.slug,
       matched_on: matchedOn,
-      lead_id: (lead as { id?: string } | null)?.id ?? leadId,
+      lead_id: (lead as { id?: string } | null)?.id ?? match.id,
+      lead_status: match.status,
       status: "recorded",
     });
   }
 
-  const recorded = outcomes.filter((o) => o.status === "recorded").length;
-  const failed = outcomes.filter((o) => o.status === "failed").length;
+  const failureOutcomes: FailureOutcome[] = [];
+  // One refusal per lead per UTC day. The builder re-runs by hand as often as
+  // anyone likes, and each re-post of the same night is the same fact.
+  const day = new Date().toISOString().slice(0, 10);
+
+  for (const failure of failures) {
+    const { data: lead, error: leadError } = await supabase
+      .from("leads")
+      .select("id, org_id")
+      .eq("id", failure.lead_id)
+      .maybeSingle();
+
+    if (leadError || !lead) {
+      failureOutcomes.push({
+        lead_id: failure.lead_id,
+        status: "failed",
+        detail: leadError?.message ?? "no such lead",
+      });
+      continue;
+    }
+
+    if (dryRun) {
+      failureOutcomes.push({ lead_id: failure.lead_id, status: "would_record" });
+      continue;
+    }
+
+    // Straight into the log rather than through an RPC: nothing about a failed
+    // build is guarded, and the event is rank 0, so it moves no status.
+    const { data: inserted, error } = await supabase
+      .from("lead_events")
+      .upsert(
+        {
+          org_id: lead.org_id,
+          lead_id: lead.id,
+          type: "demo_failed",
+          payload: {
+            reason: failure.reason,
+            stage: failure.stage ?? null,
+            source_website: failure.website ?? null,
+          },
+          dedupe_token: `demo_failed:${day}`,
+        },
+        { onConflict: "lead_id,type,dedupe_token", ignoreDuplicates: true },
+      )
+      .select("id");
+
+    if (error) {
+      failureOutcomes.push({ lead_id: failure.lead_id, status: "failed", detail: error.message });
+      continue;
+    }
+
+    failureOutcomes.push({
+      lead_id: failure.lead_id,
+      status: (inserted ?? []).length > 0 ? "recorded" : "already_recorded",
+    });
+  }
+
+  const failed =
+    outcomes.filter((o) => o.status === "failed").length +
+    failureOutcomes.filter((o) => o.status === "failed").length;
+  const received = demos.length + failures.length;
 
   return Response.json(
     {
+      dry_run: dryRun,
       received: demos.length,
-      recorded,
+      recorded: outcomes.filter((o) => o.status === "recorded").length,
       orphaned: outcomes.filter((o) => o.status === "orphaned").length,
-      failed,
+      failed: outcomes.filter((o) => o.status === "failed").length,
       results: outcomes,
+      failures_received: failures.length,
+      failures_recorded: failureOutcomes.filter((o) => o.status === "recorded").length,
+      failures_failed: failureOutcomes.filter((o) => o.status === "failed").length,
+      failure_results: failureOutcomes,
     },
     // A partial failure is still a 200 with per-row detail: the caller builds a
     // batch and must be able to tell which rows to retry without parsing an
     // error page.
-    { status: failed === demos.length && demos.length > 0 ? 502 : 200 },
+    { status: failed === received && received > 0 ? 502 : 200 },
   );
 }

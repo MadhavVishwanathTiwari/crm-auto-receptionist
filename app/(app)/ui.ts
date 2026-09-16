@@ -44,6 +44,9 @@ export const STATUS_TONE: Record<string, string> = {
   closed_won: "text-[var(--color-ok)]",
   closed_lost: "text-[var(--color-ink-3)]",
   do_not_contact: "text-[var(--color-danger)]",
+  // Not a status. The lead timeline colours event types from this map too,
+  // and a refused demo build is the one event worth a warning there.
+  demo_failed: "text-[var(--color-warn)]",
 };
 
 export const OUTCOME_TONE: Record<string, string> = {

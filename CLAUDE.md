@@ -780,22 +780,50 @@ hand.
 ## The demo contract
 
 `GET /api/v1/demos/pending` and `POST /api/v1/demos`, both bearing
-`AR_INGEST_SECRET`. Together they replace the `outreach_management` sheet as the
-Auto-Receptionist repo's work queue and write-back target.
+`AR_INGEST_SECRET`. They are the Auto-Receptionist repo's whole work queue and
+write-back target; its nightly `build-from-crm.mjs` reads the first and posts
+to the second. The `outreach_management` sheet is no longer read by anything.
 
-- **`/pending` returns qualified leads with a website and no demo yet**, oldest
-  first, and drops suppressed domains. It does NOT require the first touch to
-  have gone out: demos are built at qualification so T1's copy is true and T2 is
-  not racing a build.
+- **`/pending` returns qualified leads with a website and no demo yet**, and
+  drops suppressed domains. It does NOT require the first touch to have gone
+  out: demos are built at qualification so T1's copy is true and T2 is not
+  racing a build.
+- **Priority, then oldest first:** leads whose T1 is out (`sent/delivered/
+  opened`, T2 is waiting on this demo), then owned ones (`claimed/audited/
+  queued`), then untouched ones. It reads every candidate through `selectAll()`
+  and slices after sorting, so `limit` never cuts before the priority does.
+- **`verification = 'invalid'` is excluded; `unknown` is not.** Most Clay
+  imports are `unknown` and are emailed like anything else, so they need a demo
+  for T2 like anything else.
+- **It hands over the Maps facts**: `phone`, `city`, `state`, `company_name`,
+  and `timezone` with its `timezone_source`. The builder uses our zone instead
+  of its own state-and-city table, which refused every Texas town it did not
+  list, and may fill the four essentials from the listing when the site does
+  not state them, labelled as ours in its provenance report. Handing a zone out
+  is safe whatever its source, because nothing here ever stores a guessed one.
+- **A refused build is a `demo_failed` event (`0051`).** The builder posts its
+  refusals as `failures: [{ lead_id, reason, stage }]` in the same POST, one
+  per lead per UTC day (`dedupe_token = demo_failed:<date>`). It is rank 0, so
+  it moves no status. `/pending` skips a lead with one in the last 7 days, which
+  is what stops the same unbuildable sites taking every night's budget; the
+  lead drawer and `/write` show the reason, because "no demo" and "the builder
+  gave up on this site" used to look identical.
+- **`POST ?dry_run=1` matches and writes nothing**: no `record_demo()`, no
+  event, no orphan alert. Results come back `would_record` / `would_orphan`
+  with the lead's status. The AR repo's `backfill-crm-demos.mjs` reads it
+  before recording demos built before this contract existed.
 - **`POST` joins on normalized domain**, `place_id` first when present and
   `lead_id` first when the caller echoes one back. A payload matching no lead
   raises an `orphan_demo` alert rather than being dropped, because somebody paid
   a model to build it.
-- **The `timezone` that repo reports is accepted and never applied.** It derives
-  zones from state and city, which is the mapping non-negotiable 6 forbids. It
+- **The `timezone` that repo reports back is accepted and never applied.** It
   is kept in the `demo_ready` event payload for comparison only.
 - **`record_demo()` is the only writer of the demo columns.** The guard in
   `0004` binds the service role too, so the route cannot UPDATE the row itself.
+- **The builder posts a demo only after its Vercel deployment succeeds.**
+  `demo_ready_at` unblocks the planner within 15 minutes, and
+  `autoreceptionist.io/sandbox/<anything>` answers 200 whether the slug exists
+  or not, so a finished deployment is the only proof the link works.
 
 ## Reply alerts
 
@@ -871,7 +899,6 @@ Connection gotchas, both discovered the hard way:
 - `D:\Portfolio\Auto-Receptionist-Website\Auto-Receptionist` — builds sandbox
   demos. Has **no** `place_id`; its slugs derive from the website hostname, and
   nine legacy demos use hand-picked slugs that don't match their domain. Join on
-  normalized domain. It reads `status == 'first_touch'` from the Google Sheet in
-  `build-from-sheet.mjs`; `GET /api/v1/demos/pending` is the replacement and is
-  live, so that script can be repointed and the sheet retired. Its write-back of
-  `demo_txt` becomes a `POST /api/v1/demos` per built slug.
+  normalized domain. Its nightly `Daily demos from the CRM` workflow reads
+  `GET /api/v1/demos/pending` and posts built demos and refusals back to
+  `POST /api/v1/demos`; see "The demo contract".

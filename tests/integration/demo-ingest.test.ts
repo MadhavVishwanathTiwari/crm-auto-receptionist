@@ -31,8 +31,8 @@ function admin() {
   return adminClient();
 }
 
-function post(body: unknown, secret = INGEST_SECRET): Request {
-  return new Request("http://localhost/api/v1/demos", {
+function post(body: unknown, secret = INGEST_SECRET, query = ""): Request {
+  return new Request(`http://localhost/api/v1/demos${query}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${secret}`,
@@ -283,5 +283,188 @@ describe("GET /api/v1/demos/pending", () => {
     const response = await pendingDemos(get(`?org=${orgId}&limit=100`));
     const body = (await response.json()) as { leads: { lead_id: string }[] };
     expect(body.leads.some((row) => row.lead_id === lead.id)).toBe(false);
+  });
+});
+
+describe("dry runs and refused builds", () => {
+  it("a dry run matches but writes nothing, not even an orphan alert", async () => {
+    const lead = await makeLead();
+    const orphanSlug = `dry-orphan-${randomUUID().slice(0, 8)}`;
+
+    const response = await ingestDemos(
+      post(
+        {
+          demos: [
+            { website: lead.website, slug: `dry-${randomUUID().slice(0, 6)}` },
+            { website: "https://nobody-here.invalid", slug: orphanSlug },
+          ],
+        },
+        INGEST_SECRET,
+        "?dry_run=1",
+      ),
+    );
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as {
+      dry_run: boolean;
+      recorded: number;
+      results: { status: string; lead_id: string | null; lead_status?: string }[];
+    };
+    expect(body.dry_run).toBe(true);
+    expect(body.recorded).toBe(0);
+    expect(body.results.map((r) => r.status)).toEqual(["would_record", "would_orphan"]);
+    expect(body.results[0]!.lead_id).toBe(lead.id);
+    expect(body.results[0]!.lead_status).toBe("imported");
+
+    // Re-read as admin: a 200 proves nothing about what did not happen.
+    const { data: row } = await admin()
+      .from("leads")
+      .select("demo_slug, demo_ready_at")
+      .eq("id", lead.id)
+      .single();
+    expect(row!.demo_slug).toBeNull();
+    expect(row!.demo_ready_at).toBeNull();
+
+    const { data: events } = await admin()
+      .from("lead_events")
+      .select("id")
+      .eq("lead_id", lead.id)
+      .eq("type", "demo_ready");
+    expect(events).toHaveLength(0);
+
+    const { data: alerts } = await admin()
+      .from("alerts")
+      .select("id")
+      .eq("kind", "orphan_demo")
+      .eq("dedupe_token", orphanSlug);
+    expect(alerts).toHaveLength(0);
+  });
+
+  it("records a refused build once per day and moves no status", async () => {
+    const lead = await makeLead();
+    const failure = { lead_id: lead.id, reason: "missing essential fact(s): phone", stage: "verify" };
+
+    const first = await ingestDemos(post({ failures: [failure] }));
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as { failures_recorded: number };
+    expect(firstBody.failures_recorded).toBe(1);
+
+    // The builder re-runs by hand as often as anyone likes.
+    const second = await ingestDemos(post({ failures: [failure] }));
+    const secondBody = (await second.json()) as {
+      failures_recorded: number;
+      failure_results: { status: string }[];
+    };
+    expect(secondBody.failures_recorded).toBe(0);
+    expect(secondBody.failure_results[0]!.status).toBe("already_recorded");
+
+    const { data: events } = await admin()
+      .from("lead_events")
+      .select("payload")
+      .eq("lead_id", lead.id)
+      .eq("type", "demo_failed");
+    expect(events).toHaveLength(1);
+    expect((events![0]!.payload as { reason: string }).reason).toBe(failure.reason);
+
+    const { data: row } = await admin()
+      .from("leads")
+      .select("status, demo_ready_at")
+      .eq("id", lead.id)
+      .single();
+    expect(row!.status).toBe("imported");
+    expect(row!.demo_ready_at).toBeNull();
+  });
+
+  it("reports a failure for a lead that does not exist, without inventing one", async () => {
+    const response = await ingestDemos(
+      post({ failures: [{ lead_id: randomUUID(), reason: "scrape blocked" }] }),
+    );
+    // Everything in the batch failed, so the batch did.
+    expect(response.status).toBe(502);
+    const body = (await response.json()) as { failure_results: { status: string }[] };
+    expect(body.failure_results[0]!.status).toBe("failed");
+  });
+});
+
+describe("GET /api/v1/demos/pending, as the builder's only queue", () => {
+  async function pendingIds(): Promise<string[]> {
+    const response = await pendingDemos(get(`?org=${orgId}&limit=500`));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { leads: { lead_id: string }[] };
+    return body.leads.map((row) => row.lead_id);
+  }
+
+  async function failedAgo(leadId: string, days: number) {
+    const { error } = await admin()
+      .from("lead_events")
+      .insert({
+        org_id: orgId,
+        lead_id: leadId,
+        type: "demo_failed",
+        occurred_at: new Date(Date.now() - days * 86_400_000).toISOString(),
+        payload: { reason: "no timezone could be resolved" },
+        dedupe_token: `test:${randomUUID()}`,
+      });
+    expect(error).toBeNull();
+  }
+
+  it("hands over the Maps facts and the zone the builder falls back on", async () => {
+    const lead = await makeLead({ phone: "+1 480 555 0142", city: "Mesa", state: "AZ" });
+
+    const response = await pendingDemos(get(`?org=${orgId}&limit=500`));
+    const body = (await response.json()) as {
+      leads: {
+        lead_id: string;
+        phone: string | null;
+        timezone: string | null;
+        timezone_source: string | null;
+        city: string | null;
+      }[];
+    };
+    const found = body.leads.find((row) => row.lead_id === lead.id);
+    expect(found).toMatchObject({
+      phone: "+1 480 555 0142",
+      timezone: "America/Phoenix",
+      timezone_source: "import",
+      city: "Mesa",
+    });
+  });
+
+  it("builds for an unverified address but not an invalid one", async () => {
+    const unknown = await makeLead({ verification: "unknown" });
+    const invalid = await makeLead({ verification: "invalid" });
+
+    const ids = await pendingIds();
+    expect(ids).toContain(unknown.id);
+    expect(ids).not.toContain(invalid.id);
+  });
+
+  it("rests a lead for a week after a refused build", async () => {
+    const recent = await makeLead();
+    const old = await makeLead();
+    await failedAgo(recent.id, 2);
+    await failedAgo(old.id, 8);
+
+    const ids = await pendingIds();
+    expect(ids).not.toContain(recent.id);
+    expect(ids).toContain(old.id);
+  });
+
+  it("puts a lead whose T1 is out ahead of an older untouched one", async () => {
+    const untouched = await makeLead();
+    const contacted = await makeLead();
+
+    // Status is derived: the event is what makes the lead `sent`.
+    const { error } = await admin().from("lead_events").insert({
+      org_id: orgId,
+      lead_id: contacted.id,
+      type: "sent",
+      dedupe_token: `test:${randomUUID()}`,
+    });
+    expect(error).toBeNull();
+
+    const ids = await pendingIds();
+    expect(ids.indexOf(contacted.id)).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf(contacted.id)).toBeLessThan(ids.indexOf(untouched.id));
   });
 });
