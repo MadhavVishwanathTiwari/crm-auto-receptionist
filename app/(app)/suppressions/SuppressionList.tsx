@@ -11,6 +11,8 @@ import { addSuppression, removeSuppression } from "./actions";
 // server" actions file — see reasons.ts.
 import { SUPPRESSION_REASONS, type SuppressionReason } from "./reasons";
 
+import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
+
 export interface SuppressionRow {
   id: string;
   email_norm: string | null;
@@ -138,17 +140,15 @@ export function SuppressionList({
         {rows.length === 0 ? (
           <p className="text-ink-3">Nobody suppressed yet.</p>
         ) : (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="text-left text-ink-3">
-                <th className="py-1 font-normal">Target</th>
-                <th className="py-1 font-normal">Kind</th>
-                <th className="py-1 font-normal">Reason</th>
-                <th className="py-1 font-normal">Notes</th>
-                <th className="py-1 font-normal">Added</th>
-                <th />
-              </tr>
-            </thead>
+          <Table>
+            <THead>
+                <TH>Target</TH>
+                <TH>Kind</TH>
+                <TH>Reason</TH>
+                <TH>Notes</TH>
+                <TH>Added</TH>
+                <TH />
+              </THead>
             <tbody>
               {rows.map((row) => {
                 const target =
@@ -159,19 +159,19 @@ export function SuppressionList({
                     ? "domain"
                     : "phone";
                 return (
-                  <tr key={row.id} className="border-t border-line">
-                    <td className="py-1">{target}</td>
-                    <td className="py-1 text-ink-3">{kind}</td>
-                    <td className="py-1 text-ink-2">
+                  <TR key={row.id}>
+                    <TD>{target}</TD>
+                    <TD className="text-ink-3">{kind}</TD>
+                    <TD className="text-ink-2">
                       {row.reason.replace(/_/g, " ")}
-                    </td>
-                    <td className="py-1 text-ink-2">
+                    </TD>
+                    <TD className="text-ink-2">
                       {row.notes ?? "—"}
-                    </td>
-                    <td className="py-1 text-ink-3">
+                    </TD>
+                    <TD className="text-ink-3">
                       {formatYours(row.created_at, zone, "date")}
-                    </td>
-                    <td className="py-1 text-right">
+                    </TD>
+                    <TD className="text-right">
                       {isAdmin && (
                         <button
                           type="button"
@@ -182,12 +182,12 @@ export function SuppressionList({
                           remove
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </TD>
+                  </TR>
                 );
               })}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
     </div>

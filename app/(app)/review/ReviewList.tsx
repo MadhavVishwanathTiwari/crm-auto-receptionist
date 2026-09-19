@@ -8,6 +8,8 @@ import { BUTTON, PANEL } from "../ui";
 import { useViewerZone } from "../ViewerZone";
 import { decideReview, type Decision } from "./actions";
 
+import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
+
 export interface ReviewItem {
   id: string;
   match_kind: string;
@@ -100,21 +102,19 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
               </span>
             </div>
 
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="text-left text-ink-3">
-                  <th className="w-40 py-1 font-normal">Field</th>
-                  <th className="py-1 font-normal">
+            <Table>
+              <THead>
+                  <TH className="w-40">Field</TH>
+                  <TH>
                     Existing lead
                     {item.existing && (
                       <span className="ml-2 text-ink-3">
                         ({item.existing.status.replace(/_/g, " ")})
                       </span>
                     )}
-                  </th>
-                  <th className="py-1 font-normal">Incoming row</th>
-                </tr>
-              </thead>
+                  </TH>
+                  <TH>Incoming row</TH>
+                </THead>
               <tbody>
                 {COMPARED.map(([key, label]) => {
                   const existingValue = item.existing
@@ -126,21 +126,17 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
                     show(incomingValue).toLowerCase();
 
                   return (
-                    <tr key={key} className="border-t border-line">
-                      <td className="py-1 text-ink-3">{label}</td>
-                      <td className="py-1">{show(existingValue)}</td>
-                      <td
-                        className={
-                          "py-1 " + (differs ? "text-warn" : "")
-                        }
-                      >
+                    <TR key={key}>
+                      <TD className="text-ink-3">{label}</TD>
+                      <TD>{show(existingValue)}</TD>
+                      <TD className={differs ? "text-warn" : ""}>
                         {show(incomingValue)}
-                      </td>
-                    </tr>
+                      </TD>
+                    </TR>
                   );
                 })}
               </tbody>
-            </table>
+            </Table>
 
             <div className="mt-3 flex items-center gap-2">
               <button

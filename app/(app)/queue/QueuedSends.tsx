@@ -9,6 +9,8 @@ import { BUTTON_QUIET } from "../ui";
 import { useViewerZone } from "../ViewerZone";
 import { cancelSend } from "../write/actions";
 
+import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
+
 export interface QueuedSend {
   id: string;
   step_number: number;
@@ -65,30 +67,28 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
         </p>
       )}
 
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="text-left text-ink-3">
-            <th className="py-1 font-normal">Company</th>
-            <th className="py-1 font-normal">Step</th>
-            <th className="py-1 font-normal">Copy</th>
-            <th className="py-1 font-normal">Your time</th>
-            <th className="py-1 font-normal">Their time</th>
-            <th className="py-1 font-normal">State</th>
-            <th className="py-1 font-normal"></th>
-          </tr>
-        </thead>
+      <Table>
+        <THead>
+            <TH>Company</TH>
+            <TH>Step</TH>
+            <TH>Copy</TH>
+            <TH>Your time</TH>
+            <TH>Their time</TH>
+            <TH>State</TH>
+            <TH></TH>
+          </THead>
         <tbody>
           {rows.map((send) => {
             const local = DateTime.fromISO(send.scheduled_local);
             const written = send.composed_subject !== null;
 
             return (
-              <tr key={send.id} className="border-t border-line">
-                <td className="max-w-[240px] truncate py-1">
+              <TR key={send.id}>
+                <TD className="max-w-[240px] truncate">
                   {send.company ?? "—"}
-                </td>
-                <td className="tabular py-1">T{send.step_number}</td>
-                <td className="max-w-[280px] truncate py-1">
+                </TD>
+                <TD className="tabular">T{send.step_number}</TD>
+                <TD className="max-w-[280px] truncate">
                   {written ? (
                     <span className="text-ink-2">
                       <span className="text-info">written</span>{" "}
@@ -97,16 +97,16 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
                   ) : (
                     <span className="text-ink-3">from a template</span>
                   )}
-                </td>
-                <td className="tabular py-1 text-ink-2">
+                </TD>
+                <TD className="tabular text-ink-2">
                   {send.status === "blocked" ? "—" : formatYours(send.scheduled_at, zone)}
-                </td>
-                <td className="tabular py-1 text-ink-2">
+                </TD>
+                <TD className="tabular text-ink-2">
                   {send.status === "blocked"
                     ? "—"
                     : `${local.toFormat("HH:mm")} ${send.prospect_timezone}`}
-                </td>
-                <td className="py-1">
+                </TD>
+                <TD>
                   {send.status === "blocked" ? (
                     <span className="text-warn">
                       blocked: {send.outcome_reason ?? "no capacity"}
@@ -114,8 +114,8 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
                   ) : (
                     <span className="text-ink-3">planned</span>
                   )}
-                </td>
-                <td className="py-1 text-right">
+                </TD>
+                <TD className="text-right">
                   <button
                     type="button"
                     className={BUTTON_QUIET}
@@ -124,12 +124,12 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
                   >
                     cancel
                   </button>
-                </td>
-              </tr>
+                </TD>
+              </TR>
             );
           })}
         </tbody>
-      </table>
+      </Table>
 
       {rows.length === 0 && (
         <p className="text-ink-3">Nothing booked.</p>

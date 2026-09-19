@@ -32,7 +32,9 @@ import { selectAll } from "@/lib/supabase/paginate";
 import { PANEL, STAGE_TONE } from "../ui";
 import { Funnel, SendHistory, Stat, type DayCount } from "./Charts";
 
+import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
 import { LoadError } from "@/components/ui/LoadError";
 import { Page, PageHeader } from "@/components/ui/PageShell";
 
@@ -407,37 +409,50 @@ export default async function DashboardPage() {
             {perOperator.length === 0 ? (
               <p className="text-ink-3">Nobody in this org yet.</p>
             ) : (
-              <div className="space-y-1">
-                <div className="flex gap-4 text-ink-3">
-                  <span className="w-[140px] shrink-0">Operator</span>
-                  <span className="w-[80px] text-right">Claimed</span>
-                  <span className="w-[80px] text-right">Sent</span>
-                  <span className="w-[80px] text-right">Won</span>
-                  <span className="w-[80px] text-right">Overdue</span>
-                  <span className="w-[100px] text-right">Pipeline</span>
-                </div>
-                {perOperator.map((row) => (
-                  <div key={row.name} className="flex gap-4 text-ink">
-                    <span className="w-[140px] shrink-0 truncate">{row.name}</span>
-                    <span className="tabular w-[80px] text-right">{row.claimed}</span>
-                    <span className="tabular w-[80px] text-right">{row.sent}</span>
-                    <span className="tabular w-[80px] text-right text-ok">
-                      {row.won}
-                    </span>
-                    <span
-                      className={
-                        "tabular w-[80px] text-right " +
-                        (row.overdue > 0 ? "text-danger" : "")
-                      }
-                    >
-                      {row.overdue}
-                    </span>
-                    <span className="tabular w-[100px] text-right">
-                      {formatMoney(row.pipeline)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              // Fixed-width spans faking columns is how two "tables" on
+              // different screens end up not lining up with each other.
+              <Table>
+                <THead>
+                  <TH>Operator</TH>
+                  <TH align="right">Claimed</TH>
+                  <TH align="right">Sent</TH>
+                  <TH align="right">Won</TH>
+                  <TH align="right">Overdue</TH>
+                  <TH align="right">Pipeline</TH>
+                </THead>
+                <tbody>
+                  {perOperator.map((row) => (
+                    <TR key={row.name}>
+                      <TD className="font-medium text-ink">
+                        <span className="flex items-center gap-2">
+                          <Avatar email={row.name} size="sm" />
+                          {row.name}
+                        </span>
+                      </TD>
+                      <TD align="right" className="tabular">
+                        {row.claimed}
+                      </TD>
+                      <TD align="right" className="tabular">
+                        {row.sent}
+                      </TD>
+                      <TD align="right" className="tabular text-ok">
+                        {row.won}
+                      </TD>
+                      <TD
+                        align="right"
+                        className={
+                          row.overdue > 0 ? "tabular text-danger" : "tabular"
+                        }
+                      >
+                        {row.overdue}
+                      </TD>
+                      <TD align="right" className="tabular font-medium">
+                        {formatMoney(row.pipeline)}
+                      </TD>
+                    </TR>
+                  ))}
+                </tbody>
+              </Table>
             )}
             {/* Both of madhav's accounts collapse to one row here, resolved in
                 SQL through app.operator_aliases -- which is revoked from

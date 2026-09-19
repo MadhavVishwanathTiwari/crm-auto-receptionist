@@ -678,7 +678,7 @@ export function WriteClient({
 
       {/* ------------------------------------------------ what to say it about */}
       {draft && (
-        <aside className="w-[300px] shrink-0 space-y-3 overflow-y-auto border-l border-line bg-surface p-3">
+        <aside className="w-[320px] shrink-0 space-y-4 overflow-y-auto border-l border-line bg-surface p-4">
           <div>
             <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">The business</h3>
             <dl className="mt-1 space-y-0.5">
@@ -776,8 +776,8 @@ export function WriteClient({
 function Fact({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
-    <div className="flex gap-2">
-      <dt className="w-20 shrink-0 text-ink-3">{label}</dt>
+    <div className="flex gap-2 py-0.5">
+      <dt className="w-[76px] shrink-0 text-ink-3">{label}</dt>
       <dd className="min-w-0 flex-1 break-words text-ink-2">{value}</dd>
     </div>
   );

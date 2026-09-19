@@ -9,6 +9,8 @@ import { placeholderWords } from "@/lib/write/placeholders";
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
 import { deleteTemplate, saveTemplate, setTemplateActive } from "./actions";
 
+import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
+
 export interface TemplateRow {
   id: string;
   name: string;
@@ -281,36 +283,34 @@ export function TemplateEditor({
             template for it.
           </p>
         ) : (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="text-left text-ink-3">
-                <th className="py-1 font-normal">Name</th>
-                <th className="py-1 font-normal">Step</th>
-                <th className="py-1 font-normal">Angle</th>
-                <th className="py-1 font-normal">Subject</th>
-                <th className="py-1 font-normal">State</th>
-                <th />
-              </tr>
-            </thead>
+          <Table>
+            <THead>
+                <TH>Name</TH>
+                <TH>Step</TH>
+                <TH>Angle</TH>
+                <TH>Subject</TH>
+                <TH>State</TH>
+                <TH />
+              </THead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-line">
-                  <td className="py-1">{row.name}</td>
-                  <td className="tabular py-1">T{row.step_number}</td>
-                  <td className="py-1 text-ink-2">
+                <TR key={row.id}>
+                  <TD>{row.name}</TD>
+                  <TD className="tabular">T{row.step_number}</TD>
+                  <TD className="text-ink-2">
                     {row.angle_type?.replace(/_/g, " ") ?? "either"}
-                  </td>
-                  <td className="max-w-[320px] truncate py-1 text-ink-2">
+                  </TD>
+                  <TD className="max-w-[320px] truncate text-ink-2">
                     {row.subject}
-                  </td>
-                  <td className="py-1">
+                  </TD>
+                  <TD>
                     {row.is_active ? (
                       <span className="text-ok">active</span>
                     ) : (
                       <span className="text-ink-3">draft</span>
                     )}
-                  </td>
-                  <td className="py-1 text-right">
+                  </TD>
+                  <TD className="text-right">
                     <button
                       type="button"
                       onClick={() => edit(row)}
@@ -336,11 +336,11 @@ export function TemplateEditor({
                         delete
                       </button>
                     )}
-                  </td>
-                </tr>
+                  </TD>
+                </TR>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
     </div>

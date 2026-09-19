@@ -30,10 +30,11 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="flex h-full flex-col items-center justify-center gap-6">
-      <h1 className="text-[15px] tracking-wide text-ink-2">
-        Outreach Ops
-      </h1>
+    <main className="flex h-full flex-col items-center justify-center gap-6 px-4">
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold text-ink">Outreach Ops</h1>
+        <p className="mt-1 text-ink-3">AutoReceptionist outbound pipeline</p>
+      </div>
       <Suspense>
         <LoginForm />
       </Suspense>

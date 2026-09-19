@@ -6,6 +6,8 @@ import { useState, useSyncExternalStore } from "react";
 import { describeAuthError } from "@/lib/authErrors";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
+import { Button } from "@/components/ui/Button";
+
 // Supabase also reports failures in the URL fragment, which never reaches the
 // server, so a redirect landing anywhere other than the callback loses it
 // unless the browser reads it.
@@ -77,18 +79,26 @@ export function LoginForm() {
   }
 
   return (
-    <div className="flex w-[300px] flex-col gap-3">
-      <button
-        type="button"
+    <div className="flex w-[320px] flex-col gap-3">
+      {/* Finally the same button as the rest of the app. This file lives
+          outside the (app) route group, so it could not reach the old class
+          strings and had hand-copied them -- and had already drifted to a
+          different padding and a different disabled opacity. */}
+      <Button
+        variant="primary"
+        size="lg"
+        fullWidth
+        loading={busy}
         onClick={signIn}
-        disabled={busy}
-        className="w-full border border-line-2 bg-surface-3 px-3 py-2 text-ink hover:border-line-strong disabled:opacity-50"
       >
-        {busy ? "Redirecting..." : "Continue with Google"}
-      </button>
+        {busy ? "Redirecting…" : "Continue with Google"}
+      </Button>
 
       {(error ?? reported) && (
-        <p role="alert" className="text-danger">
+        <p
+          role="alert"
+          className="rounded-md bg-danger-soft px-3 py-2 text-danger"
+        >
           {describeAuthError(error ?? reported ?? "")}
         </p>
       )}

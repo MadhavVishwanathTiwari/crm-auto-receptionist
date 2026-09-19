@@ -1,12 +1,19 @@
 "use client";
 
+import { BellOff, Check, CheckCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 
 import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
 import { formatYours } from "@/lib/time/format";
 
-import { BUTTON_QUIET, PANEL } from "../ui";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { cn } from "@/lib/cn";
+import type { Tone } from "@/lib/ui/tones";
+
 import { useViewerZone } from "../ViewerZone";
 import { acknowledgeAlert, acknowledgeAllAlerts } from "./actions";
 
@@ -27,22 +34,22 @@ export interface AlertRow {
  * costs domain reputation, and the rest are the pipeline telling you it has
  * stopped doing something.
  */
-const KIND_COPY: Record<string, { label: string; tone: string }> = {
-  reply: { label: "reply", tone: "text-ok" },
-  bounce: { label: "bounce", tone: "text-danger" },
-  unsubscribe: { label: "unsubscribe", tone: "text-danger" },
-  mailbox_auth: { label: "mailbox auth", tone: "text-danger" },
-  cap_exhausted: { label: "cap exhausted", tone: "text-warn" },
-  import_failed: { label: "import failed", tone: "text-danger" },
-  orphan_demo: { label: "orphan demo", tone: "text-warn" },
+const KIND_COPY: Record<string, { label: string; tone: Tone }> = {
+  reply: { label: "reply", tone: "ok" },
+  bounce: { label: "bounce", tone: "danger" },
+  unsubscribe: { label: "unsubscribe", tone: "danger" },
+  mailbox_auth: { label: "mailbox auth", tone: "danger" },
+  cap_exhausted: { label: "cap exhausted", tone: "warn" },
+  import_failed: { label: "import failed", tone: "danger" },
+  orphan_demo: { label: "orphan demo", tone: "warn" },
   timezone_unresolved: {
     label: "no timezone",
-    tone: "text-warn",
+    tone: "warn",
   },
-  dedupe_review: { label: "dedupe review", tone: "text-info" },
-  demo_missing: { label: "demo missing", tone: "text-warn" },
-  pre_send_review: { label: "pre-send review", tone: "text-info" },
-  new_pool_leads: { label: "new pool leads", tone: "text-info" },
+  dedupe_review: { label: "dedupe review", tone: "info" },
+  demo_missing: { label: "demo missing", tone: "warn" },
+  pre_send_review: { label: "pre-send review", tone: "info" },
+  new_pool_leads: { label: "new pool leads", tone: "info" },
 };
 
 function AlertLine({
@@ -56,23 +63,25 @@ function AlertLine({
 }) {
   const copy = KIND_COPY[alert.kind] ?? {
     label: alert.kind.replace(/_/g, " "),
-    tone: "text-ink-2",
+    tone: "neutral",
   };
   const seen = alert.acknowledged_at !== null;
   const { zone } = useViewerZone();
 
   return (
     <li
-      className={
-        "flex items-baseline gap-3 border-t border-line py-1 " +
-        (seen ? "opacity-50" : "")
-      }
+      className={cn(
+        "flex items-center gap-3 border-t border-line py-1.5 first:border-t-0",
+        seen && "opacity-50",
+      )}
     >
-      <span className={"w-32 shrink-0 " + copy.tone}>{copy.label}</span>
+      <span className="w-32 shrink-0">
+        <Badge tone={copy.tone}>{copy.label}</Badge>
+      </span>
       <span className="tabular w-36 shrink-0 text-ink-3">
         {formatYours(alert.created_at, zone)}
       </span>
-      <span className="w-52 shrink-0 truncate text-ink">
+      <span className="w-52 shrink-0 truncate font-medium text-ink">
         {alert.lead_id ? (
           <Link
             href={`/leads?lead=${alert.lead_id}`}
@@ -88,14 +97,15 @@ function AlertLine({
         {alert.message}
       </span>
       {!seen && (
-        <button
-          type="button"
+        <Button
+          size="sm"
+          icon={<Check size={13} />}
           onClick={() => onAcknowledge(alert.id)}
           disabled={pending}
-          className={BUTTON_QUIET + " shrink-0"}
+          className="shrink-0"
         >
-          done
-        </button>
+          Done
+        </Button>
       )}
     </li>
   );
@@ -179,28 +189,30 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className={PANEL}>
+      <Card className="p-4">
         <div className="flex items-baseline gap-3">
           <h2 className="text-xl font-semibold text-ink">Open</h2>
           <span className="tabular text-ink-2">{open.length}</span>
           {open.length > 0 && (
-            <button
-              type="button"
+            <Button
+              size="sm"
+              icon={<CheckCheck size={13} />}
               onClick={acknowledgeAll}
               disabled={pending}
-              className={BUTTON_QUIET + " ml-auto"}
+              className="ml-auto"
             >
-              mark all done
-            </button>
+              Mark all done
+            </Button>
           )}
         </div>
 
         {open.length === 0 ? (
-          <p className="mt-2 text-ink-3">
-            Nothing waiting. Replies, bounces and unsubscribes land here as the
-            poller finds them, and each one has already halted its sequence
-            through the event log.
-          </p>
+          <EmptyState
+            compact
+            icon={<BellOff size={16} />}
+            title="Nothing waiting"
+            body="Replies, bounces and unsubscribes land here as the poller finds them, and each one has already halted its sequence through the event log."
+          />
         ) : (
           <ul className="mt-2">
             {open.map((alert) => (
@@ -213,12 +225,12 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
       {seen.length > 0 && (
-        <div className={PANEL}>
+        <Card className="p-4">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-ink-2">Done</h2>
+            <h2 className="text-xl font-semibold text-ink-2">Done</h2>
             <span className="tabular text-ink-3">
               {seen.length}
             </span>
@@ -233,7 +245,7 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
               />
             ))}
           </ul>
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -140,7 +140,7 @@ export function Funnel({ rows }: { rows: FunnelRow[] }) {
         // The tone sets `color` on the wrapper and the bar is bg-current, so
         // one map drives both the label and its bar.
         <div key={row.key} className={"flex items-center gap-2 " + row.tone}>
-          <span className="w-[104px] shrink-0 truncate">{row.label}</span>
+          <span className="w-[150px] shrink-0 truncate">{row.label}</span>
           <span className="flex h-2 min-w-0 flex-1 items-center overflow-hidden rounded-full bg-surface-2">
             {!row.unscaled && (
               <span
@@ -150,11 +150,11 @@ export function Funnel({ rows }: { rows: FunnelRow[] }) {
               />
             )}
           </span>
-          <span className="tabular w-[52px] shrink-0 text-right font-medium">
+          <span className="tabular w-[48px] shrink-0 text-right font-medium">
             {row.count}
           </span>
           {row.detail !== undefined && (
-            <span className="tabular w-[72px] shrink-0 text-right text-ink-3">
+            <span className="tabular w-[68px] shrink-0 text-right text-ink-3">
               {row.detail}
             </span>
           )}

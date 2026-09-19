@@ -5,9 +5,7 @@ import { SignOutButton } from "../(app)/SignOutButton";
 export default function NoAccessPage() {
   return (
     <main className="flex h-full flex-col items-center justify-center gap-4">
-      <h1 className="text-[15px] tracking-wide text-ink-2">
-        Outreach Ops
-      </h1>
+      <h1 className="text-2xl font-semibold text-ink">Outreach Ops</h1>
       <p className="max-w-[380px] text-center text-ink-2">
         You are signed in, but your account is not attached to an organisation,
         so there is nothing you can see yet.
