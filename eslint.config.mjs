@@ -33,7 +33,7 @@ const eslintConfig = defineConfig([
   // browser, so a bare toLocaleString() renders one string on each side:
   // times flashed in UTC and six screens threw hydration error #418 (Sep 2026).
   {
-    files: ["app/**/*.{ts,tsx}"],
+    files: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "lib/ui/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-syntax": [
         "error",
