@@ -10,14 +10,30 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
+  Inbox,
+  SearchX,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Input, Select } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { cn } from "@/lib/cn";
 import { COLUMN_LABEL, columnFor, isOverdue } from "@/lib/pipeline/stages";
 import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
-import { formatYours } from "@/lib/time/format";
+import { formatCount, formatYours } from "@/lib/time/format";
+import { useAction } from "@/lib/ui/useAction";
+import { humanise, STAGE_TONE, STATUS_TONE, toneFor } from "@/lib/ui/tones";
 
-import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
 import { useViewerZone } from "../ViewerZone";
 import { claimFromPool, claimLead, releaseLead } from "./actions";
 
@@ -81,16 +97,28 @@ export function LeadsGrid({
   const [sorting, setSorting] = useState<SortingState>([
     { id: "created_at", desc: true },
   ]);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run, pending } = useAction();
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setError(null);
-    startTransition(async () => {
-      const result = await action();
-      if (!result.ok) setError(result.error ?? "That did not work.");
-    });
-  }
+  // "/" jumps to the search box, the way every list screen worth using does.
+  // Ignored while you are already typing somewhere, so it can still be typed.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "/" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      searchRef.current?.focus();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const columns = useMemo<ColumnDef<LeadRow>[]>(
     () => [
@@ -123,10 +151,13 @@ export function LeadsGrid({
         size: 110,
         cell: (info) => {
           const value = info.getValue<string>();
+          // A dot rather than a filled chip: fifteen coloured pills down a
+          // dense grid is decoration, and globals.css is explicit that a
+          // coloured cell here has to mean something.
           return (
-            <span className={STATUS_TONE[value] ?? ""}>
-              {value.replace(/_/g, " ")}
-            </span>
+            <Badge tone={toneFor(STATUS_TONE, value)} variant="dot">
+              {humanise(value)}
+            </Badge>
           );
         },
       },
@@ -139,9 +170,12 @@ export function LeadsGrid({
         size: 110,
         accessorFn: (row) => COLUMN_LABEL[columnFor(row)] ?? row.stage,
         cell: (info) => (
-          <span className={STAGE_TONE[columnFor(info.row.original)] ?? ""}>
+          <Badge
+            tone={toneFor(STAGE_TONE, columnFor(info.row.original))}
+            variant="dot"
+          >
             {info.getValue<string>()}
-          </span>
+          </Badge>
         ),
       },
       {
@@ -151,15 +185,19 @@ export function LeadsGrid({
         accessorFn: (row) => row.next_action ?? "",
         cell: (info) => {
           const row = info.row.original;
-          if (!row.next_action) return "—";
+          if (!row.next_action) return <span className="text-ink-3">—</span>;
+          const late = isOverdue(row);
           return (
             <span
-              className={
-                isOverdue(row) ? "text-danger" : "text-warn"
-              }
+              className={cn(
+                "flex items-center gap-1",
+                late ? "text-danger" : "text-warn",
+              )}
             >
-              {isOverdue(row) ? "⚠ " : ""}
-              {row.next_action}
+              {late && (
+                <TriangleAlert size={12} className="shrink-0" aria-label="Overdue" />
+              )}
+              <span className="truncate">{row.next_action}</span>
             </span>
           );
         },
@@ -176,16 +214,12 @@ export function LeadsGrid({
               : "other",
         cell: (info) => {
           const value = info.getValue<string>();
-          return (
-            <span
-              className={
-                value === "you"
-                  ? "text-info"
-                  : value === "pool"
-                    ? "text-ink-3"
-                    : "text-ink-2"
-              }
-            >
+          return value === "you" ? (
+            <Badge tone="accent" variant="soft">
+              you
+            </Badge>
+          ) : (
+            <span className={value === "pool" ? "text-ink-3" : "text-ink-2"}>
               {value}
             </span>
           );
@@ -210,7 +244,9 @@ export function LeadsGrid({
           return value ? (
             value
           ) : (
-            <span className="text-warn">unresolved</span>
+            <Badge tone="warn" variant="soft">
+              unresolved
+            </Badge>
           );
         },
       },
@@ -252,33 +288,41 @@ export function LeadsGrid({
           const lead = row.original;
           if (lead.claimed_by === null) {
             return (
-              <button
-                type="button"
+              <Button
+                size="xs"
+                variant="ghost"
                 disabled={pending}
-                onClick={() => run(() => claimLead(lead.id))}
-                className={BUTTON_QUIET}
+                onClick={() =>
+                  run(() => claimLead(lead.id), {
+                    success: `Claimed ${lead.company_name ?? "the lead"}`,
+                  })
+                }
               >
-                claim
-              </button>
+                Claim
+              </Button>
             );
           }
           if (lead.claimed_by === currentUserId) {
             return (
-              <button
-                type="button"
+              <Button
+                size="xs"
+                variant="ghost"
                 disabled={pending}
-                onClick={() => run(() => releaseLead(lead.id))}
-                className={BUTTON_QUIET}
+                onClick={() =>
+                  run(() => releaseLead(lead.id), {
+                    success: "Released back to the pool",
+                  })
+                }
               >
-                release
-              </button>
+                Release
+              </Button>
             );
           }
           return null;
         },
       },
     ],
-    [currentUserId, pending, zone],
+    [currentUserId, pending, zone, run],
   );
 
   // Realtime. RLS is enforced per subscriber, so no org filter is needed on the
@@ -369,93 +413,153 @@ export function LeadsGrid({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2">
-        <input
+      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2">
+        <Input
+          ref={searchRef}
           type="search"
           placeholder="Search company, contact, email, city"
+          aria-label="Search leads"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className={INPUT + " w-[300px]"}
+          className="w-[300px]"
         />
-        <select
+
+        <Select
           value={status}
+          aria-label="Filter by status"
           onChange={(event) => setStatus(event.target.value)}
-          className={INPUT}
+          className="w-[150px]"
         >
           <option value="all">All statuses</option>
           {statuses.map((value) => (
             <option key={value} value={value}>
-              {value.replace(/_/g, " ")}
+              {humanise(value)}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+
+        {/* Three visible choices rather than a <select>: the options here are
+            the question the screen is actually for, and hiding them behind a
+            click made "whose leads am I looking at" a thing you had to check. */}
+        <SegmentedControl
+          ariaLabel="Whose leads"
           value={ownership}
-          onChange={(event) => setOwnership(event.target.value as Ownership)}
-          className={INPUT}
-        >
-          <option value="all">Everyone</option>
-          <option value="mine">Mine</option>
-          <option value="unclaimed">Unclaimed pool</option>
-        </select>
+          onChange={setOwnership}
+          options={[
+            { value: "all", label: "Everyone" },
+            { value: "mine", label: "Mine" },
+            { value: "unclaimed", label: "Pool" },
+          ]}
+        />
 
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          icon={<Sparkles size={14} />}
           disabled={pending}
-          onClick={() => run(() => claimFromPool(25))}
-          className={BUTTON + " ml-2"}
+          loading={pending}
+          onClick={() =>
+            run(() => claimFromPool(25), {
+              success: "Claimed up to 25 leads from the pool",
+            })
+          }
+          className="ml-1"
         >
-          Claim 25 from pool
-        </button>
+          Claim 25
+        </Button>
 
-        <span className="tabular ml-auto text-ink-3">
-          {rows.length} of {liveLeads.length}
+        <span className="tabular ml-auto shrink-0 text-ink-3">
+          <span className="text-ink">{formatCount(rows.length)}</span>
+          {" of "}
+          {formatCount(liveLeads.length)}
         </span>
       </div>
 
-      {error && (
-        <p
-          role="alert"
-          className="shrink-0 border-b border-line px-4 py-1 text-danger"
-        >
-          {error}
-        </p>
-      )}
-
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
-        <div className="w-max min-w-full">
+        <div role="grid" aria-rowcount={rows.length} className="w-max min-w-full">
           <div
+            role="row"
             className="sticky top-0 z-10 grid items-center border-b border-line-2 bg-surface-2"
             style={{
               gridTemplateColumns: templateColumns,
               height: "var(--header-height)",
             }}
           >
-            {table.getHeaderGroups()[0]?.headers.map((header) => (
-              <button
-                key={header.id}
-                type="button"
-                disabled={!header.column.getCanSort()}
-                onClick={header.column.getToggleSortingHandler()}
-                className="truncate px-2 text-left text-ink-3 disabled:cursor-default"
-              >
-                {flexRender(
-                  header.column.columnDef.header,
-                  header.getContext(),
-                )}
-                {{ asc: " ↑", desc: " ↓" }[
-                  header.column.getIsSorted() as string
-                ] ?? ""}
-              </button>
-            ))}
+            {table.getHeaderGroups()[0]?.headers.map((header) => {
+              const sortable = header.column.getCanSort();
+              const sorted = header.column.getIsSorted();
+              return (
+                <button
+                  key={header.id}
+                  type="button"
+                  disabled={!sortable}
+                  onClick={header.column.getToggleSortingHandler()}
+                  aria-sort={
+                    sorted === "asc"
+                      ? "ascending"
+                      : sorted === "desc"
+                        ? "descending"
+                        : undefined
+                  }
+                  className={cn(
+                    "group flex h-full items-center gap-1 px-2 text-left text-xs font-medium tracking-wide uppercase",
+                    "disabled:cursor-default",
+                    sorted ? "text-ink" : "text-ink-3",
+                    sortable && "cursor-pointer hover:text-ink",
+                  )}
+                >
+                  <span className="truncate">
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )}
+                  </span>
+                  {sortable &&
+                    (sorted === "asc" ? (
+                      <ChevronUp size={12} className="shrink-0" />
+                    ) : sorted === "desc" ? (
+                      <ChevronDown size={12} className="shrink-0" />
+                    ) : (
+                      <ChevronsUpDown
+                        size={12}
+                        className="shrink-0 opacity-0 group-hover:opacity-100"
+                      />
+                    ))}
+                </button>
+              );
+            })}
           </div>
 
           {rows.length === 0 ? (
-            <p className="px-4 py-6 text-ink-3">
-              {liveLeads.length === 0
-                ? "No leads yet. Import a CSV to get started."
-                : "No leads match those filters."}
-            </p>
+            liveLeads.length === 0 ? (
+              <EmptyState
+                icon={<Inbox size={18} />}
+                title="No leads yet"
+                body="Import a CSV and the grid fills up. Every column here comes from that file or from what the app did next."
+                action={
+                  <Button variant="primary" onClick={() => router.push("/import")}>
+                    Import a CSV
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={<SearchX size={18} />}
+                title="No leads match those filters"
+                body="Widen the search, or switch back to Everyone."
+                compact
+                action={
+                  <Button
+                    onClick={() => {
+                      setSearch("");
+                      setStatus("all");
+                      setOwnership("all");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                }
+              />
+            )
           ) : (
             <div
               className="relative"
@@ -468,11 +572,15 @@ export function LeadsGrid({
                 return (
                   <div
                     key={row.id}
+                    role="row"
+                    aria-selected={selected}
                     onClick={() => router.push(`/leads?lead=${row.original.id}`)}
-                    className={
-                      "absolute top-0 left-0 grid w-full cursor-pointer items-center border-b border-line hover:bg-surface-2 " +
-                      (selected ? "bg-surface-3" : "")
-                    }
+                    className={cn(
+                      "absolute top-0 left-0 grid w-full cursor-pointer items-center border-b border-line",
+                      selected
+                        ? "bg-accent-soft"
+                        : "hover:bg-surface-2",
+                    )}
                     style={{
                       gridTemplateColumns: templateColumns,
                       height: ROW_HEIGHT,
@@ -482,6 +590,7 @@ export function LeadsGrid({
                     {row.getVisibleCells().map((cell) => (
                       <div
                         key={cell.id}
+                        role="gridcell"
                         className="truncate px-2"
                         // The claim/release buttons live in a cell. Without
                         // this, clicking one also opens the drawer behind it.

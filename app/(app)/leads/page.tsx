@@ -1,9 +1,14 @@
+import { TriangleAlert } from "lucide-react";
 import { Suspense } from "react";
 
 import { requireOrgContext } from "@/lib/org";
 import { selectUpTo } from "@/lib/supabase/paginate";
+import { formatCount } from "@/lib/time/format";
 
-import { PAGE, PAGE_HEADER } from "../ui";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Page, PageHeader } from "@/components/ui/PageShell";
+
 import { LeadDrawerData } from "./LeadDrawerData";
 import { LeadsGrid, type LeadRow } from "./LeadsGrid";
 
@@ -22,11 +27,17 @@ function DrawerSkeleton() {
   return (
     <aside
       aria-busy="true"
-      className="flex h-full w-[520px] shrink-0 flex-col border-l border-line bg-surface"
+      className="flex h-full w-(--drawer-w) shrink-0 flex-col border-l border-line bg-surface"
     >
-      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
-        <span className="text-ink-3">Loading lead</span>
+      <header className="flex h-11 shrink-0 items-center gap-3 border-b border-line px-4">
+        <Skeleton className="h-4 w-40" />
       </header>
+      <div className="space-y-4 p-4">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-3 w-32" />
+        <Skeleton className="h-24 w-full" />
+      </div>
     </aside>
   );
 }
@@ -58,15 +69,21 @@ export default async function LeadsPage({
   );
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Leads</h1>
-      </header>
+    <Page>
+      <PageHeader
+        title="Leads"
+        subtitle={
+          error ? undefined : `${formatCount(data?.length ?? 0)} loaded`
+        }
+        note="Click a row to open it. Press / to search."
+      />
 
       {error ? (
-        <p role="alert" className="px-4 py-6 text-danger">
-          Could not load leads: {error.message}
-        </p>
+        <EmptyState
+          icon={<TriangleAlert size={18} className="text-danger" />}
+          title="Could not load leads"
+          body={error.message}
+        />
       ) : (
         <div className="flex min-h-0 flex-1">
           <LeadsGrid
@@ -90,6 +107,6 @@ export default async function LeadsPage({
           )}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

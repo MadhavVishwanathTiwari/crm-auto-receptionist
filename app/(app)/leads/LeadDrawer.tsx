@@ -1,8 +1,9 @@
 "use client";
 
+import { PenLine, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState } from "react";
 
 import { suppressLead } from "../suppressions/actions";
 // The reasons array and its type come from a plain module, not the "use server"
@@ -21,7 +22,15 @@ import {
 } from "@/lib/pipeline/stages";
 
 import { addNote, setDealValue, setNextAction, setStage } from "../pipeline/actions";
-import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
+import { Badge } from "@/components/ui/Badge";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { inputClasses } from "@/components/ui/Input";
+import { cn } from "@/lib/cn";
+import { useAction } from "@/lib/ui/useAction";
+import { useEscape } from "@/lib/ui/useEscape";
+import { humanise, STAGE_TONE, STATUS_TONE, toneFor } from "@/lib/ui/tones";
+
 import { useViewerZone } from "../ViewerZone";
 import { cancelSend } from "../write/actions";
 import {
@@ -159,9 +168,9 @@ function eventDetail(event: EventRow): string {
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-3 py-0.5">
       <span className="w-28 shrink-0 text-ink-3">{label}</span>
-      <span className="min-w-0 break-words">{value || "—"}</span>
+      <span className="min-w-0 break-words text-ink-2">{value || "—"}</span>
     </div>
   );
 }
@@ -274,61 +283,61 @@ export function LeadDrawer({
     lead.deal_value === null ? "" : String(lead.deal_value),
   );
   const [noteBody, setNoteBody] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  /** The booked send the operator is asking to cancel, if any. */
+  const [cancelling, setCancelling] = useState<string | null>(null);
+
+  const { run, pending, error } = useAction();
 
   const close = () => router.push("/leads");
 
-  // Listener only, no state, so this is not the effect pattern lint objects to.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") router.push("/leads");
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [router]);
-
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setError(null);
-    startTransition(async () => {
-      const result = await action();
-      if (!result.ok) setError(result.error ?? "That did not work.");
-    });
-  }
+  // Shared, so an Escape that a dialog or the command palette already consumed
+  // does not also navigate this drawer away behind it.
+  useEscape(close);
 
   const mine = lead.claimed_by === currentUserId;
   const editable = lead.claimed_by === null || mine;
 
   return (
-    <aside className="flex h-full w-[520px] shrink-0 flex-col border-l border-line bg-surface">
-      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
-        <h2 className="truncate text-ink">
-          {lead.company_name ?? "Lead"}
-        </h2>
-        <span className={STATUS_TONE[lead.status] ?? ""}>
-          {lead.status.replace(/_/g, " ")}
-        </span>
+    <aside className="flex h-full w-(--drawer-w) shrink-0 flex-col border-l border-line bg-surface">
+      <header className="flex shrink-0 items-start gap-3 border-b border-line px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-xl font-semibold text-ink">
+            {lead.company_name ?? "Lead"}
+          </h2>
+          <div className="mt-1 flex items-center gap-2">
+            <Badge tone={toneFor(STATUS_TONE, lead.status)}>
+              {humanise(lead.status)}
+            </Badge>
+            <Badge tone={toneFor(STAGE_TONE, lead.stage)} variant="dot">
+              {humanise(lead.stage)}
+            </Badge>
+          </div>
+        </div>
+
         {/* Always offered while the lead is open. /write says in words why a
             lead is not on your list, which beats a link that is not there. */}
         {!lead.terminal_outcome && !lead.halt_reason && (
-          <Link href={`/write?lead=${lead.id}`} className={BUTTON_QUIET + " ml-auto"}>
-            write
+          <Link
+            href={`/write?lead=${lead.id}`}
+            className={buttonClasses("primary", "sm")}
+          >
+            <PenLine size={13} />
+            Write
           </Link>
         )}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={close}
-          className={
-            BUTTON_QUIET + (lead.terminal_outcome || lead.halt_reason ? " ml-auto" : "")
-          }
-        >
-          close
-        </button>
+          aria-label="Close lead"
+          icon={<X size={14} />}
+          className="-mr-1.5"
+        />
       </header>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 text-lg">
         {error && (
-          <p role="alert" className="text-danger">
+          <p role="alert" className="rounded-md bg-danger-soft px-3 py-2 text-danger">
             {error}
           </p>
         )}
@@ -338,7 +347,7 @@ export function LeadDrawer({
             happened. Not gated on `editable`; resolve_stalled_send() checks
             ownership with app.same_operator, the same as set_lead_stage(). */}
         {stalledSends.length > 0 && (
-          <section className="space-y-2 border border-warn p-3">
+          <section className="space-y-2 rounded-lg border border-warn bg-warn-soft p-3">
             <h3 className="text-warn">
               {stalledSends.length === 1
                 ? "An email may have gone out without being recorded"
@@ -372,7 +381,7 @@ export function LeadDrawer({
                         type="button"
                         disabled={pending}
                         onClick={() => run(() => resolveStalledSend(send.id, true))}
-                        className={BUTTON}
+                        className={buttonClasses("secondary", "md")}
                       >
                         It went out
                       </button>
@@ -380,7 +389,7 @@ export function LeadDrawer({
                         type="button"
                         disabled={pending}
                         onClick={() => run(() => resolveStalledSend(send.id, false))}
-                        className={BUTTON}
+                        className={buttonClasses("secondary", "md")}
                       >
                         It did not go out
                       </button>
@@ -398,8 +407,8 @@ export function LeadDrawer({
         )}
 
         {nextSends.length > 0 && (
-          <section className="space-y-2 border border-line-2 p-3">
-            <h3 className="text-ink-3">Next email</h3>
+          <section className="space-y-2 rounded-lg border border-line-2 bg-surface-2 p-3">
+            <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">Next email</h3>
             {nextSends.map((send) => {
               const editable = send.status === "planned" || send.status === "blocked";
               return (
@@ -432,26 +441,17 @@ export function LeadDrawer({
                   </div>
                   {editable && (
                     <div className="flex flex-wrap gap-2">
-                      <Link href={`/write?lead=${lead.id}`} className={BUTTON}>
+                      <Link href={`/write?lead=${lead.id}`} className={buttonClasses("secondary", "md")}>
                         {send.composed_subject ? "Edit on Write" : "Write it instead"}
                       </Link>
-                      <button
-                        type="button"
+                      <Button
+                        variant="danger"
+                        size="sm"
                         disabled={pending}
-                        className={BUTTON_QUIET}
-                        onClick={() => {
-                          if (
-                            !window.confirm(
-                              `Cancel T${send.step_number} to ${lead.company_name ?? "this lead"}? The planner may book a template send in its place.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          run(() => cancelSend(send.id));
-                        }}
+                        onClick={() => setCancelling(send.id)}
                       >
-                        cancel it
-                      </button>
+                        Cancel it
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -522,7 +522,7 @@ export function LeadDrawer({
         </section>
 
         <section>
-          <h3 className="mb-2 text-ink-3">Timezone</h3>
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-ink-3 uppercase">Timezone</h3>
           <div className="flex flex-wrap items-center gap-2">
             <input
               list="iana-zones"
@@ -530,7 +530,7 @@ export function LeadDrawer({
               disabled={!editable || pending}
               onChange={(event) => setZone(event.target.value)}
               placeholder="America/Chicago"
-              className={INPUT + " w-60"}
+              className={inputClasses("w-60")}
             />
             <datalist id="iana-zones">
               {ZONES.map((value) => (
@@ -541,7 +541,7 @@ export function LeadDrawer({
               type="button"
               disabled={!editable || pending || zone === (lead.timezone ?? "")}
               onClick={() => run(() => setLeadTimezone(lead.id, zone))}
-              className={BUTTON}
+              className={buttonClasses("secondary", "md")}
             >
               Save
             </button>
@@ -553,7 +553,7 @@ export function LeadDrawer({
                   setZone("");
                   run(() => setLeadTimezone(lead.id, null));
                 }}
-                className={BUTTON_QUIET}
+                className={buttonClasses("ghost", "sm")}
               >
                 clear
               </button>
@@ -567,7 +567,7 @@ export function LeadDrawer({
         </section>
 
         <section>
-          <h3 className="mb-2 text-ink-3">Deal</h3>
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-ink-3 uppercase">Deal</h3>
 
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -596,7 +596,7 @@ export function LeadDrawer({
                         setStage(lead.id, event.target.value as PipelineStage),
                       )
                     }
-                    className={INPUT}
+                    className={inputClasses()}
                   >
                     {PIPELINE_STAGES.map((stage) => (
                       <option key={stage} value={stage}>
@@ -621,7 +621,7 @@ export function LeadDrawer({
                 disabled={!editable || pending}
                 onChange={(event) => setValue(event.target.value)}
                 placeholder={String(defaultDealValue)}
-                className={INPUT + " w-28"}
+                className={inputClasses("w-28")}
               />
               <button
                 type="button"
@@ -634,7 +634,7 @@ export function LeadDrawer({
                     ),
                   )
                 }
-                className={BUTTON}
+                className={buttonClasses("secondary", "md")}
               >
                 Save
               </button>
@@ -654,14 +654,14 @@ export function LeadDrawer({
                 disabled={!editable || pending}
                 onChange={(event) => setAction(event.target.value)}
                 placeholder="call back about the Thursday quote"
-                className={INPUT + " w-60"}
+                className={inputClasses("w-60")}
               />
               <input
                 type="datetime-local"
                 value={actionAt}
                 disabled={!editable || pending}
                 onChange={(event) => setActionAt(event.target.value)}
-                className={INPUT}
+                className={inputClasses()}
               />
               <button
                 type="button"
@@ -675,7 +675,7 @@ export function LeadDrawer({
                     ),
                   )
                 }
-                className={BUTTON}
+                className={buttonClasses("secondary", "md")}
               >
                 Save
               </button>
@@ -688,7 +688,7 @@ export function LeadDrawer({
                     setActionAt("");
                     run(() => setNextAction(lead.id, "", null));
                   }}
-                  className={BUTTON_QUIET}
+                  className={buttonClasses("ghost", "sm")}
                 >
                   done
                 </button>
@@ -701,7 +701,7 @@ export function LeadDrawer({
         </section>
 
         <section>
-          <h3 className="mb-2 text-ink-3">
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-ink-3 uppercase">
             Audits <span className="tabular">{evidence.length}</span>
           </h3>
           {evidence.length === 0 ? (
@@ -725,7 +725,7 @@ export function LeadDrawer({
                       type="button"
                       disabled={!editable || pending}
                       onClick={() => run(() => queueWithoutAudit(lead.id))}
-                      className={BUTTON}
+                      className={buttonClasses("secondary", "md")}
                     >
                       Send without an audit
                     </button>
@@ -776,7 +776,7 @@ export function LeadDrawer({
         </section>
 
         <section>
-          <h3 className="mb-2 text-ink-3">Timeline</h3>
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-ink-3 uppercase">Timeline</h3>
 
           {/* `note` has been in the event enum since 0001 and permitted to
               authenticated users since 0005, and nothing has ever written one.
@@ -788,7 +788,7 @@ export function LeadDrawer({
               disabled={pending}
               onChange={(event) => setNoteBody(event.target.value)}
               placeholder="what happened on the call"
-              className={INPUT + " w-80"}
+              className={inputClasses("w-80")}
             />
             <button
               type="button"
@@ -798,7 +798,7 @@ export function LeadDrawer({
                 setNoteBody("");
                 run(() => addNote(lead.id, body));
               }}
-              className={BUTTON}
+              className={buttonClasses("secondary", "md")}
             >
               Add note
             </button>
@@ -845,7 +845,7 @@ export function LeadDrawer({
         </section>
 
         <section className="border-t border-line pt-4">
-          <h3 className="mb-2 text-ink-3">Stop contacting</h3>
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-ink-3 uppercase">Stop contacting</h3>
 
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <select
@@ -854,7 +854,7 @@ export function LeadDrawer({
               onChange={(event) =>
                 setReason(event.target.value as SuppressionReason)
               }
-              className={INPUT}
+              className={inputClasses()}
             >
               {SUPPRESSION_REASONS.map((entry) => (
                 <option key={entry.value} value={entry.value}>
@@ -866,7 +866,7 @@ export function LeadDrawer({
               type="button"
               disabled={pending || !lead.work_email}
               onClick={() => run(() => suppressLead(lead.id, "email", reason, note))}
-              className={BUTTON}
+              className={buttonClasses("secondary", "md")}
             >
               Suppress this address
             </button>
@@ -874,7 +874,7 @@ export function LeadDrawer({
               type="button"
               disabled={pending || !lead.website}
               onClick={() => run(() => suppressLead(lead.id, "domain", reason, note))}
-              className={BUTTON}
+              className={buttonClasses("secondary", "md")}
             >
               Suppress whole domain
             </button>
@@ -887,7 +887,7 @@ export function LeadDrawer({
               onChange={(event) =>
                 setOutcome(event.target.value as TerminalOutcome)
               }
-              className={INPUT}
+              className={inputClasses()}
             >
               {OUTCOMES.map((entry) => (
                 <option key={entry.value} value={entry.value}>
@@ -900,7 +900,7 @@ export function LeadDrawer({
               disabled={pending}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Note (kept on the event)"
-              className={INPUT + " min-w-[160px] flex-1"}
+              className={inputClasses("min-w-[160px] flex-1")}
             />
             {confirmingClose ? (
               <>
@@ -911,14 +911,14 @@ export function LeadDrawer({
                     setConfirmingClose(false);
                     run(() => closeLead(lead.id, outcome, note));
                   }}
-                  className={BUTTON + " text-danger"}
+                  className={buttonClasses("secondary", "md", "text-danger")}
                 >
                   Yes, close it
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmingClose(false)}
-                  className={BUTTON_QUIET}
+                  className={buttonClasses("ghost", "sm")}
                 >
                   cancel
                 </button>
@@ -928,7 +928,7 @@ export function LeadDrawer({
                 type="button"
                 disabled={pending || lead.terminal_outcome !== null}
                 onClick={() => setConfirmingClose(true)}
-                className={BUTTON}
+                className={buttonClasses("secondary", "md")}
               >
                 {lead.terminal_outcome ? "Already closed" : "Close lead"}
               </button>
@@ -940,6 +940,28 @@ export function LeadDrawer({
           </p>
         </section>
       </div>
+
+      {/* window.confirm() used to ask this. It cannot be styled, it cannot say
+          which send it means beyond a sentence, and on a screen that is itself
+          dismissed by Escape it was the only overlay the operator could not
+          tell apart from the drawer behind it. */}
+      <ConfirmDialog
+        open={cancelling !== null}
+        onCancel={() => setCancelling(null)}
+        onConfirm={() => {
+          const id = cancelling;
+          setCancelling(null);
+          if (id) {
+            run(() => cancelSend(id), { success: "Booked send cancelled" });
+          }
+        }}
+        destructive
+        pending={pending}
+        title="Cancel this booked send?"
+        description={`The planner may book a template send to ${lead.company_name ?? "this lead"} in its place.`}
+        confirmLabel="Cancel the send"
+        cancelLabel="Leave it booked"
+      />
     </aside>
   );
 }

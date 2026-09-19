@@ -7,7 +7,7 @@ export { Dialog } from "./Dialog";
 export { DropdownMenu, type MenuItem } from "./DropdownMenu";
 export { EmptyState } from "./EmptyState";
 export { Field } from "./Field";
-export { Checkbox, Input, Select, Textarea } from "./Input";
+export { Checkbox, Input, inputClasses, Select, Textarea } from "./Input";
 export { Kbd } from "./Kbd";
 export { KeyValue, KeyValueList } from "./KeyValue";
 export { Page, PageBody, PageHeader } from "./PageShell";

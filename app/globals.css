@@ -65,6 +65,11 @@
   --row-height: 30px;
   --header-height: 34px;
 
+  /* The detail panel on /leads. Its streamed skeleton has to be exactly this
+     wide or the grid reflows the moment the real one arrives, so the number
+     lives here rather than twice in JSX. */
+  --drawer-w: 520px;
+
   /* ---------------------------------------------------- type */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;

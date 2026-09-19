@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -37,7 +37,7 @@ const SIZE: Record<ButtonSize, string> = {
   lg: "h-9 gap-2 rounded-md px-4 text-lg",
 };
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends React.ComponentPropsWithRef<"button"> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   /** Shows a spinner in place of the leading icon and disables the button. */
