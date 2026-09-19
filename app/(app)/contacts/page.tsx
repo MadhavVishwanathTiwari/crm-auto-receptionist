@@ -1,3 +1,4 @@
+import { UserRound } from "lucide-react";
 import { Suspense } from "react";
 
 import { requireOrgContext } from "@/lib/org";
@@ -7,6 +8,7 @@ import { ContactCardData } from "./ContactCardData";
 import { ContactDirectory, type ContactRow } from "./ContactDirectory";
 
 import { Page, PageHeader } from "@/components/ui/PageShell";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +84,17 @@ export default async function ContactsPage({
             <Suspense key={selectedId} fallback={<CardSkeleton />}>
               <ContactCardData key={selectedId} contactId={selectedId} />
             </Suspense>
+          )}
+          {!selectedId && (
+            // An unexplained half-empty screen reads as something that failed
+            // to load rather than as something waiting for you.
+            <div className="flex min-w-0 flex-1 items-center justify-center border-l border-line">
+              <EmptyState
+                icon={<UserRound size={18} />}
+                title="Pick someone"
+                body="Their phone, email, socials and the last ten notes on them show up here."
+              />
+            </div>
           )}
         </div>
       )}
