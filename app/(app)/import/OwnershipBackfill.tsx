@@ -7,12 +7,12 @@ import { BUTTON, PANEL } from "../ui";
 import { backfillLeadOwners, type BackfillResult } from "./actions";
 
 const TONE: Record<string, string> = {
-  assigned: "text-[var(--color-ok)]",
-  already_owned: "text-[var(--color-ink-3)]",
-  claimed_by_other: "text-[var(--color-warn)]",
-  unknown_owner: "text-[var(--color-danger)]",
-  not_found: "text-[var(--color-danger)]",
-  no_owner: "text-[var(--color-ink-3)]",
+  assigned: "text-ok",
+  already_owned: "text-ink-3",
+  claimed_by_other: "text-warn",
+  unknown_owner: "text-danger",
+  not_found: "text-danger",
+  no_owner: "text-ink-3",
 };
 
 const EXPLAIN: Record<string, string> = {
@@ -54,8 +54,8 @@ export function OwnershipBackfill() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-[var(--color-ink)]">Ownership from the legacy sheet</h2>
-      <p className="mb-3 max-w-[70ch] text-[var(--color-ink-3)]">
+      <h2 className="mb-2 text-ink">Ownership from the legacy sheet</h2>
+      <p className="mb-3 max-w-[70ch] text-ink-3">
         Reads <code>lead_owner</code> back out of each lead&apos;s stored import
         row and claims it for that operator. Only touches leads nobody holds, so
         it never takes a lead away from whoever has it now, and running it twice
@@ -84,7 +84,7 @@ export function OwnershipBackfill() {
       </div>
 
       {result && !result.ok && (
-        <p role="alert" className="mt-3 text-[var(--color-danger)]">
+        <p role="alert" className="mt-3 text-danger">
           {result.error}
         </p>
       )}
@@ -92,12 +92,12 @@ export function OwnershipBackfill() {
       {result?.ok && (
         <div className="mt-3">
           {Object.keys(result.counts).length === 0 ? (
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               No unclaimed lead carries a <code>lead_owner</code>. Nothing to do.
             </p>
           ) : (
             <>
-              <p className="mb-2 text-[var(--color-ink-2)]">
+              <p className="mb-2 text-ink-2">
                 {result.dryRun ? "Would apply:" : "Applied:"}
               </p>
               <ul className="tabular space-y-1">
@@ -106,7 +106,7 @@ export function OwnershipBackfill() {
                   .map(([outcome, count]) => (
                     <li key={outcome} className={TONE[outcome] ?? ""}>
                       {count} {outcome.replace(/_/g, " ")}
-                      <span className="text-[var(--color-ink-3)]">
+                      <span className="text-ink-3">
                         {" "}
                         — {EXPLAIN[outcome] ?? ""}
                       </span>
@@ -117,14 +117,14 @@ export function OwnershipBackfill() {
           )}
 
           {result.problems.length > 0 && (
-            <div className="mt-3 border-t border-[var(--color-line)] pt-3">
-              <p className="mb-2 text-[var(--color-ink-2)]">
+            <div className="mt-3 border-t border-line pt-3">
+              <p className="mb-2 text-ink-2">
                 Needs a person ({result.problems.length} shown):
               </p>
-              <ul className="space-y-1 text-[var(--color-ink-3)]">
+              <ul className="space-y-1 text-ink-3">
                 {result.problems.map((row) => (
                   <li key={row.lead_id}>
-                    <span className="text-[var(--color-ink-2)]">
+                    <span className="text-ink-2">
                       {row.company ?? row.lead_id}
                     </span>{" "}
                     — {row.owner_email} — {row.outcome.replace(/_/g, " ")}

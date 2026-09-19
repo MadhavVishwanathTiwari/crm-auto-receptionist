@@ -7,9 +7,9 @@ import { BUTTON, PANEL } from "../ui";
 import { repairLeadWebsites, type WebsiteRepairResult } from "./actions";
 
 const TONE: Record<string, string> = {
-  repaired: "text-[var(--color-ok)]",
-  "repaired, but a demo already exists": "text-[var(--color-warn)]",
-  "no candidate in raw": "text-[var(--color-ink-3)]",
+  repaired: "text-ok",
+  "repaired, but a demo already exists": "text-warn",
+  "no candidate in raw": "text-ink-3",
 };
 
 const EXPLAIN: Record<string, string> = {
@@ -49,8 +49,8 @@ export function WebsiteRepair() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-[var(--color-ink)]">Websites that are maps links</h2>
-      <p className="mb-3 max-w-[70ch] text-[var(--color-ink-3)]">
+      <h2 className="mb-2 text-ink">Websites that are maps links</h2>
+      <p className="mb-3 max-w-[70ch] text-ink-3">
         Finds leads whose <code>website</code> is a Google Maps or directory link
         and reads the real company site back out of the stored import row. Those
         leads have a <code>website_domain</code> of <code>google.com</code>, which
@@ -80,7 +80,7 @@ export function WebsiteRepair() {
       </div>
 
       {result && !result.ok && (
-        <p role="alert" className="mt-3 text-[var(--color-danger)]">
+        <p role="alert" className="mt-3 text-danger">
           {result.error}
         </p>
       )}
@@ -88,12 +88,12 @@ export function WebsiteRepair() {
       {result?.ok && (
         <div className="mt-3">
           {Object.keys(result.counts).length === 0 ? (
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               No lead has a directory link for a website. Nothing to do.
             </p>
           ) : (
             <>
-              <p className="mb-2 text-[var(--color-ink-2)]">
+              <p className="mb-2 text-ink-2">
                 {result.dryRun ? "Would apply:" : "Applied:"}
               </p>
               <ul className="tabular space-y-1">
@@ -102,7 +102,7 @@ export function WebsiteRepair() {
                   .map(([outcome, count]) => (
                     <li key={outcome} className={TONE[outcome] ?? ""}>
                       {count} {outcome}
-                      <span className="text-[var(--color-ink-3)]">
+                      <span className="text-ink-3">
                         {" "}
                         — {EXPLAIN[outcome] ?? ""}
                       </span>
@@ -113,14 +113,14 @@ export function WebsiteRepair() {
           )}
 
           {result.notable.length > 0 && (
-            <div className="mt-3 border-t border-[var(--color-line)] pt-3">
-              <p className="mb-2 text-[var(--color-ink-2)]">
+            <div className="mt-3 border-t border-line pt-3">
+              <p className="mb-2 text-ink-2">
                 What changes ({result.notable.length} shown):
               </p>
-              <ul className="space-y-1 text-[var(--color-ink-3)]">
+              <ul className="space-y-1 text-ink-3">
                 {result.notable.map((row) => (
                   <li key={row.lead_id}>
-                    <span className="text-[var(--color-ink-2)]">
+                    <span className="text-ink-2">
                       {row.company ?? row.lead_id}
                     </span>{" "}
                     — {row.new_website ?? "no candidate"}

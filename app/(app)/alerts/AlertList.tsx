@@ -28,21 +28,21 @@ export interface AlertRow {
  * stopped doing something.
  */
 const KIND_COPY: Record<string, { label: string; tone: string }> = {
-  reply: { label: "reply", tone: "text-[var(--color-ok)]" },
-  bounce: { label: "bounce", tone: "text-[var(--color-danger)]" },
-  unsubscribe: { label: "unsubscribe", tone: "text-[var(--color-danger)]" },
-  mailbox_auth: { label: "mailbox auth", tone: "text-[var(--color-danger)]" },
-  cap_exhausted: { label: "cap exhausted", tone: "text-[var(--color-warn)]" },
-  import_failed: { label: "import failed", tone: "text-[var(--color-danger)]" },
-  orphan_demo: { label: "orphan demo", tone: "text-[var(--color-warn)]" },
+  reply: { label: "reply", tone: "text-ok" },
+  bounce: { label: "bounce", tone: "text-danger" },
+  unsubscribe: { label: "unsubscribe", tone: "text-danger" },
+  mailbox_auth: { label: "mailbox auth", tone: "text-danger" },
+  cap_exhausted: { label: "cap exhausted", tone: "text-warn" },
+  import_failed: { label: "import failed", tone: "text-danger" },
+  orphan_demo: { label: "orphan demo", tone: "text-warn" },
   timezone_unresolved: {
     label: "no timezone",
-    tone: "text-[var(--color-warn)]",
+    tone: "text-warn",
   },
-  dedupe_review: { label: "dedupe review", tone: "text-[var(--color-info)]" },
-  demo_missing: { label: "demo missing", tone: "text-[var(--color-warn)]" },
-  pre_send_review: { label: "pre-send review", tone: "text-[var(--color-info)]" },
-  new_pool_leads: { label: "new pool leads", tone: "text-[var(--color-info)]" },
+  dedupe_review: { label: "dedupe review", tone: "text-info" },
+  demo_missing: { label: "demo missing", tone: "text-warn" },
+  pre_send_review: { label: "pre-send review", tone: "text-info" },
+  new_pool_leads: { label: "new pool leads", tone: "text-info" },
 };
 
 function AlertLine({
@@ -56,7 +56,7 @@ function AlertLine({
 }) {
   const copy = KIND_COPY[alert.kind] ?? {
     label: alert.kind.replace(/_/g, " "),
-    tone: "text-[var(--color-ink-2)]",
+    tone: "text-ink-2",
   };
   const seen = alert.acknowledged_at !== null;
   const { zone } = useViewerZone();
@@ -64,15 +64,15 @@ function AlertLine({
   return (
     <li
       className={
-        "flex items-baseline gap-3 border-t border-[var(--color-line)] py-1 " +
+        "flex items-baseline gap-3 border-t border-line py-1 " +
         (seen ? "opacity-50" : "")
       }
     >
       <span className={"w-32 shrink-0 " + copy.tone}>{copy.label}</span>
-      <span className="tabular w-36 shrink-0 text-[var(--color-ink-3)]">
+      <span className="tabular w-36 shrink-0 text-ink-3">
         {formatYours(alert.created_at, zone)}
       </span>
-      <span className="w-52 shrink-0 truncate text-[var(--color-ink)]">
+      <span className="w-52 shrink-0 truncate text-ink">
         {alert.lead_id ? (
           <Link
             href={`/leads?lead=${alert.lead_id}`}
@@ -84,7 +84,7 @@ function AlertLine({
           "—"
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[var(--color-ink-2)]">
+      <span className="min-w-0 flex-1 truncate text-ink-2">
         {alert.message}
       </span>
       {!seen && (
@@ -181,8 +181,8 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
     <div className="space-y-4">
       <div className={PANEL}>
         <div className="flex items-baseline gap-3">
-          <h2 className="text-[var(--color-ink)]">Open</h2>
-          <span className="tabular text-[var(--color-ink-2)]">{open.length}</span>
+          <h2 className="text-ink">Open</h2>
+          <span className="tabular text-ink-2">{open.length}</span>
           {open.length > 0 && (
             <button
               type="button"
@@ -196,7 +196,7 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
         </div>
 
         {open.length === 0 ? (
-          <p className="mt-2 text-[var(--color-ink-3)]">
+          <p className="mt-2 text-ink-3">
             Nothing waiting. Replies, bounces and unsubscribes land here as the
             poller finds them, and each one has already halted its sequence
             through the event log.
@@ -218,8 +218,8 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
       {seen.length > 0 && (
         <div className={PANEL}>
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[var(--color-ink-2)]">Done</h2>
-            <span className="tabular text-[var(--color-ink-3)]">
+            <h2 className="text-ink-2">Done</h2>
+            <span className="tabular text-ink-3">
               {seen.length}
             </span>
           </div>

@@ -21,7 +21,7 @@ export default function Loading() {
   return (
     <div className={PAGE} aria-busy="true">
       <header className={PAGE_HEADER}>
-        <span className="text-[var(--color-ink-3)]">Loading</span>
+        <span className="text-ink-3">Loading</span>
       </header>
 
       <div className="min-h-0 flex-1 overflow-hidden p-4">
@@ -29,7 +29,7 @@ export default function Loading() {
           {Array.from({ length: ROWS }, (_, index) => (
             <div
               key={index}
-              className="h-[var(--row-height)] bg-[var(--color-surface)]"
+              className="h-[var(--row-height)] bg-surface"
               // Ragged widths so it reads as rows of text rather than as a
               // block that failed to load.
               style={{ width: `${88 - ((index * 7) % 34)}%` }}

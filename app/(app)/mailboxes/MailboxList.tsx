@@ -62,17 +62,17 @@ function MailboxCard({ row }: { row: MailboxRow }) {
   }
 
   const state = row.disconnected_at
-    ? { label: "needs reconnecting", tone: "text-[var(--color-danger)]" }
+    ? { label: "needs reconnecting", tone: "text-danger" }
     : row.paused_at
-      ? { label: "paused", tone: "text-[var(--color-warn)]" }
-      : { label: "sending", tone: "text-[var(--color-ok)]" };
+      ? { label: "paused", tone: "text-warn" }
+      : { label: "sending", tone: "text-ok" };
 
   return (
     <div className={PANEL}>
       <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="text-[var(--color-ink)]">{row.email}</h2>
+        <h2 className="text-ink">{row.email}</h2>
         <span className={state.tone}>{state.label}</span>
-        <span className="tabular text-[var(--color-ink-3)]">
+        <span className="tabular text-ink-3">
           {row.used_today} of {row.daily_cap} used today
         </span>
         <div className="ml-auto flex gap-2">
@@ -93,7 +93,7 @@ function MailboxCard({ row }: { row: MailboxRow }) {
       </div>
 
       {row.disconnected_at && (
-        <p className="mt-2 text-[var(--color-danger)]">
+        <p className="mt-2 text-danger">
           The Google grant stopped working, so nothing can go out from here.
           Reconnect it to carry on.
         </p>
@@ -101,7 +101,7 @@ function MailboxCard({ row }: { row: MailboxRow }) {
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">
+          <span className="text-ink-3">
             Display name, as the prospect sees it
           </span>
           <input
@@ -114,7 +114,7 @@ function MailboxCard({ row }: { row: MailboxRow }) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">Daily cap</span>
+          <span className="text-ink-3">Daily cap</span>
           <input
             value={dailyCap}
             onChange={(e) => setDailyCap(e.target.value.replace(/[^0-9]/g, ""))}
@@ -125,7 +125,7 @@ function MailboxCard({ row }: { row: MailboxRow }) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">
+          <span className="text-ink-3">
             Mailbox timezone, where the cap resets
           </span>
           <input
@@ -147,7 +147,7 @@ function MailboxCard({ row }: { row: MailboxRow }) {
         </button>
       </div>
 
-      <p className="mt-2 text-[var(--color-ink-3)]">
+      <p className="mt-2 text-ink-3">
         Last send{" "}
         {row.last_send_at ? formatYours(row.last_send_at, viewerZone) : "never"}
         {" · "}
@@ -159,10 +159,10 @@ function MailboxCard({ row }: { row: MailboxRow }) {
       </p>
 
       {saved && !error && (
-        <p className="mt-2 text-[var(--color-ok)]">Saved.</p>
+        <p className="mt-2 text-ok">Saved.</p>
       )}
       {error && (
-        <p role="alert" className="mt-2 text-[var(--color-danger)]">
+        <p role="alert" className="mt-2 text-danger">
           {error}
         </p>
       )}
@@ -185,8 +185,8 @@ export function MailboxList({
           className={
             PANEL +
             (notice.kind === "error"
-              ? " text-[var(--color-danger)]"
-              : " text-[var(--color-ok)]")
+              ? " text-danger"
+              : " text-ok")
           }
         >
           {notice.text}
@@ -195,12 +195,12 @@ export function MailboxList({
 
       <div className={PANEL}>
         <div className="flex items-baseline gap-3">
-          <h2 className="text-[var(--color-ink)]">Connect a sending mailbox</h2>
+          <h2 className="text-ink">Connect a sending mailbox</h2>
           <a href="/api/auth/google/start" className={BUTTON + " ml-auto"}>
             Connect with Google
           </a>
         </div>
-        <p className="mt-2 text-[var(--color-ink-2)]">
+        <p className="mt-2 text-ink-2">
           This is a separate grant from signing in. It asks for permission to
           send and to read, and deliberately not to modify: the app is
           structurally incapable of archiving, labelling or marking anything
@@ -209,7 +209,7 @@ export function MailboxList({
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-[var(--color-ink-3)]">
+        <p className="text-ink-3">
           No mailbox connected yet, so nothing can be planned or sent.
         </p>
       ) : (

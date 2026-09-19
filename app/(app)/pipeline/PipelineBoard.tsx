@@ -228,20 +228,20 @@ export function PipelineBoard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-4 border-b border-[var(--color-line)] px-4 py-1.5 text-[var(--color-ink-3)]">
+      <div className="flex shrink-0 items-center gap-4 border-b border-line px-4 py-1.5 text-ink-3">
         <span>
           Open pipeline{" "}
-          <span className="tabular text-[var(--color-ink)]">{formatMoney(open)}</span>
+          <span className="tabular text-ink">{formatMoney(open)}</span>
         </span>
         <span>
           Weighted{" "}
-          <span className="tabular text-[var(--color-ink-2)]">
+          <span className="tabular text-ink-2">
             {formatMoney(weighted)}
           </span>
         </span>
         <span>
           Won{" "}
-          <span className="tabular text-[var(--color-ok)]">{formatMoney(won)}</span>
+          <span className="tabular text-ok">{formatMoney(won)}</span>
         </span>
         {/* Prospect is excluded from every figure above: thousands of unworked
             leads at the default value is a number nobody believes. Cards in that
@@ -254,8 +254,8 @@ export function PipelineBoard({
       </div>
 
       {confirming && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-line)] px-4 py-1.5">
-          <span className="text-[var(--color-ink)]">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
+          <span className="text-ink">
             Close {confirming.lead.company_name ?? "this lead"} as{" "}
             <span className={STAGE_TONE[confirming.outcome] ?? ""}>
               {COLUMN_LABEL[confirming.outcome]}
@@ -264,7 +264,7 @@ export function PipelineBoard({
           </span>
           {/* The same sentence the drawer prints for the same action, so the app
               says one thing about what closing costs. */}
-          <span className="text-[var(--color-ink-3)]">
+          <span className="text-ink-3">
             Closing cannot be undone from the app. A terminal outcome wins over
             every later event, so reopening would need a database change.
           </span>
@@ -276,7 +276,7 @@ export function PipelineBoard({
               setConfirming(null);
               commitClose(target);
             }}
-            className={BUTTON + " text-[var(--color-danger)]"}
+            className={BUTTON + " text-danger"}
           >
             Yes, close it
           </button>
@@ -293,7 +293,7 @@ export function PipelineBoard({
       {error && (
         <p
           role="alert"
-          className="shrink-0 border-b border-[var(--color-line)] px-4 py-1.5 text-[var(--color-danger)]"
+          className="shrink-0 border-b border-line px-4 py-1.5 text-danger"
         >
           {error}
         </p>
@@ -324,20 +324,20 @@ export function PipelineBoard({
                   const leadId = event.dataTransfer.getData(DRAG_TYPE);
                   if (leadId) requestMove(leadId, column);
                 }}
-                className="flex h-full w-[240px] shrink-0 flex-col border border-[var(--color-line)] bg-[var(--color-surface)]"
+                className="flex h-full w-[240px] shrink-0 flex-col border border-line bg-surface"
               >
-                <header className="flex shrink-0 items-baseline gap-2 border-b border-[var(--color-line)] px-2 py-1">
+                <header className="flex shrink-0 items-baseline gap-2 border-b border-line px-2 py-1">
                   <span className={STAGE_TONE[column] ?? ""}>
                     {COLUMN_LABEL[column]}
                   </span>
-                  <span className="tabular ml-auto text-[var(--color-ink-3)]">
+                  <span className="tabular ml-auto text-ink-3">
                     {isProspect
                       ? `${rows.length} / ${formatCount(prospectCount)}`
                       : rows.length}
                   </span>
                   {/* Prospect must still never show a value, cards or not. */}
                   {!isProspect && rows.length > 0 && (
-                    <span className="tabular text-[var(--color-ink-3)]">
+                    <span className="tabular text-ink-3">
                       {formatMoney(value)}
                     </span>
                   )}
@@ -345,7 +345,7 @@ export function PipelineBoard({
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-1">
                   {rows.length === 0 ? (
-                    <p className="px-1 py-2 text-[var(--color-ink-3)]">Empty.</p>
+                    <p className="px-1 py-2 text-ink-3">Empty.</p>
                   ) : (
                     rows.map((lead) => (
                       <Card
@@ -364,7 +364,7 @@ export function PipelineBoard({
 
                   {/* Only the shown slice is draggable, so say which slice. */}
                   {isProspect && prospectCount > rows.length && (
-                    <p className="px-1 py-2 text-[var(--color-ink-3)]">
+                    <p className="px-1 py-2 text-ink-3">
                       The {rows.length} most recently touched of{" "}
                       {formatCount(prospectCount)}. The rest are on{" "}
                       <Link href="/leads" className="underline">
@@ -427,7 +427,7 @@ function Card({
       }}
       onDragEnd={() => onDragStateChange(null)}
       className={
-        "mb-1 border border-[var(--color-line)] bg-[var(--color-surface-2)] px-2 py-1.5 " +
+        "mb-1 border border-line bg-surface-2 px-2 py-1.5 " +
         (draggable ? "cursor-grab " : "") +
         (dragging ? "opacity-40" : "")
       }
@@ -437,18 +437,18 @@ function Card({
       <Link
         href={{ pathname: "/leads", query: { lead: lead.id } }}
         draggable={false}
-        className="block truncate text-[var(--color-ink)] hover:underline"
+        className="block truncate text-ink hover:underline"
       >
         {lead.company_name ?? "Unnamed"}
       </Link>
 
-      <p className="truncate text-[var(--color-ink-3)]">
+      <p className="truncate text-ink-3">
         {owner}
         {lead.city ? ` · ${lead.city}` : ""}
         {lead.state ? `, ${lead.state}` : ""}
       </p>
 
-      <p className="truncate text-[var(--color-ink-3)]">
+      <p className="truncate text-ink-3">
         {lead.status} {relativeTo(lead.status_updated_at, renderedAt)}
       </p>
 
@@ -456,7 +456,7 @@ function Card({
         <p
           className={
             "truncate " +
-            (overdue ? "text-[var(--color-danger)]" : "text-[var(--color-warn)]")
+            (overdue ? "text-danger" : "text-warn")
           }
         >
           {overdue ? "⚠ " : ""}
@@ -466,7 +466,7 @@ function Card({
       )}
 
       <div className="mt-1 flex items-center gap-2">
-        <span className="tabular text-[var(--color-ink-2)]">
+        <span className="tabular text-ink-2">
           {formatMoney(dealValue(lead, defaultDealValue))}
         </span>
 
@@ -479,7 +479,7 @@ function Card({
           value={columnFor(lead)}
           disabled={pending || frozen || closed}
           onChange={(event) => onMove(lead.id, event.target.value as BoardColumn)}
-          className="ml-auto border border-[var(--color-line)] bg-[var(--color-surface-3)] px-1 py-0.5 text-[var(--color-ink)] disabled:opacity-40"
+          className="ml-auto border border-line bg-surface-3 px-1 py-0.5 text-ink disabled:opacity-40"
         >
           {BOARD_COLUMNS.map((column) => (
             <option key={column} value={column}>

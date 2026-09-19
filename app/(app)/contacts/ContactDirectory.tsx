@@ -153,8 +153,8 @@ export function ContactDirectory({
   });
 
   return (
-    <div className="flex w-[380px] shrink-0 flex-col border-r border-[var(--color-line)]">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-line)] px-3 py-2">
+    <div className="flex w-[380px] shrink-0 flex-col border-r border-line">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2">
         <input
           type="search"
           placeholder="Name, company, title, email, phone"
@@ -190,14 +190,14 @@ export function ContactDirectory({
           <option value="name">A to Z</option>
           <option value="recent">Recently touched</option>
         </select>
-        <span className="tabular ml-auto text-[var(--color-ink-3)]">
+        <span className="tabular ml-auto text-ink-3">
           {rows.length} of {liveContacts.length}
         </span>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         {rows.length === 0 ? (
-          <p className="px-3 py-4 text-[var(--color-ink-3)]">Nobody matches that.</p>
+          <p className="px-3 py-4 text-ink-3">Nobody matches that.</p>
         ) : (
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -221,15 +221,15 @@ export function ContactDirectory({
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                   className={
-                    "flex items-baseline gap-2 px-3 text-left hover:bg-[var(--color-surface-2)] " +
-                    (selected ? "bg-[var(--color-surface-3)]" : "")
+                    "flex items-baseline gap-2 px-3 text-left hover:bg-surface-2 " +
+                    (selected ? "bg-surface-3" : "")
                   }
                 >
-                  <span className="truncate text-[var(--color-ink)]">
+                  <span className="truncate text-ink">
                     {name || contact.company_name || "Unnamed"}
                   </span>
                   {name && (
-                    <span className="truncate text-[var(--color-ink-3)]">
+                    <span className="truncate text-ink-3">
                       {contact.company_name ?? ""}
                     </span>
                   )}

@@ -89,10 +89,10 @@ export default async function WritePage({
     return (
       <div className={PAGE}>
         <header className={PAGE_HEADER}>
-          <h1 className="text-[var(--color-ink)]">Write</h1>
+          <h1 className="text-ink">Write</h1>
         </header>
         <div className="p-4">
-          <p className={PANEL + " text-[var(--color-danger)]"}>
+          <p className={PANEL + " text-danger"}>
             This org has no settings row, so nothing can be scheduled.
           </p>
         </div>

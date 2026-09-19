@@ -29,8 +29,8 @@ export function SendHistory({ series }: { series: DayCount[] }) {
   return (
     <div>
       <div className="flex items-baseline gap-2">
-        <span className="text-[var(--color-ink-3)]">Sent, last {series.length} days</span>
-        <span className="tabular text-[var(--color-ink)]">{total}</span>
+        <span className="text-ink-3">Sent, last {series.length} days</span>
+        <span className="tabular text-ink">{total}</span>
       </div>
 
       <div className="mt-2 flex h-[64px] items-end gap-[3px]">
@@ -38,7 +38,7 @@ export function SendHistory({ series }: { series: DayCount[] }) {
           <div
             key={point.day}
             title={`${point.day}: ${point.sent} sent`}
-            className="flex-1 bg-[var(--color-ink-3)]"
+            className="flex-1 bg-ink-3"
             style={{
               // A zero day still gets a hairline, so an empty stretch reads as
               // "nothing happened" rather than as a rendering gap.
@@ -51,7 +51,7 @@ export function SendHistory({ series }: { series: DayCount[] }) {
 
       {/* First and last only. At fourteen bars in a 13px UI a full axis is more
           pixels than data. */}
-      <div className="mt-1 flex justify-between text-[var(--color-ink-3)]">
+      <div className="mt-1 flex justify-between text-ink-3">
         <span className="tabular">{dayLabel(series[0]?.day ?? "")}</span>
         <span className="tabular">
           {dayLabel(series[series.length - 1]?.day ?? "")}
@@ -104,7 +104,7 @@ export function Funnel({ rows }: { rows: FunnelRow[] }) {
           </span>
           <span className="tabular w-[52px] shrink-0 text-right">{row.count}</span>
           {row.detail !== undefined && (
-            <span className="tabular w-[72px] shrink-0 text-right text-[var(--color-ink-3)]">
+            <span className="tabular w-[72px] shrink-0 text-right text-ink-3">
               {row.detail}
             </span>
           )}
@@ -128,13 +128,13 @@ export function Stat({
 }) {
   return (
     <div className="min-w-[124px]">
-      <p className="text-[var(--color-ink-3)]">{label}</p>
+      <p className="text-ink-3">{label}</p>
       {/* One colour class, never two. Tailwind utilities for the same property
           have equal specificity, so a base plus an override is decided by the
           order rules land in the stylesheet rather than by the order they are
           written here -- which had Failed rendering in ink instead of danger. */}
-      <p className={"tabular " + (tone || "text-[var(--color-ink)]")}>{value}</p>
-      {detail && <p className="text-[var(--color-ink-3)]">{detail}</p>}
+      <p className={"tabular " + (tone || "text-ink")}>{value}</p>
+      {detail && <p className="text-ink-3">{detail}</p>}
     </div>
   );
 }

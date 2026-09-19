@@ -19,15 +19,15 @@ export default async function TemplatesPage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Templates</h1>
-        <span className="ml-auto text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Templates</h1>
+        <span className="ml-auto text-ink-3">
           No em dashes. Loss-framed. One binary-choice ask.
         </span>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-[var(--color-danger)]">
+          <p role="alert" className="px-4 py-6 text-danger">
             Could not load templates: {error.message}
           </p>
         ) : (

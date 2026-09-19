@@ -160,7 +160,7 @@ function eventDetail(event: EventRow): string {
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex gap-2">
-      <span className="w-28 shrink-0 text-[var(--color-ink-3)]">{label}</span>
+      <span className="w-28 shrink-0 text-ink-3">{label}</span>
       <span className="min-w-0 break-words">{value || "—"}</span>
     </div>
   );
@@ -190,12 +190,12 @@ function DemoState({
           href={lead.demo_txt_url}
           target="_blank"
           rel="noreferrer"
-          className="underline decoration-[var(--color-line-strong)] underline-offset-2"
+          className="underline decoration-line-strong underline-offset-2"
         >
           {lead.demo_txt_url.replace(/^https?:\/\//, "")}
         </a>
         {lead.demo_ready_at && (
-          <span className="text-[var(--color-ink-3)]"> · {formatYours(lead.demo_ready_at, zone)}</span>
+          <span className="text-ink-3"> · {formatYours(lead.demo_ready_at, zone)}</span>
         )}
       </span>
     );
@@ -204,14 +204,14 @@ function DemoState({
   const failure = events.find((event) => event.type === "demo_failed");
   if (failure) {
     return (
-      <span className="text-[var(--color-warn)]">
+      <span className="text-warn">
         Could not build: {String(failure.payload?.reason ?? "no reason given")}
-        <span className="text-[var(--color-ink-3)]"> · {formatYours(failure.occurred_at, zone)}</span>
+        <span className="text-ink-3"> · {formatYours(failure.occurred_at, zone)}</span>
       </span>
     );
   }
 
-  return <span className="text-[var(--color-ink-3)]">not built yet</span>;
+  return <span className="text-ink-3">not built yet</span>;
 }
 
 /** A send that reached Gmail and was never recorded. See 0040. */
@@ -300,9 +300,9 @@ export function LeadDrawer({
   const editable = lead.claimed_by === null || mine;
 
   return (
-    <aside className="flex h-full w-[520px] shrink-0 flex-col border-l border-[var(--color-line)] bg-[var(--color-surface)]">
-      <header className="flex shrink-0 items-center gap-3 border-b border-[var(--color-line)] px-4 py-2">
-        <h2 className="truncate text-[var(--color-ink)]">
+    <aside className="flex h-full w-[520px] shrink-0 flex-col border-l border-line bg-surface">
+      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
+        <h2 className="truncate text-ink">
           {lead.company_name ?? "Lead"}
         </h2>
         <span className={STATUS_TONE[lead.status] ?? ""}>
@@ -328,7 +328,7 @@ export function LeadDrawer({
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
         {error && (
-          <p role="alert" className="text-[var(--color-danger)]">
+          <p role="alert" className="text-danger">
             {error}
           </p>
         )}
@@ -338,13 +338,13 @@ export function LeadDrawer({
             happened. Not gated on `editable`; resolve_stalled_send() checks
             ownership with app.same_operator, the same as set_lead_stage(). */}
         {stalledSends.length > 0 && (
-          <section className="space-y-2 border border-[var(--color-warn)] p-3">
-            <h3 className="text-[var(--color-warn)]">
+          <section className="space-y-2 border border-warn p-3">
+            <h3 className="text-warn">
               {stalledSends.length === 1
                 ? "An email may have gone out without being recorded"
                 : `${stalledSends.length} emails may have gone out without being recorded`}
             </h3>
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               Nothing more is sent to this lead until each one is settled. Check the
               sending mailbox&apos;s Sent folder, then say what happened.
               {stalledSends.length > STALLED_SHOWN &&
@@ -355,7 +355,7 @@ export function LeadDrawer({
                 const subject = send.rendered_subject ?? send.composed_subject;
                 return (
                   <li key={send.id} className="space-y-1">
-                    <div className="text-[var(--color-ink-2)]">
+                    <div className="text-ink-2">
                       <span className="tabular">T{send.step_number}</span> reached Gmail{" "}
                       <span className="tabular">
                         {formatYours(send.sending_at, viewerZone)}
@@ -363,7 +363,7 @@ export function LeadDrawer({
                       {subject ? ` — "${subject}"` : ""}
                     </div>
                     {send.error_detail && (
-                      <div className="break-words text-[var(--color-ink-3)]">
+                      <div className="break-words text-ink-3">
                         {send.error_detail}
                       </div>
                     )}
@@ -390,7 +390,7 @@ export function LeadDrawer({
               })}
             </ul>
             {stalledSends.length > STALLED_SHOWN && (
-              <p className="text-[var(--color-ink-3)]">
+              <p className="text-ink-3">
                 and {stalledSends.length - STALLED_SHOWN} more
               </p>
             )}
@@ -398,16 +398,16 @@ export function LeadDrawer({
         )}
 
         {nextSends.length > 0 && (
-          <section className="space-y-2 border border-[var(--color-line-2)] p-3">
-            <h3 className="text-[var(--color-ink-3)]">Next email</h3>
+          <section className="space-y-2 border border-line-2 p-3">
+            <h3 className="text-ink-3">Next email</h3>
             {nextSends.map((send) => {
               const editable = send.status === "planned" || send.status === "blocked";
               return (
                 <div key={send.id} className="space-y-1">
-                  <div className="text-[var(--color-ink-2)]">
+                  <div className="text-ink-2">
                     <span className="tabular">T{send.step_number}</span>{" "}
                     {send.status === "blocked" ? (
-                      <span className="text-[var(--color-warn)]">
+                      <span className="text-warn">
                         blocked: {send.outcome_reason ?? "no capacity"}
                       </span>
                     ) : send.status === "planned" ? (
@@ -416,13 +416,13 @@ export function LeadDrawer({
                         {formatYours(send.scheduled_at, viewerZone)} yours)
                       </span>
                     ) : (
-                      <span className="text-[var(--color-info)]">on its way out now</span>
+                      <span className="text-info">on its way out now</span>
                     )}
                   </div>
-                  <div className="break-words text-[var(--color-ink-3)]">
+                  <div className="break-words text-ink-3">
                     {send.composed_subject ? (
                       <>
-                        <span className="text-[var(--color-info)]">written</span> &ldquo;
+                        <span className="text-info">written</span> &ldquo;
                         {send.composed_subject}&rdquo;
                       </>
                     ) : (
@@ -495,7 +495,7 @@ export function LeadDrawer({
               lead.is_qualified ? (
                 "yes"
               ) : (
-                <span className="text-[var(--color-ink-3)]">
+                <span className="text-ink-3">
                   no — needs a work email
                 </span>
               )
@@ -515,14 +515,14 @@ export function LeadDrawer({
             <Field
               label="Halted"
               value={
-                <span className="text-[var(--color-danger)]">{lead.halt_reason}</span>
+                <span className="text-danger">{lead.halt_reason}</span>
               }
             />
           )}
         </section>
 
         <section>
-          <h3 className="mb-2 text-[var(--color-ink-3)]">Timezone</h3>
+          <h3 className="mb-2 text-ink-3">Timezone</h3>
           <div className="flex flex-wrap items-center gap-2">
             <input
               list="iana-zones"
@@ -558,7 +558,7 @@ export function LeadDrawer({
                 clear
               </button>
             )}
-            <span className="text-[var(--color-ink-3)]">
+            <span className="text-ink-3">
               {lead.timezone_source
                 ? `set ${lead.timezone_source}`
                 : "unresolved — never scheduled"}
@@ -567,17 +567,17 @@ export function LeadDrawer({
         </section>
 
         <section>
-          <h3 className="mb-2 text-[var(--color-ink-3)]">Deal</h3>
+          <h3 className="mb-2 text-ink-3">Deal</h3>
 
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="w-28 shrink-0 text-[var(--color-ink-3)]">Stage</span>
+              <span className="w-28 shrink-0 text-ink-3">Stage</span>
               {lead.terminal_outcome ? (
                 <span className={STAGE_TONE[lead.terminal_outcome] ?? ""}>
                   {COLUMN_LABEL[
                     lead.terminal_outcome as keyof typeof COLUMN_LABEL
                   ] ?? lead.terminal_outcome}{" "}
-                  <span className="text-[var(--color-ink-3)]">
+                  <span className="text-ink-3">
                     — closed, so the stage is final
                   </span>
                 </span>
@@ -614,7 +614,7 @@ export function LeadDrawer({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="w-28 shrink-0 text-[var(--color-ink-3)]">Value</span>
+              <span className="w-28 shrink-0 text-ink-3">Value</span>
               <input
                 inputMode="decimal"
                 value={value}
@@ -638,7 +638,7 @@ export function LeadDrawer({
               >
                 Save
               </button>
-              <span className="text-[var(--color-ink-3)]">
+              <span className="text-ink-3">
                 {lead.deal_value === null
                   ? `on the org default, ${formatMoney(defaultDealValue)}`
                   : `overridden — ${formatMoney(dealValue(lead, defaultDealValue))}`}
@@ -646,7 +646,7 @@ export function LeadDrawer({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="w-28 shrink-0 text-[var(--color-ink-3)]">
+              <span className="w-28 shrink-0 text-ink-3">
                 Next action
               </span>
               <input
@@ -694,19 +694,19 @@ export function LeadDrawer({
                 </button>
               )}
               {isOverdue(lead) && (
-                <span className="text-[var(--color-danger)]">overdue</span>
+                <span className="text-danger">overdue</span>
               )}
             </div>
           </div>
         </section>
 
         <section>
-          <h3 className="mb-2 text-[var(--color-ink-3)]">
+          <h3 className="mb-2 text-ink-3">
             Audits <span className="tabular">{evidence.length}</span>
           </h3>
           {evidence.length === 0 ? (
             <div className="space-y-2">
-              <p className="text-[var(--color-ink-3)]">Not audited yet.</p>
+              <p className="text-ink-3">Not audited yet.</p>
 
               {/* An audit is the default, not a requirement. Auditing a lead
                   costs a text message and a stopwatch, which is worth it for a
@@ -714,7 +714,7 @@ export function LeadDrawer({
                   a scraped import. Queueing without one sends the generic copy,
                   which quotes no audit and therefore cannot contradict itself. */}
               {lead.status === "queued" ? (
-                <p className="text-[var(--color-ink-2)]">
+                <p className="text-ink-2">
                   Queued without an audit, so it gets the generic first touch
                   rather than the one that quotes a callback.
                 </p>
@@ -729,7 +729,7 @@ export function LeadDrawer({
                     >
                       Send without an audit
                     </button>
-                    <span className="text-[var(--color-ink-3)]">
+                    <span className="text-ink-3">
                       Generic copy, no callback quoted. Use it on leads not worth
                       auditing.
                     </span>
@@ -740,12 +740,12 @@ export function LeadDrawer({
           ) : (
             <div className="space-y-2">
               {evidence.map((row) => (
-                <div key={row.id} className="border border-[var(--color-line)] p-2">
-                  <div className="flex flex-wrap gap-x-4 text-[var(--color-ink-2)]">
+                <div key={row.id} className="border border-line p-2">
+                  <div className="flex flex-wrap gap-x-4 text-ink-2">
                     <span>{row.angle_type.replace(/_/g, " ")}</span>
                     <span className="tabular">
                       {row.audited_at_local.replace("T", " ").slice(0, 16)}{" "}
-                      <span className="text-[var(--color-ink-3)]">
+                      <span className="text-ink-3">
                         {row.audit_timezone}
                       </span>
                     </span>
@@ -757,7 +757,7 @@ export function LeadDrawer({
                     )}
                   </div>
                   {row.notes && (
-                    <p className="mt-1 text-[var(--color-ink-3)]">{row.notes}</p>
+                    <p className="mt-1 text-ink-3">{row.notes}</p>
                   )}
                   {row.screenshot_path && screenshotUrls[row.screenshot_path] && (
                     <a
@@ -776,7 +776,7 @@ export function LeadDrawer({
         </section>
 
         <section>
-          <h3 className="mb-2 text-[var(--color-ink-3)]">Timeline</h3>
+          <h3 className="mb-2 text-ink-3">Timeline</h3>
 
           {/* `note` has been in the event enum since 0001 and permitted to
               authenticated users since 0005, and nothing has ever written one.
@@ -805,21 +805,21 @@ export function LeadDrawer({
           </div>
 
           {events.length === 0 && !imported ? (
-            <p className="text-[var(--color-ink-3)]">No events yet.</p>
+            <p className="text-ink-3">No events yet.</p>
           ) : (
             <ul className="space-y-0.5">
               {events.map((event) => (
                 <li key={event.id} className="flex gap-3">
-                  <span className="tabular w-32 shrink-0 text-[var(--color-ink-3)]">
+                  <span className="tabular w-32 shrink-0 text-ink-3">
                     {formatYours(event.occurred_at, viewerZone)}
                   </span>
                   <span className={STATUS_TONE[event.type] ?? ""}>
                     {event.type.replace(/_/g, " ")}
                   </span>
-                  <span className="min-w-0 flex-1 break-words text-[var(--color-ink-2)]">
+                  <span className="min-w-0 flex-1 break-words text-ink-2">
                     {eventDetail(event)}
                   </span>
-                  <span className="shrink-0 text-[var(--color-ink-3)]">
+                  <span className="shrink-0 text-ink-3">
                     {whoDid(event.actor_id, actorNames)}
                   </span>
                 </li>
@@ -828,14 +828,14 @@ export function LeadDrawer({
                   wrote down: rebuilt from the lead and its import. */}
               {imported && !events.some((event) => event.type === "imported") && (
                 <li className="flex gap-3">
-                  <span className="tabular w-32 shrink-0 text-[var(--color-ink-3)]">
+                  <span className="tabular w-32 shrink-0 text-ink-3">
                     {formatYours(imported.at, viewerZone)}
                   </span>
                   <span>imported</span>
-                  <span className="min-w-0 flex-1 break-words text-[var(--color-ink-2)]">
+                  <span className="min-w-0 flex-1 break-words text-ink-2">
                     {imported.filename ? `from ${imported.filename}` : ""}
                   </span>
-                  <span className="shrink-0 text-[var(--color-ink-3)]">
+                  <span className="shrink-0 text-ink-3">
                     {whoDid(imported.by, actorNames)}
                   </span>
                 </li>
@@ -844,8 +844,8 @@ export function LeadDrawer({
           )}
         </section>
 
-        <section className="border-t border-[var(--color-line)] pt-4">
-          <h3 className="mb-2 text-[var(--color-ink-3)]">Stop contacting</h3>
+        <section className="border-t border-line pt-4">
+          <h3 className="mb-2 text-ink-3">Stop contacting</h3>
 
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <select
@@ -911,7 +911,7 @@ export function LeadDrawer({
                     setConfirmingClose(false);
                     run(() => closeLead(lead.id, outcome, note));
                   }}
-                  className={BUTTON + " text-[var(--color-danger)]"}
+                  className={BUTTON + " text-danger"}
                 >
                   Yes, close it
                 </button>
@@ -934,7 +934,7 @@ export function LeadDrawer({
               </button>
             )}
           </div>
-          <p className="mt-2 text-[var(--color-ink-3)]">
+          <p className="mt-2 text-ink-3">
             Closing cannot be undone from the app. A terminal outcome wins over every
             later event, so reopening would need a database change.
           </p>

@@ -7,12 +7,12 @@ import { BUTTON, PANEL } from "../ui";
 import { rerouteSendsToOwner, type RerouteResult } from "./actions";
 
 const TONE: Record<string, string> = {
-  "would move": "text-[var(--color-ok)]",
-  moved: "text-[var(--color-ok)]",
-  "already correct": "text-[var(--color-ink-3)]",
-  "pinned to its thread, left alone": "text-[var(--color-ink-3)]",
-  "lead is unclaimed, left alone": "text-[var(--color-warn)]",
-  "owner has no sendable mailbox, left alone": "text-[var(--color-danger)]",
+  "would move": "text-ok",
+  moved: "text-ok",
+  "already correct": "text-ink-3",
+  "pinned to its thread, left alone": "text-ink-3",
+  "lead is unclaimed, left alone": "text-warn",
+  "owner has no sendable mailbox, left alone": "text-danger",
 };
 
 const EXPLAIN: Record<string, string> = {
@@ -53,8 +53,8 @@ export function SendRouting() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-[var(--color-ink)]">Sends queued on the wrong mailbox</h2>
-      <p className="mb-3 max-w-[70ch] text-[var(--color-ink-3)]">
+      <h2 className="mb-2 text-ink">Sends queued on the wrong mailbox</h2>
+      <p className="mb-3 max-w-[70ch] text-ink-3">
         Until now a send went out from whichever mailbox had the most room that
         day, not from the person who owns the lead. This moves anything still
         waiting onto its owner&apos;s account. It never touches a send that has
@@ -85,7 +85,7 @@ export function SendRouting() {
       </div>
 
       {result && !result.ok && (
-        <p role="alert" className="mt-3 text-[var(--color-danger)]">
+        <p role="alert" className="mt-3 text-danger">
           {result.error}
         </p>
       )}
@@ -93,12 +93,12 @@ export function SendRouting() {
       {result?.ok && (
         <div className="mt-3">
           {Object.keys(result.counts).length === 0 ? (
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               Nothing is queued right now. Nothing to do.
             </p>
           ) : (
             <>
-              <p className="mb-2 text-[var(--color-ink-2)]">
+              <p className="mb-2 text-ink-2">
                 {result.dryRun ? "Would apply:" : "Applied:"}
               </p>
               <ul className="tabular space-y-1">
@@ -107,7 +107,7 @@ export function SendRouting() {
                   .map(([outcome, count]) => (
                     <li key={outcome} className={TONE[outcome] ?? ""}>
                       {count} {outcome}
-                      <span className="text-[var(--color-ink-3)]">
+                      <span className="text-ink-3">
                         {EXPLAIN[outcome] ? ` — ${EXPLAIN[outcome]}` : ""}
                       </span>
                     </li>
@@ -117,14 +117,14 @@ export function SendRouting() {
           )}
 
           {result.notable.length > 0 && (
-            <div className="mt-3 border-t border-[var(--color-line)] pt-3">
-              <p className="mb-2 text-[var(--color-ink-2)]">
+            <div className="mt-3 border-t border-line pt-3">
+              <p className="mb-2 text-ink-2">
                 Worth reading before you run it ({result.notable.length} shown):
               </p>
-              <ul className="space-y-1 text-[var(--color-ink-3)]">
+              <ul className="space-y-1 text-ink-3">
                 {result.notable.map((row) => (
                   <li key={row.send_id}>
-                    <span className="text-[var(--color-ink-2)]">
+                    <span className="text-ink-2">
                       {row.company ?? row.lead_id}
                     </span>{" "}
                     T{row.step_number} — {row.from_mailbox ?? "no mailbox"}

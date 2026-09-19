@@ -27,15 +27,15 @@ export default async function SuppressionsPage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Suppressions</h1>
-        <span className="ml-auto text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Suppressions</h1>
+        <span className="ml-auto text-ink-3">
           Anyone can add. Only an admin can remove.
         </span>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-[var(--color-danger)]">
+          <p role="alert" className="px-4 py-6 text-danger">
             Could not load the list: {error.message}
           </p>
         ) : (

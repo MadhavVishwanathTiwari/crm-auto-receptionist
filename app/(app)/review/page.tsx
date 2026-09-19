@@ -43,15 +43,15 @@ export default async function ReviewPage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Review</h1>
-        <span className="tabular text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Review</h1>
+        <span className="tabular text-ink-3">
           {items.length} pending
         </span>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-[var(--color-danger)]">
+          <p role="alert" className="px-4 py-6 text-danger">
             Could not load the review queue: {error.message}
           </p>
         ) : (

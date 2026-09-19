@@ -230,7 +230,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
   return (
     <div className="space-y-4">
       <div className={PANEL}>
-        <label htmlFor="csv" className="mb-2 block text-[var(--color-ink-2)]">
+        <label htmlFor="csv" className="mb-2 block text-ink-2">
           CSV file
         </label>
         <input
@@ -239,9 +239,9 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
           accept=".csv,text/csv"
           disabled={busy}
           onChange={onPick}
-          className={INPUT + " w-[400px] file:mr-3 file:border-0 file:bg-transparent file:text-[var(--color-ink-2)]"}
+          className={INPUT + " w-[400px] file:mr-3 file:border-0 file:bg-transparent file:text-ink-2"}
         />
-        <p className="mt-2 text-[var(--color-ink-3)]">
+        <p className="mt-2 text-ink-3">
           Clay exports and the legacy outreach sheet are both recognised, and any
           other layout can be mapped by hand below. Nothing is written until you
           commit.
@@ -249,14 +249,14 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
       </div>
 
       {error && (
-        <p role="alert" className={PANEL + " text-[var(--color-danger)]"}>
+        <p role="alert" className={PANEL + " text-danger"}>
           {error}
         </p>
       )}
 
       {result && (
         <div className={PANEL}>
-          <h2 className="mb-2 text-[var(--color-ink)]">
+          <h2 className="mb-2 text-ink">
             Imported {result.totalRows} rows
           </h2>
           <ul className="tabular space-y-1">
@@ -267,7 +267,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
             ))}
           </ul>
           {(result.counts.flagged_review ?? 0) > 0 && (
-            <p className="mt-3 text-[var(--color-ink-2)]">
+            <p className="mt-3 text-ink-2">
               <a href="/review" className="underline">
                 {result.counts.flagged_review} near-duplicates need a decision
               </a>
@@ -275,7 +275,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
           )}
 
           {result.ownership && (
-            <p className="mt-3 text-[var(--color-ink-2)]">
+            <p className="mt-3 text-ink-2">
               Ownership:{" "}
               {Object.entries(result.ownership)
                 .map(([outcome, count]) => `${count} ${outcome.replace(/_/g, " ")}`)
@@ -283,7 +283,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
             </p>
           )}
           {result.ownershipError && (
-            <p className="mt-2 text-[var(--color-warn)]">
+            <p className="mt-2 text-warn">
               The leads imported, but ownership did not apply:{" "}
               {result.ownershipError} You can re-apply it below.
             </p>
@@ -295,20 +295,20 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
         <>
           <div className={PANEL}>
             <div className="mb-3 flex items-center gap-4">
-              <span className="text-[var(--color-ink)]">
+              <span className="text-ink">
                 {SHAPE_LABEL[preview.shape]}
               </span>
-              <span className="tabular text-[var(--color-ink-2)]">
+              <span className="tabular text-ink-2">
                 {preview.totalRows} rows
               </span>
               {preview.invalidRows > 0 && (
-                <span className="tabular text-[var(--color-danger)]">
+                <span className="tabular text-danger">
                   {preview.invalidRows} will fail validation
                 </span>
               )}
             </div>
 
-            <label className="text-[var(--color-ink-2)]">
+            <label className="text-ink-2">
               Headers are on row{" "}
               <input
                 type="number"
@@ -322,10 +322,10 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
             </label>
 
             {reusable && (
-              <p className="mt-3 flex items-center gap-3 text-[var(--color-ink-2)]">
+              <p className="mt-3 flex items-center gap-3 text-ink-2">
                 <span>
                   These columns match an earlier upload,{" "}
-                  <span className="text-[var(--color-ink)]">{reusable.filename}</span>.
+                  <span className="text-ink">{reusable.filename}</span>.
                 </span>
                 <button
                   type="button"
@@ -341,10 +341,10 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
 
           {readiness.length > 0 && (
             <div className={PANEL}>
-              <h2 className="mb-2 text-[var(--color-ink)]">
+              <h2 className="mb-2 text-ink">
                 These leads will import, but
               </h2>
-              <ul className="max-w-[80ch] space-y-1 text-[var(--color-warn)]">
+              <ul className="max-w-[80ch] space-y-1 text-warn">
                 {readiness.map((message) => (
                   <li key={message}>{message}</li>
                 ))}
@@ -354,8 +354,8 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
 
           <div className={PANEL}>
             <div className="mb-3 flex items-baseline gap-3">
-              <h2 className="text-[var(--color-ink)]">Column mapping</h2>
-              <span className="text-[var(--color-ink-3)]">
+              <h2 className="text-ink">Column mapping</h2>
+              <span className="text-ink-3">
                 {recomputing
                   ? "checking..."
                   : `what ${preview.totalRows === 1 ? "the row" : "these rows"} would become`}
@@ -371,10 +371,10 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
                 return (
                   <div key={spec.field}>
                     <label className="flex items-center gap-3">
-                      <span className="w-40 shrink-0 text-[var(--color-ink-2)]">
+                      <span className="w-40 shrink-0 text-ink-2">
                         {spec.label}
                         {spec.required && (
-                          <span className="text-[var(--color-danger)]"> *</span>
+                          <span className="text-danger"> *</span>
                         )}
                       </span>
                       <select
@@ -395,17 +395,17 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
                         className={
                           "tabular w-16 shrink-0 text-right " +
                           (empty
-                            ? "text-[var(--color-danger)]"
+                            ? "text-danger"
                             : warning
-                              ? "text-[var(--color-warn)]"
-                              : "text-[var(--color-ink-3)]")
+                              ? "text-warn"
+                              : "text-ink-3")
                         }
                       >
                         {stat ? `${stat.filled}/${stat.total}` : ""}
                       </span>
 
                       <span
-                        className="min-w-0 flex-1 truncate text-[var(--color-ink-3)]"
+                        className="min-w-0 flex-1 truncate text-ink-3"
                         title={stat?.examples.join("  ·  ")}
                       >
                         {stat?.examples[0] ?? ""}
@@ -413,7 +413,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
                     </label>
 
                     {warning && (
-                      <p className="ml-[11.75rem] max-w-[70ch] text-[var(--color-warn)]">
+                      <p className="ml-[11.75rem] max-w-[70ch] text-warn">
                         {warning}
                       </p>
                     )}
@@ -423,9 +423,9 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
             </div>
 
             {insight && insight.unmapped.length > 0 && (
-              <div className="mt-4 border-t border-[var(--color-line)] pt-3">
-                <p className="max-w-[80ch] text-[var(--color-ink-3)]">
-                  <span className="text-[var(--color-ink-2)]">
+              <div className="mt-4 border-t border-line pt-3">
+                <p className="max-w-[80ch] text-ink-3">
+                  <span className="text-ink-2">
                     Not imported ({insight.unmapped.length}):
                   </span>{" "}
                   {insight.unmapped.join(", ")}
@@ -435,14 +435,14 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
           </div>
 
           <div className={PANEL + " overflow-x-auto"}>
-            <h2 className="mb-3 text-[var(--color-ink)]">First rows</h2>
+            <h2 className="mb-3 text-ink">First rows</h2>
             <table className="w-max border-collapse">
               <thead>
                 <tr>
                   {preview.headers.map((header) => (
                     <th
                       key={header}
-                      className="border border-[var(--color-line)] px-2 py-1 text-left font-normal text-[var(--color-ink-3)]"
+                      className="border border-line px-2 py-1 text-left font-normal text-ink-3"
                     >
                       {header}
                     </th>
@@ -455,7 +455,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
                     {preview.headers.map((header) => (
                       <td
                         key={header}
-                        className="max-w-[220px] truncate border border-[var(--color-line)] px-2 py-1"
+                        className="max-w-[220px] truncate border border-line px-2 py-1"
                       >
                         {row[header]}
                       </td>
@@ -476,7 +476,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
               {busy ? "Importing..." : `Import ${preview.totalRows} rows`}
             </button>
             {missingRequired.length > 0 && (
-              <span className="text-[var(--color-danger)]">
+              <span className="text-danger">
                 Map {missingRequired.map((s) => s.label).join(" and ")} first.
               </span>
             )}

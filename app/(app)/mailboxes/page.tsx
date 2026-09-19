@@ -122,15 +122,15 @@ export default async function MailboxesPage({
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Mailboxes</h1>
-        <span className="ml-auto text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Mailboxes</h1>
+        <span className="ml-auto text-ink-3">
           Caps reset in the mailbox&rsquo;s own timezone, not the prospect&rsquo;s.
         </span>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-[var(--color-danger)]">
+          <p role="alert" className="px-4 py-6 text-danger">
             Could not load mailboxes: {error.message}
           </p>
         ) : (

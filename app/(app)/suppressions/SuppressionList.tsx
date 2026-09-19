@@ -71,10 +71,10 @@ export function SuppressionList({
   return (
     <div className="space-y-4 p-4">
       <div className={PANEL}>
-        <h2 className="mb-3 text-[var(--color-ink)]">Add to the list</h2>
+        <h2 className="mb-3 text-ink">Add to the list</h2>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">
+            <span className="text-ink-3">
               Email, domain or phone
             </span>
             <input
@@ -86,7 +86,7 @@ export function SuppressionList({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">Reason</span>
+            <span className="text-ink-3">Reason</span>
             <select
               value={reason}
               onChange={(e) => setReason(e.target.value as SuppressionReason)}
@@ -101,7 +101,7 @@ export function SuppressionList({
           </label>
 
           <label className="flex min-w-[200px] flex-1 flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">Notes</span>
+            <span className="text-ink-3">Notes</span>
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -118,29 +118,29 @@ export function SuppressionList({
             Suppress
           </button>
         </div>
-        <p className="mt-2 text-[var(--color-ink-3)]">
+        <p className="mt-2 text-ink-3">
           A domain covers every contact at that company. Suppressing is checked
           immediately before every send.
         </p>
         {error && (
-          <p role="alert" className="mt-2 text-[var(--color-danger)]">
+          <p role="alert" className="mt-2 text-danger">
             {error}
           </p>
         )}
       </div>
 
       <div className={PANEL}>
-        <h2 className="mb-3 text-[var(--color-ink)]">
+        <h2 className="mb-3 text-ink">
           On the list{" "}
-          <span className="tabular text-[var(--color-ink-3)]">{rows.length}</span>
+          <span className="tabular text-ink-3">{rows.length}</span>
         </h2>
 
         {rows.length === 0 ? (
-          <p className="text-[var(--color-ink-3)]">Nobody suppressed yet.</p>
+          <p className="text-ink-3">Nobody suppressed yet.</p>
         ) : (
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-left text-[var(--color-ink-3)]">
+              <tr className="text-left text-ink-3">
                 <th className="py-1 font-normal">Target</th>
                 <th className="py-1 font-normal">Kind</th>
                 <th className="py-1 font-normal">Reason</th>
@@ -159,16 +159,16 @@ export function SuppressionList({
                     ? "domain"
                     : "phone";
                 return (
-                  <tr key={row.id} className="border-t border-[var(--color-line)]">
+                  <tr key={row.id} className="border-t border-line">
                     <td className="py-1">{target}</td>
-                    <td className="py-1 text-[var(--color-ink-3)]">{kind}</td>
-                    <td className="py-1 text-[var(--color-ink-2)]">
+                    <td className="py-1 text-ink-3">{kind}</td>
+                    <td className="py-1 text-ink-2">
                       {row.reason.replace(/_/g, " ")}
                     </td>
-                    <td className="py-1 text-[var(--color-ink-2)]">
+                    <td className="py-1 text-ink-2">
                       {row.notes ?? "—"}
                     </td>
-                    <td className="py-1 text-[var(--color-ink-3)]">
+                    <td className="py-1 text-ink-3">
                       {formatYours(row.created_at, zone, "date")}
                     </td>
                     <td className="py-1 text-right">

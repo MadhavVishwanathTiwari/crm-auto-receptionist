@@ -86,14 +86,14 @@ const BLOCKER_LABEL: Record<Blocker, string> = {
 };
 
 const BLOCKER_TONE: Record<Blocker, string> = {
-  ready: "text-[var(--color-ok)]",
-  booked: "text-[var(--color-info)]",
-  not_audited: "text-[var(--color-info)]",
-  not_claimed: "text-[var(--color-info)]",
-  no_timezone: "text-[var(--color-warn)]",
-  not_qualified: "text-[var(--color-warn)]",
-  suppressed: "text-[var(--color-ink-3)]",
-  halted: "text-[var(--color-ink-3)]",
+  ready: "text-ok",
+  booked: "text-info",
+  not_audited: "text-info",
+  not_claimed: "text-info",
+  no_timezone: "text-warn",
+  not_qualified: "text-warn",
+  suppressed: "text-ink-3",
+  halted: "text-ink-3",
 };
 
 /** A rate, or a dash when the denominator is too small to mean anything. */
@@ -182,14 +182,14 @@ export default async function DashboardPage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Dashboard</h1>
+        <h1 className="text-ink">Dashboard</h1>
         {activity && (
-          <span className="text-[var(--color-ink-3)]">
+          <span className="text-ink-3">
             Last {activity.days} days, counted in {activity.zone}
           </span>
         )}
         {settings.data?.dry_run && (
-          <span className="text-[var(--color-warn)]">
+          <span className="text-warn">
             Dry run is on, so nothing is actually sending
           </span>
         )}
@@ -197,7 +197,7 @@ export default async function DashboardPage() {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {activityResult.error ? (
-          <p role="alert" className="px-1 py-4 text-[var(--color-danger)]">
+          <p role="alert" className="px-1 py-4 text-danger">
             Could not load activity: {activityResult.error.message}
           </p>
         ) : null}
@@ -205,7 +205,7 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 gap-3">
           {/* --- outbound activity ------------------------------------------ */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-[var(--color-ink)]">Outbound</h2>
+            <h2 className="mb-3 text-ink">Outbound</h2>
 
             {activity && <SendHistory series={activity.series} />}
 
@@ -220,14 +220,14 @@ export default async function DashboardPage() {
                 label="Blocked"
                 value={activity?.sends.blocked ?? 0}
                 tone={
-                  (activity?.sends.blocked ?? 0) > 0 ? "text-[var(--color-warn)]" : ""
+                  (activity?.sends.blocked ?? 0) > 0 ? "text-warn" : ""
                 }
               />
               <Stat
                 label="Failed"
                 value={activity?.sends.failed ?? 0}
                 tone={
-                  (activity?.sends.failed ?? 0) > 0 ? "text-[var(--color-danger)]" : ""
+                  (activity?.sends.failed ?? 0) > 0 ? "text-danger" : ""
                 }
               />
             </div>
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
               <Stat
                 label="Replied"
                 value={activity?.events.replied ?? 0}
-                tone="text-[var(--color-ok)]"
+                tone="text-ok"
                 detail={rate(activity?.events.replied ?? 0, sentWindow)}
               />
               <Stat
@@ -246,7 +246,7 @@ export default async function DashboardPage() {
                 value={activity?.events.bounced ?? 0}
                 tone={
                   (activity?.events.bounced ?? 0) > 0
-                    ? "text-[var(--color-danger)]"
+                    ? "text-danger"
                     : ""
                 }
                 detail={rate(activity?.events.bounced ?? 0, sentWindow)}
@@ -260,9 +260,9 @@ export default async function DashboardPage() {
 
           {/* --- mailbox headroom ------------------------------------------- */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-[var(--color-ink)]">Mailboxes</h2>
+            <h2 className="mb-3 text-ink">Mailboxes</h2>
             {(activity?.mailboxes.length ?? 0) === 0 ? (
-              <p className="text-[var(--color-ink-3)]">
+              <p className="text-ink-3">
                 No mailbox connected.{" "}
                 <Link href="/mailboxes" className="underline">
                   Connect one
@@ -275,10 +275,10 @@ export default async function DashboardPage() {
                   key: mailbox.mailbox_id,
                   label: mailbox.email.split("@")[0],
                   tone: !mailbox.sendable
-                    ? "text-[var(--color-ink-3)]"
+                    ? "text-ink-3"
                     : mailbox.used_today >= mailbox.daily_cap
-                      ? "text-[var(--color-warn)]"
-                      : "text-[var(--color-info)]",
+                      ? "text-warn"
+                      : "text-info",
                   count: mailbox.used_today,
                   // Counted on cap_date in the MAILBOX's zone, which is the day
                   // the cap actually resets in. /mailboxes reads it the same
@@ -287,14 +287,14 @@ export default async function DashboardPage() {
                 }))}
               />
             )}
-            <p className="mt-3 text-[var(--color-ink-3)]">
+            <p className="mt-3 text-ink-3">
               Used today, in each mailbox&apos;s own timezone.
             </p>
           </section>
 
           {/* --- pipeline ---------------------------------------------------- */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-[var(--color-ink)]">Pipeline</h2>
+            <h2 className="mb-3 text-ink">Pipeline</h2>
 
             <div className="mb-4 flex flex-wrap gap-4">
               {/* Computed by lib/pipeline/stages.ts, the same functions the
@@ -303,12 +303,12 @@ export default async function DashboardPage() {
               <Stat
                 label="Weighted"
                 value={formatMoney(weighted)}
-                tone="text-[var(--color-ink-2)]"
+                tone="text-ink-2"
               />
               <Stat
                 label="Won"
                 value={formatMoney(won)}
-                tone="text-[var(--color-ok)]"
+                tone="text-ok"
               />
               <Stat
                 label="Win rate"
@@ -344,7 +344,7 @@ export default async function DashboardPage() {
             />
 
             {activity && Object.keys(activity.stage_moves).length > 0 && (
-              <p className="mt-3 text-[var(--color-ink-3)]">
+              <p className="mt-3 text-ink-3">
                 Moved in the last {activity.days} days:{" "}
                 {Object.entries(activity.stage_moves)
                   .map(
@@ -359,19 +359,19 @@ export default async function DashboardPage() {
 
           {/* --- work to do now ---------------------------------------------- */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-[var(--color-ink)]">Now</h2>
+            <h2 className="mb-3 text-ink">Now</h2>
 
             <div className="mb-4 flex flex-wrap gap-4">
               <Stat
                 label="Overdue follow-ups"
                 value={overdue}
-                tone={overdue > 0 ? "text-[var(--color-danger)]" : ""}
+                tone={overdue > 0 ? "text-danger" : ""}
               />
               <Stat
                 label="Open alerts"
                 value={activity?.open_alerts ?? 0}
                 tone={
-                  (activity?.open_alerts ?? 0) > 0 ? "text-[var(--color-ok)]" : ""
+                  (activity?.open_alerts ?? 0) > 0 ? "text-ok" : ""
                 }
               />
               <Stat label="Unclaimed" value={unclaimed} />
@@ -390,7 +390,7 @@ export default async function DashboardPage() {
                 }))}
             />
 
-            <p className="mt-3 text-[var(--color-ink-3)]">
+            <p className="mt-3 text-ink-3">
               Grouped on{" "}
               <Link href="/queue" className="underline">
                 Queue
@@ -401,12 +401,12 @@ export default async function DashboardPage() {
 
           {/* --- per operator ------------------------------------------------ */}
           <section className={PANEL + " col-span-2"}>
-            <h2 className="mb-3 text-[var(--color-ink)]">By operator</h2>
+            <h2 className="mb-3 text-ink">By operator</h2>
             {perOperator.length === 0 ? (
-              <p className="text-[var(--color-ink-3)]">Nobody in this org yet.</p>
+              <p className="text-ink-3">Nobody in this org yet.</p>
             ) : (
               <div className="space-y-1">
-                <div className="flex gap-4 text-[var(--color-ink-3)]">
+                <div className="flex gap-4 text-ink-3">
                   <span className="w-[140px] shrink-0">Operator</span>
                   <span className="w-[80px] text-right">Claimed</span>
                   <span className="w-[80px] text-right">Sent</span>
@@ -415,17 +415,17 @@ export default async function DashboardPage() {
                   <span className="w-[100px] text-right">Pipeline</span>
                 </div>
                 {perOperator.map((row) => (
-                  <div key={row.name} className="flex gap-4 text-[var(--color-ink)]">
+                  <div key={row.name} className="flex gap-4 text-ink">
                     <span className="w-[140px] shrink-0 truncate">{row.name}</span>
                     <span className="tabular w-[80px] text-right">{row.claimed}</span>
                     <span className="tabular w-[80px] text-right">{row.sent}</span>
-                    <span className="tabular w-[80px] text-right text-[var(--color-ok)]">
+                    <span className="tabular w-[80px] text-right text-ok">
                       {row.won}
                     </span>
                     <span
                       className={
                         "tabular w-[80px] text-right " +
-                        (row.overdue > 0 ? "text-[var(--color-danger)]" : "")
+                        (row.overdue > 0 ? "text-danger" : "")
                       }
                     >
                       {row.overdue}
@@ -443,7 +443,7 @@ export default async function DashboardPage() {
                 attributed by the mailbox they left from rather than by who owns
                 the lead now, because a pinned thread keeps going out of the
                 original account after a reassignment. */}
-            <p className="mt-3 text-[var(--color-ink-3)]">
+            <p className="mt-3 text-ink-3">
               Sends are counted against the mailbox they left from, over the last{" "}
               {activity?.days ?? 14} days. Everything else is current.
             </p>
@@ -451,7 +451,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* The thing this screen deliberately does not draw. */}
-        <p className="mt-3 px-1 text-[var(--color-ink-3)]">
+        <p className="mt-3 px-1 text-ink-3">
           There is no pipeline-value-over-time line here on purpose: nothing
           snapshots it, and deal_value edits are plain updates that leave no
           event, so any such line would be a guess drawn confidently.

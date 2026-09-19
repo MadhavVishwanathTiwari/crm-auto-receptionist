@@ -155,7 +155,7 @@ export function LeadsGrid({
           return (
             <span
               className={
-                isOverdue(row) ? "text-[var(--color-danger)]" : "text-[var(--color-warn)]"
+                isOverdue(row) ? "text-danger" : "text-warn"
               }
             >
               {isOverdue(row) ? "⚠ " : ""}
@@ -180,10 +180,10 @@ export function LeadsGrid({
             <span
               className={
                 value === "you"
-                  ? "text-[var(--color-info)]"
+                  ? "text-info"
                   : value === "pool"
-                    ? "text-[var(--color-ink-3)]"
-                    : "text-[var(--color-ink-2)]"
+                    ? "text-ink-3"
+                    : "text-ink-2"
               }
             >
               {value}
@@ -210,7 +210,7 @@ export function LeadsGrid({
           return value ? (
             value
           ) : (
-            <span className="text-[var(--color-warn)]">unresolved</span>
+            <span className="text-warn">unresolved</span>
           );
         },
       },
@@ -369,7 +369,7 @@ export function LeadsGrid({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-4 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2">
         <input
           type="search"
           placeholder="Search company, contact, email, city"
@@ -408,7 +408,7 @@ export function LeadsGrid({
           Claim 25 from pool
         </button>
 
-        <span className="tabular ml-auto text-[var(--color-ink-3)]">
+        <span className="tabular ml-auto text-ink-3">
           {rows.length} of {liveLeads.length}
         </span>
       </div>
@@ -416,7 +416,7 @@ export function LeadsGrid({
       {error && (
         <p
           role="alert"
-          className="shrink-0 border-b border-[var(--color-line)] px-4 py-1 text-[var(--color-danger)]"
+          className="shrink-0 border-b border-line px-4 py-1 text-danger"
         >
           {error}
         </p>
@@ -425,7 +425,7 @@ export function LeadsGrid({
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <div className="w-max min-w-full">
           <div
-            className="sticky top-0 z-10 grid items-center border-b border-[var(--color-line-2)] bg-[var(--color-surface-2)]"
+            className="sticky top-0 z-10 grid items-center border-b border-line-2 bg-surface-2"
             style={{
               gridTemplateColumns: templateColumns,
               height: "var(--header-height)",
@@ -437,7 +437,7 @@ export function LeadsGrid({
                 type="button"
                 disabled={!header.column.getCanSort()}
                 onClick={header.column.getToggleSortingHandler()}
-                className="truncate px-2 text-left text-[var(--color-ink-3)] disabled:cursor-default"
+                className="truncate px-2 text-left text-ink-3 disabled:cursor-default"
               >
                 {flexRender(
                   header.column.columnDef.header,
@@ -451,7 +451,7 @@ export function LeadsGrid({
           </div>
 
           {rows.length === 0 ? (
-            <p className="px-4 py-6 text-[var(--color-ink-3)]">
+            <p className="px-4 py-6 text-ink-3">
               {liveLeads.length === 0
                 ? "No leads yet. Import a CSV to get started."
                 : "No leads match those filters."}
@@ -470,8 +470,8 @@ export function LeadsGrid({
                     key={row.id}
                     onClick={() => router.push(`/leads?lead=${row.original.id}`)}
                     className={
-                      "absolute top-0 left-0 grid w-full cursor-pointer items-center border-b border-[var(--color-line)] hover:bg-[var(--color-surface-2)] " +
-                      (selected ? "bg-[var(--color-surface-3)]" : "")
+                      "absolute top-0 left-0 grid w-full cursor-pointer items-center border-b border-line hover:bg-surface-2 " +
+                      (selected ? "bg-surface-3" : "")
                     }
                     style={{
                       gridTemplateColumns: templateColumns,

@@ -73,10 +73,10 @@ function ProspectClock({ timezone }: { timezone: string }) {
     return () => clearInterval(id);
   }, [timezone]);
 
-  if (!now) return <span className="text-[var(--color-ink-3)]">—</span>;
+  if (!now) return <span className="text-ink-3">—</span>;
   return (
-    <span className="tabular text-[var(--color-ink)]" title={timezone}>
-      {now} <span className="text-[var(--color-ink-3)]">local</span>
+    <span className="tabular text-ink" title={timezone}>
+      {now} <span className="text-ink-3">local</span>
     </span>
   );
 }
@@ -153,11 +153,11 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
   return (
     <div className={PANEL}>
       <div className="mb-3 flex items-baseline gap-3">
-        <span className="text-[var(--color-ink)]">
+        <span className="text-ink">
           {lead.company_name ?? "Unnamed company"}
         </span>
-        {name && <span className="text-[var(--color-ink-2)]">{name}</span>}
-        <span className="text-[var(--color-ink-3)]">
+        {name && <span className="text-ink-2">{name}</span>}
+        <span className="text-ink-3">
           {[lead.city, lead.state].filter(Boolean).join(", ")}
         </span>
         <span className="ml-auto">
@@ -165,17 +165,17 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
         </span>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-[var(--color-ink-2)]">
+      <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-ink-2">
         <span>
-          <span className="text-[var(--color-ink-3)]">phone </span>
+          <span className="text-ink-3">phone </span>
           {lead.phone ?? "—"}
         </span>
         <span>
-          <span className="text-[var(--color-ink-3)]">site </span>
+          <span className="text-ink-3">site </span>
           {lead.website ?? "—"}
         </span>
         <span>
-          <span className="text-[var(--color-ink-3)]">rating </span>
+          <span className="text-ink-3">rating </span>
           {lead.rating ?? "—"}
           {lead.reviews_count !== null && ` (${lead.reviews_count})`}
         </span>
@@ -183,7 +183,7 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">Angle</span>
+          <span className="text-ink-3">Angle</span>
           <select
             value={angle}
             onChange={(e) => setAngle(e.target.value as AngleType)}
@@ -198,7 +198,7 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">Outcome</span>
+          <span className="text-ink-3">Outcome</span>
           <input
             list={`outcomes-${lead.id}`}
             value={outcome}
@@ -218,12 +218,12 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
             checked={responded}
             onChange={(e) => setResponded(e.target.checked)}
           />
-          <span className="text-[var(--color-ink-2)]">They responded</span>
+          <span className="text-ink-2">They responded</span>
         </label>
 
         {responded && (
           <label className="flex flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">After (minutes)</span>
+            <span className="text-ink-3">After (minutes)</span>
             <input
               type="number"
               min={0}
@@ -236,7 +236,7 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
         )}
 
         <label className="flex min-w-[200px] flex-1 flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">Notes</span>
+          <span className="text-ink-3">Notes</span>
           <input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -246,14 +246,14 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">Screenshot</span>
+          <span className="text-ink-3">Screenshot</span>
           <input
             type="file"
             accept="image/*"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             className={
               INPUT +
-              " w-56 file:mr-2 file:border-0 file:bg-transparent file:text-[var(--color-ink-2)]"
+              " w-56 file:mr-2 file:border-0 file:bg-transparent file:text-ink-2"
             }
           />
         </label>
@@ -269,7 +269,7 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
       </div>
 
       {error && (
-        <p role="alert" className="mt-2 text-[var(--color-danger)]">
+        <p role="alert" className="mt-2 text-danger">
           {error}
         </p>
       )}
@@ -286,7 +286,7 @@ export function AuditList({
 }) {
   if (leads.length === 0) {
     return (
-      <p className="px-4 py-6 text-[var(--color-ink-3)]">
+      <p className="px-4 py-6 text-ink-3">
         Nothing to audit. A lead shows up here once you have claimed it, it is
         qualified, and it has a timezone.
       </p>

@@ -1,41 +1,115 @@
 @import "tailwindcss";
 
-/* Dark, black-and-white, dense. Colour is reserved for status and alert states
-   so that a coloured cell in the grid always means something. Desktop only —
-   there are deliberately no responsive breakpoints anywhere in this app. */
+/* Dark, dense, desktop-only. There are deliberately no responsive breakpoints
+   anywhere in this app and no light theme.
+
+   Colour still carries meaning rather than decoration -- ok/warn/danger/info
+   mean exactly what they say, and a coloured cell in the grid is always a fact
+   about that row. The one deliberate revision to that rule is --color-accent:
+   it marks *intent* (the primary action, the row you are on, the thing focus is
+   sitting on) rather than status. Before it, a primary action looked identical
+   to a secondary one, which is its own kind of dishonesty.
+
+   The scale is compressed because the base is 13px, not 16px: text-lg is 14px,
+   not 18px. Names track ROLE, not absolute size. */
 
 @theme {
-  /* Surfaces, darkest to lightest. */
+  /* ---------------------------------------------------- surfaces, dark to light */
   --color-canvas: #08090a;
   --color-surface: #0e1011;
   --color-surface-2: #16191b;
   --color-surface-3: #1e2225;
+  --color-surface-4: #272c30;
 
-  /* Text. */
+  /* The scrim behind a modal dialog. */
+  --color-overlay: rgb(3 4 5 / 0.72);
+
+  /* ---------------------------------------------------- text */
   --color-ink: #e8eaed;
   --color-ink-2: #a8aeb4;
   --color-ink-3: #6b7280;
 
-  /* Lines. Hairlines matter a lot in a dense grid. */
+  /* ---------------------------------------------------- lines */
+  /* Hairlines matter a lot in a dense grid. */
   --color-line: #24282c;
   --color-line-2: #32383d;
   --color-line-strong: #4a5259;
 
-  /* The only chromatic tokens. Each maps to a meaning, never to decoration. */
+  /* ---------------------------------------------------- intent */
+  --color-accent: #3b7dfb;
+  --color-accent-hover: #5590fc;
+  --color-accent-ink: #ffffff;
+  --color-accent-soft: color-mix(in oklab, #3b7dfb 14%, transparent);
+  --color-accent-line: color-mix(in oklab, #3b7dfb 40%, transparent);
+
+  /* ---------------------------------------------------- status */
+  /* Each maps to a meaning, never to decoration. The -soft pair is the badge
+     fill; the bare token stays the text and bar colour it always was. */
   --color-ok: #3fb950;
   --color-warn: #d29922;
   --color-danger: #f85149;
   --color-info: #58a6ff;
-  --color-focus: #58a6ff;
+  --color-focus: #3b7dfb;
 
-  /* Grid metrics. Row height is the load-bearing number for virtualization —
-     TanStack Virtual needs it to match the rendered height exactly or the
-     scrollbar drifts. Change it here and nowhere else. */
+  --color-ok-soft: color-mix(in oklab, #3fb950 15%, transparent);
+  --color-warn-soft: color-mix(in oklab, #d29922 15%, transparent);
+  --color-danger-soft: color-mix(in oklab, #f85149 15%, transparent);
+  --color-info-soft: color-mix(in oklab, #58a6ff 15%, transparent);
+  --color-neutral-soft: color-mix(in oklab, #a8aeb4 10%, transparent);
+
+  /* ---------------------------------------------------- grid metrics */
+  /* Row height is the load-bearing number for virtualization -- TanStack
+     Virtual needs it to match the rendered height exactly or the scrollbar
+     drifts. It is mirrored as ROW_HEIGHT in LeadsGrid.tsx and
+     ContactDirectory.tsx. Change it in all three or none. */
   --row-height: 30px;
   --header-height: 34px;
 
+  /* ---------------------------------------------------- type */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+
+  --text-xs: 11px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 12px;
+  --text-sm--line-height: 1.45;
+  --text-base: 13px;
+  --text-base--line-height: 1.45;
+  /* The "comfortable" step. Forms, drawers, the composer and the dashboard opt
+     into this; grids stay on base so their row height is untouched. */
+  --text-lg: 14px;
+  --text-lg--line-height: 1.5;
+  --text-xl: 16px;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 20px;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 28px;
+  --text-3xl--line-height: 1.2;
+  --text-4xl: 34px;
+  --text-4xl--line-height: 1.1;
+
+  /* ---------------------------------------------------- shape */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* Elevation for a near-black canvas: depth comes from a dark spread plus a
+     1px top highlight, because a light-theme drop shadow just reads as grey
+     mud on #08090a. */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.45),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+  --shadow-md: 0 2px 4px -1px rgb(0 0 0 / 0.5), 0 6px 14px -3px rgb(0 0 0 / 0.45),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+  --shadow-lg: 0 10px 28px -6px rgb(0 0 0 / 0.6), 0 2px 6px -1px rgb(0 0 0 / 0.5),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+  --shadow-xl: 0 20px 56px -12px rgb(0 0 0 / 0.72),
+    0 4px 12px -2px rgb(0 0 0 / 0.5);
+
+  /* ---------------------------------------------------- motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
 }
 
 :root {
@@ -51,9 +125,10 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   /* The grid owns scrolling. The page itself must never scroll horizontally. */
   overflow: hidden;
 }
@@ -62,6 +137,24 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -1px;
+  border-radius: var(--radius-sm);
+}
+
+/* A mouse click on a button should not leave a ring behind it. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+/* Headings read better broken evenly than ragged, and they are all short. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
 
 /* Thin scrollbars so a dense grid doesn't lose 15px of a column to chrome. */
@@ -86,4 +179,22 @@ body {
 /* Numeric columns (rating, reviews, counts) line up only with tabular figures. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* A dialog opened with showModal() gets the platform's focus trap, Escape and
+   inertness for free. All it needs from us is the scrim and the entrance. */
+dialog::backdrop {
+  background: var(--color-overlay);
+  backdrop-filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

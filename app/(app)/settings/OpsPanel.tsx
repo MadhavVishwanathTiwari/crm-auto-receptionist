@@ -54,12 +54,12 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
   return (
     <div className={PANEL}>
       <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="text-[var(--color-ink)]">Jobs</h2>
+        <h2 className="text-ink">Jobs</h2>
         <span
           className={
             unscheduled === 0
-              ? "text-[var(--color-ok)]"
-              : "text-[var(--color-warn)]"
+              ? "text-ok"
+              : "text-warn"
           }
         >
           {unscheduled === 0
@@ -69,7 +69,7 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
               : `${unscheduled} not scheduled`}
         </span>
       </div>
-      <p className="mt-1 mb-3 text-[var(--color-ink-2)]">
+      <p className="mt-1 mb-3 text-ink-2">
         The same routes pg_cron calls, with the same secret check. Each is safe
         to run twice: the planner is idempotent on (lead, step) and the
         dispatcher claims a row before it touches Gmail.
@@ -86,10 +86,10 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
             >
               {running === job.name ? "running..." : job.label}
             </button>
-            <span className="min-w-0 flex-1 text-[var(--color-ink-2)]">
+            <span className="min-w-0 flex-1 text-ink-2">
               {job.blurb}
             </span>
-            <span className="tabular w-32 shrink-0 text-right text-[var(--color-ink-3)]">
+            <span className="tabular w-32 shrink-0 text-right text-ink-3">
               {job.scheduled?.schedule ?? job.cadence}
             </span>
             <span className="w-44 shrink-0 text-right">
@@ -97,8 +97,8 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
                 <span
                   className={
                     job.scheduled.last_status === "failed"
-                      ? "text-[var(--color-danger)]"
-                      : "text-[var(--color-ink-3)]"
+                      ? "text-danger"
+                      : "text-ink-3"
                   }
                 >
                   {job.scheduled.last_run_at
@@ -109,7 +109,7 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
                     : "scheduled, never run"}
                 </span>
               ) : (
-                <span className="text-[var(--color-warn)]">manual only</span>
+                <span className="text-warn">manual only</span>
               )}
             </span>
 
@@ -117,7 +117,7 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
                 panel: a result five rows below the click, as a JSON dump,
                 read as no result at all. */}
             {running === job.name && (
-              <p className="basis-full pl-[11.75rem] text-[var(--color-ink-3)]">
+              <p className="basis-full pl-[11.75rem] text-ink-3">
                 Running. This can take up to a minute.
               </p>
             )}
@@ -129,7 +129,7 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
       </div>
 
       {unscheduled > 0 && (
-        <p className="mt-3 text-[var(--color-ink-3)]">
+        <p className="mt-3 text-ink-3">
           Scheduling turns on once this deployment has a public URL: put it and
           CRON_SECRET in Vault, then run{" "}
           <code>select app.enable_background_jobs();</code>. Until then these
@@ -146,15 +146,15 @@ function JobResult({ result }: { result: JobRunResult }) {
   const { text, problem } = describeRun(result);
   return (
     <div className="basis-full pl-[11.75rem]">
-      <p className={problem ? "text-[var(--color-danger)]" : "text-[var(--color-ok)]"}>
+      <p className={problem ? "text-danger" : "text-ok"}>
         {text}
       </p>
       {result.body != null && (
         <details className="mt-1">
-          <summary className="cursor-pointer text-[var(--color-ink-3)]">
+          <summary className="cursor-pointer text-ink-3">
             what the job returned
           </summary>
-          <pre className="mt-1 max-h-64 overflow-auto text-[var(--color-ink-2)]">
+          <pre className="mt-1 max-h-64 overflow-auto text-ink-2">
             {typeof result.body === "string"
               ? result.body
               : JSON.stringify(result.body, null, 1)}

@@ -21,42 +21,42 @@ const BLOCKER_COPY: Record<Blocker, { label: string; hint: string; tone: string 
   ready: {
     label: "Ready to send",
     hint: "Claimed, audited, qualified, has a resolvable timezone, not suppressed, and nothing booked yet.",
-    tone: "text-[var(--color-ok)]",
+    tone: "text-ok",
   },
   booked: {
     label: "Booked",
     hint: "An email is already booked or on its way; the times are in the Booked list above. Nothing to decide here.",
-    tone: "text-[var(--color-info)]",
+    tone: "text-info",
   },
   halted: {
     label: "Halted",
     hint: "A reply, bounce or unsubscribe stopped the remaining sequence.",
-    tone: "text-[var(--color-danger)]",
+    tone: "text-danger",
   },
   suppressed: {
     label: "Suppressed",
     hint: "On the do-not-contact list by email or by domain.",
-    tone: "text-[var(--color-danger)]",
+    tone: "text-danger",
   },
   no_timezone: {
     label: "No timezone",
     hint: "A lead with no resolvable IANA zone is never scheduled. Assign one on the lead.",
-    tone: "text-[var(--color-warn)]",
+    tone: "text-warn",
   },
   not_qualified: {
     label: "Not qualified",
     hint: "Needs a work email. That is the whole gate.",
-    tone: "text-[var(--color-ink-3)]",
+    tone: "text-ink-3",
   },
   not_claimed: {
     label: "Unclaimed",
     hint: "Sitting in the shared pool. Claim it on the Leads page.",
-    tone: "text-[var(--color-ink-2)]",
+    tone: "text-ink-2",
   },
   not_audited: {
     label: "Waiting on a decision",
     hint: "Three ways out, all fine: audit it so the first touch can quote the callback, open it and send without an audit for the generic copy, or write it yourself on the Write screen. Leaving it here is the only thing that stops it.",
-    tone: "text-[var(--color-info)]",
+    tone: "text-info",
   },
 };
 
@@ -156,8 +156,8 @@ export default async function QueuePage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Queue</h1>
-        <span className="tabular text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Queue</h1>
+        <span className="tabular text-ink-3">
           {buckets.get("ready")?.length ?? 0} ready ·{" "}
           {buckets.get("booked")?.length ?? 0} booked · {inFlight.length} already
           out
@@ -169,12 +169,12 @@ export default async function QueuePage() {
           {scheduled.length > 0 && (
             <div className={PANEL}>
               <div className="mb-1 flex items-baseline gap-3">
-                <h2 className="text-[var(--color-ink)]">Booked</h2>
-                <span className="tabular text-[var(--color-ink-2)]">
+                <h2 className="text-ink">Booked</h2>
+                <span className="tabular text-ink-2">
                   {scheduled.length}
                 </span>
               </div>
-              <p className="mb-3 text-[var(--color-ink-3)]">
+              <p className="mb-3 text-ink-3">
                 Your local time first, the prospect&rsquo;s alongside. Nobody
                 here reads UTC. Emails marked <em>written</em> are the ones
                 somebody typed on the{" "}
@@ -189,32 +189,32 @@ export default async function QueuePage() {
           )}
 
           <div className={PANEL}>
-            <p className="text-[var(--color-ink-2)]">
+            <p className="text-ink-2">
               What the planner has to work with: which leads are eligible for a
               first touch and what is holding the rest back. A lead only becomes
               ready once it is claimed, audited, qualified, has a resolvable
               timezone and is not suppressed.
             </p>
             {settings && (
-              <p className="mt-2 text-[var(--color-ink-3)]">
+              <p className="mt-2 text-ink-3">
                 Send window, prospect-local: {settings.morning_start_hour}:00–
                 {settings.morning_end_hour}:00 and {settings.afternoon_start_hour}
                 :00–{settings.afternoon_end_hour}:00. First touches{" "}
                 {weekdayLabel(settings.first_touch_weekdays)}, follow-ups{" "}
                 {weekdayLabel(settings.followup_weekdays)}.{" "}
                 {settings.dry_run ? (
-                  <span className="text-[var(--color-warn)]">
+                  <span className="text-warn">
                     Dry run is on, so nothing can send.
                   </span>
                 ) : (
-                  <span className="text-[var(--color-ok)]">Dry run is off.</span>
+                  <span className="text-ok">Dry run is off.</span>
                 )}
               </p>
             )}
           </div>
 
           {error && (
-            <p role="alert" className={PANEL + " text-[var(--color-danger)]"}>
+            <p role="alert" className={PANEL + " text-danger"}>
               Could not load the queue: {error.message}
             </p>
           )}
@@ -228,11 +228,11 @@ export default async function QueuePage() {
               <div key={blocker} className={PANEL}>
                 <div className="mb-1 flex items-baseline gap-3">
                   <h2 className={copy.tone}>{copy.label}</h2>
-                  <span className="tabular text-[var(--color-ink-2)]">
+                  <span className="tabular text-ink-2">
                     {bucket.length}
                   </span>
                 </div>
-                <p className="mb-3 text-[var(--color-ink-3)]">{copy.hint}</p>
+                <p className="mb-3 text-ink-3">{copy.hint}</p>
 
                 <ul className="space-y-0.5">
                   {bucket.slice(0, 50).map((lead) => (
@@ -241,15 +241,15 @@ export default async function QueuePage() {
                           these blockers is actually resolved. */}
                       <Link
                         href={`/leads?lead=${lead.id}`}
-                        className="flex gap-3 hover:bg-[var(--color-surface-2)]"
+                        className="flex gap-3 hover:bg-surface-2"
                       >
                         <span className="w-64 truncate">
                           {lead.company_name ?? "—"}
                         </span>
-                        <span className="w-64 truncate text-[var(--color-ink-2)]">
+                        <span className="w-64 truncate text-ink-2">
                           {lead.work_email ?? "—"}
                         </span>
-                        <span className="text-[var(--color-ink-3)]">
+                        <span className="text-ink-3">
                           {lead.status.replace(/_/g, " ")}
                         </span>
                       </Link>
@@ -257,7 +257,7 @@ export default async function QueuePage() {
                   ))}
                 </ul>
                 {bucket.length > 50 && (
-                  <p className="mt-2 text-[var(--color-ink-3)]">
+                  <p className="mt-2 text-ink-3">
                     and {bucket.length - 50} more
                   </p>
                 )}
@@ -266,7 +266,7 @@ export default async function QueuePage() {
           })}
 
           {pending.length === 0 && !error && (
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               Nothing pending. Import some leads to get started.
             </p>
           )}

@@ -82,18 +82,18 @@ export function LoginForm() {
         type="button"
         onClick={signIn}
         disabled={busy}
-        className="w-full border border-[var(--color-line-2)] bg-[var(--color-surface-3)] px-3 py-2 text-[var(--color-ink)] hover:border-[var(--color-line-strong)] disabled:opacity-50"
+        className="w-full border border-line-2 bg-surface-3 px-3 py-2 text-ink hover:border-line-strong disabled:opacity-50"
       >
         {busy ? "Redirecting..." : "Continue with Google"}
       </button>
 
       {(error ?? reported) && (
-        <p role="alert" className="text-[var(--color-danger)]">
+        <p role="alert" className="text-danger">
           {describeAuthError(error ?? reported ?? "")}
         </p>
       )}
 
-      <p className="text-[var(--color-ink-3)]">
+      <p className="text-ink-3">
         Sign in with your Auto Receptionist account. Access is granted per
         address, so an account that has not been added will be turned away even
         though it is in the Workspace.

@@ -124,7 +124,7 @@ export function TemplateEditor({
     <div className="space-y-4 p-4">
       <div className={PANEL}>
         <div className="mb-3 flex items-baseline gap-3">
-          <h2 className="text-[var(--color-ink)]">
+          <h2 className="text-ink">
             {draft.id ? "Edit template" : "New template"}
           </h2>
           {draft.id && (
@@ -140,7 +140,7 @@ export function TemplateEditor({
 
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">Name</span>
+            <span className="text-ink-3">Name</span>
             <input
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -150,7 +150,7 @@ export function TemplateEditor({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">Step</span>
+            <span className="text-ink-3">Step</span>
             <select
               value={draft.step_number}
               onChange={(e) =>
@@ -167,7 +167,7 @@ export function TemplateEditor({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">Angle</span>
+            <span className="text-ink-3">Angle</span>
             <select
               value={draft.angle_type ?? ""}
               onChange={(e) =>
@@ -191,12 +191,12 @@ export function TemplateEditor({
                 setDraft({ ...draft, requires_demo: e.target.checked })
               }
             />
-            <span className="text-[var(--color-ink-2)]">Needs a built demo</span>
+            <span className="text-ink-2">Needs a built demo</span>
           </label>
         </div>
 
         <label className="mt-3 flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">Subject</span>
+          <span className="text-ink-3">Subject</span>
           <input
             value={draft.subject}
             onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
@@ -205,7 +205,7 @@ export function TemplateEditor({
         </label>
 
         <label className="mt-3 flex flex-col gap-1">
-          <span className="text-[var(--color-ink-3)]">Body</span>
+          <span className="text-ink-3">Body</span>
           <textarea
             value={draft.body}
             onChange={(e) => setDraft({ ...draft, body: e.target.value })}
@@ -214,27 +214,27 @@ export function TemplateEditor({
           />
         </label>
 
-        <p className="mt-2 text-[var(--color-ink-3)]">
+        <p className="mt-2 text-ink-3">
           Variables:{" "}
           {TEMPLATE_VARIABLES.map((name) => `{{${name}}}`).join(" ")}
         </p>
 
         <div className="mt-3">
           {violations.length === 0 ? (
-            <p className="text-[var(--color-ok)]">
+            <p className="text-ok">
               Lints clean. This can go live.
             </p>
           ) : (
             <ul className="space-y-0.5">
               {violations.map((violation) => (
-                <li key={violation.rule} className="text-[var(--color-warn)]">
+                <li key={violation.rule} className="text-warn">
                   {violation.message}
                 </li>
               ))}
             </ul>
           )}
           {standIns.length > 0 && (
-            <p className="mt-1 text-[var(--color-warn)]">
+            <p className="mt-1 text-warn">
               {standIns.map((w) => `“${w}”`).join(", ")} reads like a placeholder.
               Use {"{{first_name}}"} or {"{{company_name}}"} instead, so the Write
               screen fills it in, or flags it when it cannot.
@@ -261,29 +261,29 @@ export function TemplateEditor({
           </button>
         </div>
 
-        {saved && !error && <p className="mt-2 text-[var(--color-ok)]">Saved.</p>}
+        {saved && !error && <p className="mt-2 text-ok">Saved.</p>}
         {error && (
-          <p role="alert" className="mt-2 text-[var(--color-danger)]">
+          <p role="alert" className="mt-2 text-danger">
             {error}
           </p>
         )}
       </div>
 
       <div className={PANEL}>
-        <h2 className="mb-3 text-[var(--color-ink)]">
+        <h2 className="mb-3 text-ink">
           Templates{" "}
-          <span className="tabular text-[var(--color-ink-3)]">{rows.length}</span>
+          <span className="tabular text-ink-3">{rows.length}</span>
         </h2>
 
         {rows.length === 0 ? (
-          <p className="text-[var(--color-ink-3)]">
+          <p className="text-ink-3">
             Nothing written yet. The planner cannot book a step with no active
             template for it.
           </p>
         ) : (
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-left text-[var(--color-ink-3)]">
+              <tr className="text-left text-ink-3">
                 <th className="py-1 font-normal">Name</th>
                 <th className="py-1 font-normal">Step</th>
                 <th className="py-1 font-normal">Angle</th>
@@ -294,20 +294,20 @@ export function TemplateEditor({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-[var(--color-line)]">
+                <tr key={row.id} className="border-t border-line">
                   <td className="py-1">{row.name}</td>
                   <td className="tabular py-1">T{row.step_number}</td>
-                  <td className="py-1 text-[var(--color-ink-2)]">
+                  <td className="py-1 text-ink-2">
                     {row.angle_type?.replace(/_/g, " ") ?? "either"}
                   </td>
-                  <td className="max-w-[320px] truncate py-1 text-[var(--color-ink-2)]">
+                  <td className="max-w-[320px] truncate py-1 text-ink-2">
                     {row.subject}
                   </td>
                   <td className="py-1">
                     {row.is_active ? (
-                      <span className="text-[var(--color-ok)]">active</span>
+                      <span className="text-ok">active</span>
                     ) : (
-                      <span className="text-[var(--color-ink-3)]">draft</span>
+                      <span className="text-ink-3">draft</span>
                     )}
                   </td>
                   <td className="py-1 text-right">

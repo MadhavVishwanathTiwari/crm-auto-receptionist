@@ -40,8 +40,8 @@ export async function ContactCardData({ contactId }: { contactId: string }) {
     // Not found and belongs-to-another-org are indistinguishable under RLS, and
     // saying which would leak the difference.
     return (
-      <section className="flex h-full min-w-0 flex-1 items-start border-l border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-6">
-        <p className="text-[var(--color-ink-3)]">That contact is not available.</p>
+      <section className="flex h-full min-w-0 flex-1 items-start border-l border-line bg-surface px-4 py-6">
+        <p className="text-ink-3">That contact is not available.</p>
       </section>
     );
   }

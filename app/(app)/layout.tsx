@@ -87,25 +87,25 @@ export default async function AppLayout({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-9 shrink-0 items-center gap-5 border-b border-[var(--color-line)] bg-[var(--color-surface)] px-3">
-        <span className="text-[var(--color-ink-3)]">Outreach Ops</span>
+      <header className="flex h-9 shrink-0 items-center gap-5 border-b border-line bg-surface px-3">
+        <span className="text-ink-3">Outreach Ops</span>
         <nav className="flex items-center gap-3">
           {NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+              className="text-ink-2 hover:text-ink"
             >
               {item.label}
               {item.href === "/alerts" && openAlerts ? (
-                <span className="tabular ml-1 text-[var(--color-ok)]">
+                <span className="tabular ml-1 text-ok">
                   {openAlerts}
                 </span>
               ) : null}
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-3 text-[var(--color-ink-3)]">
+        <div className="ml-auto flex items-center gap-3 text-ink-3">
           {/* Local part only. Fourteen nav items in a non-wrapping row
               under body{overflow:hidden} clips rather than scrolls, and the
               full address was the widest thing on the right that nobody reads

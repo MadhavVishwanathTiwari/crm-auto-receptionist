@@ -60,14 +60,14 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
   return (
     <>
       {error && (
-        <p role="alert" className="mb-2 text-[var(--color-danger)]">
+        <p role="alert" className="mb-2 text-danger">
           {error}
         </p>
       )}
 
       <table className="w-full border-collapse">
         <thead>
-          <tr className="text-left text-[var(--color-ink-3)]">
+          <tr className="text-left text-ink-3">
             <th className="py-1 font-normal">Company</th>
             <th className="py-1 font-normal">Step</th>
             <th className="py-1 font-normal">Copy</th>
@@ -83,36 +83,36 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
             const written = send.composed_subject !== null;
 
             return (
-              <tr key={send.id} className="border-t border-[var(--color-line)]">
+              <tr key={send.id} className="border-t border-line">
                 <td className="max-w-[240px] truncate py-1">
                   {send.company ?? "—"}
                 </td>
                 <td className="tabular py-1">T{send.step_number}</td>
                 <td className="max-w-[280px] truncate py-1">
                   {written ? (
-                    <span className="text-[var(--color-ink-2)]">
-                      <span className="text-[var(--color-info)]">written</span>{" "}
+                    <span className="text-ink-2">
+                      <span className="text-info">written</span>{" "}
                       {send.composed_subject}
                     </span>
                   ) : (
-                    <span className="text-[var(--color-ink-3)]">from a template</span>
+                    <span className="text-ink-3">from a template</span>
                   )}
                 </td>
-                <td className="tabular py-1 text-[var(--color-ink-2)]">
+                <td className="tabular py-1 text-ink-2">
                   {send.status === "blocked" ? "—" : formatYours(send.scheduled_at, zone)}
                 </td>
-                <td className="tabular py-1 text-[var(--color-ink-2)]">
+                <td className="tabular py-1 text-ink-2">
                   {send.status === "blocked"
                     ? "—"
                     : `${local.toFormat("HH:mm")} ${send.prospect_timezone}`}
                 </td>
                 <td className="py-1">
                   {send.status === "blocked" ? (
-                    <span className="text-[var(--color-warn)]">
+                    <span className="text-warn">
                       blocked: {send.outcome_reason ?? "no capacity"}
                     </span>
                   ) : (
-                    <span className="text-[var(--color-ink-3)]">planned</span>
+                    <span className="text-ink-3">planned</span>
                   )}
                 </td>
                 <td className="py-1 text-right">
@@ -132,7 +132,7 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
       </table>
 
       {rows.length === 0 && (
-        <p className="text-[var(--color-ink-3)]">Nothing booked.</p>
+        <p className="text-ink-3">Nothing booked.</p>
       )}
     </>
   );

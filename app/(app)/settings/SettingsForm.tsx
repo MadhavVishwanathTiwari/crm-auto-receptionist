@@ -58,7 +58,7 @@ function Hour({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[var(--color-ink-3)]">{label}</span>
+      <span className="text-ink-3">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
@@ -87,14 +87,14 @@ function Number_({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[var(--color-ink-3)]">{label}</span>
+      <span className="text-ink-3">{label}</span>
       <input
         value={String(value)}
         onChange={(e) => onChange(Number(e.target.value.replace(/[^0-9]/g, "") || 0))}
         inputMode="numeric"
         className={INPUT + " tabular w-24"}
       />
-      <span className="text-[var(--color-ink-3)]">{hint}</span>
+      <span className="text-ink-3">{hint}</span>
     </label>
   );
 }
@@ -112,7 +112,7 @@ function Weekdays({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[var(--color-ink-3)]">{label}</span>
+      <span className="text-ink-3">{label}</span>
       <div className="flex gap-1">
         {WEEKDAYS.map((day) => {
           const on = selected.includes(day.value);
@@ -131,8 +131,8 @@ function Weekdays({
               className={
                 "border px-2 py-0.5 " +
                 (on
-                  ? "border-[var(--color-line-strong)] bg-[var(--color-surface-3)] text-[var(--color-ink)]"
-                  : "border-[var(--color-line)] text-[var(--color-ink-3)]")
+                  ? "border-line-strong bg-surface-3 text-ink"
+                  : "border-line text-ink-3")
               }
             >
               {day.label}
@@ -140,7 +140,7 @@ function Weekdays({
           );
         })}
       </div>
-      <span className="text-[var(--color-ink-3)]">{hint}</span>
+      <span className="text-ink-3">{hint}</span>
     </div>
   );
 }
@@ -183,19 +183,19 @@ export function SettingsForm({
     <div className="space-y-4">
       <div className={PANEL}>
         <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-[var(--color-ink)]">Sending</h2>
+          <h2 className="text-ink">Sending</h2>
           <span
             className={
               form.dryRun
-                ? "text-[var(--color-warn)]"
-                : "text-[var(--color-ok)]"
+                ? "text-warn"
+                : "text-ok"
             }
           >
             {form.dryRun ? "dry run: nothing can send" : "live: mail goes out"}
           </span>
         </div>
 
-        <p className="mt-2 text-[var(--color-ink-2)]">
+        <p className="mt-2 text-ink-2">
           Dry run is enforced inside <code>claim_due_sends()</code>, not in the
           dispatcher, so while it is on the app is physically incapable of
           sending even if a job runs by accident. Turning it off is the moment
@@ -209,15 +209,15 @@ export function SettingsForm({
             disabled={!canEdit}
             onChange={(e) => set("dryRun", !e.target.checked)}
           />
-          <span className="text-[var(--color-ink)]">
+          <span className="text-ink">
             Send real email from the connected mailboxes
           </span>
         </label>
       </div>
 
       <div className={PANEL}>
-        <h2 className="text-[var(--color-ink)]">Send window, prospect-local</h2>
-        <p className="mt-1 mb-3 text-[var(--color-ink-3)]">
+        <h2 className="text-ink">Send window, prospect-local</h2>
+        <p className="mt-1 mb-3 text-ink-3">
           Every slot lands inside these hours in the PROSPECT&rsquo;s zone. Ends
           are exclusive, so 07:00 to 11:00 means the last start is 10:59. That
           is {hours} hours a day of window.
@@ -234,7 +234,7 @@ export function SettingsForm({
             value={form.morningEndHour}
             onChange={(v) => set("morningEndHour", v)}
           />
-          <span className="pb-1 text-[var(--color-ink-3)]">and</span>
+          <span className="pb-1 text-ink-3">and</span>
           <Hour
             label="Afternoon from"
             value={form.afternoonStartHour}
@@ -264,8 +264,8 @@ export function SettingsForm({
       </div>
 
       <div className={PANEL}>
-        <h2 className="text-[var(--color-ink)]">Your clock, and the timers</h2>
-        <p className="mt-1 mb-3 text-[var(--color-ink-3)]">
+        <h2 className="text-ink">Your clock, and the timers</h2>
+        <p className="mt-1 mb-3 text-ink-3">
           The operator zone is what the queue shows &ldquo;your time&rdquo; in.
           Mailbox caps reset in each mailbox&rsquo;s own zone, set on the
           Mailboxes page, because a daily cap is a limit on the sending account
@@ -274,14 +274,14 @@ export function SettingsForm({
 
         <div className="flex flex-wrap items-start gap-6">
           <label className="flex flex-col gap-1">
-            <span className="text-[var(--color-ink-3)]">Operator timezone</span>
+            <span className="text-ink-3">Operator timezone</span>
             <input
               value={form.operatorTimezone}
               onChange={(e) => set("operatorTimezone", e.target.value)}
               placeholder="Asia/Kolkata"
               className={INPUT + " w-56"}
             />
-            <span className="text-[var(--color-ink-3)]">
+            <span className="text-ink-3">
               An IANA name, not an offset.
             </span>
           </label>
@@ -308,8 +308,8 @@ export function SettingsForm({
       </div>
 
       <div className={PANEL}>
-        <h2 className="text-[var(--color-ink)]">Spacing between sends</h2>
-        <p className="mt-1 mb-3 text-[var(--color-ink-3)]">
+        <h2 className="text-ink">Spacing between sends</h2>
+        <p className="mt-1 mb-3 text-ink-3">
           After a mailbox sends, it waits a random number of minutes between these
           two before it sends again, and never sends two in one run. Bookings on
           one mailbox are kept the longer gap apart, so the time the composer
@@ -342,13 +342,13 @@ export function SettingsForm({
           Save settings
         </button>
         {!canEdit && (
-          <span className="text-[var(--color-ink-3)]">
+          <span className="text-ink-3">
             Read-only: changing the send policy is an admin action.
           </span>
         )}
-        {saved && !error && <span className="text-[var(--color-ok)]">Saved.</span>}
+        {saved && !error && <span className="text-ok">Saved.</span>}
         {error && (
-          <span role="alert" className="text-[var(--color-danger)]">
+          <span role="alert" className="text-danger">
             {error}
           </span>
         )}

@@ -10,10 +10,10 @@ import { useViewerZone } from "../ViewerZone";
 import { repairStalledSends, type StalledRepairResult } from "./actions";
 
 const TONE: Record<string, string> = {
-  recorded: "text-[var(--color-ok)]",
-  "already recorded, repeats marked": "text-[var(--color-ink-2)]",
-  "in flight, run again later": "text-[var(--color-warn)]",
-  error: "text-[var(--color-danger)]",
+  recorded: "text-ok",
+  "already recorded, repeats marked": "text-ink-2",
+  "in flight, run again later": "text-warn",
+  error: "text-danger",
 };
 
 const EXPLAIN: Record<string, string> = {
@@ -55,8 +55,8 @@ export function StalledRepair() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-[var(--color-ink)]">Emails that went out unrecorded</h2>
-      <p className="mb-3 max-w-[70ch] text-[var(--color-ink-3)]">
+      <h2 className="mb-2 text-ink">Emails that went out unrecorded</h2>
+      <p className="mb-3 max-w-[70ch] text-ink-3">
         Finds sends that reached Gmail but were never marked sent, so the planner
         booked the same touch again. Each lead&apos;s touch is recorded once, dated
         from its latest attempt, and the rest are marked as the repeats they
@@ -76,7 +76,7 @@ export function StalledRepair() {
       </div>
 
       {result && !result.ok && (
-        <p role="alert" className="mt-3 text-[var(--color-danger)]">
+        <p role="alert" className="mt-3 text-danger">
           {result.error}
         </p>
       )}
@@ -84,12 +84,12 @@ export function StalledRepair() {
       {result?.ok && (
         <div className="mt-3">
           {Object.keys(result.counts).length === 0 ? (
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               Every email that reached Gmail is recorded. Nothing to do.
             </p>
           ) : (
             <>
-              <p className="mb-2 text-[var(--color-ink-2)]">
+              <p className="mb-2 text-ink-2">
                 {result.dryRun ? "Would apply:" : "Applied:"}
               </p>
               <ul className="tabular space-y-1">
@@ -98,7 +98,7 @@ export function StalledRepair() {
                   .map(([outcome, count]) => (
                     <li key={outcome} className={TONE[outcome] ?? ""}>
                       {count} {outcome}
-                      <span className="text-[var(--color-ink-3)]">
+                      <span className="text-ink-3">
                         {" "}
                         — {EXPLAIN[outcome] ?? ""}
                       </span>
@@ -109,14 +109,14 @@ export function StalledRepair() {
           )}
 
           {result.notable.length > 0 && (
-            <div className="mt-3 border-t border-[var(--color-line)] pt-3">
-              <p className="mb-2 text-[var(--color-ink-2)]">
+            <div className="mt-3 border-t border-line pt-3">
+              <p className="mb-2 text-ink-2">
                 By lead ({result.notable.length} shown, most repeats first):
               </p>
-              <ul className="tabular space-y-1 text-[var(--color-ink-3)]">
+              <ul className="tabular space-y-1 text-ink-3">
                 {result.notable.map((row) => (
                   <li key={`${row.lead_id}:${row.step_number}`}>
-                    <span className="text-[var(--color-ink-2)]">
+                    <span className="text-ink-2">
                       {row.company ?? row.lead_id}
                     </span>{" "}
                     — T{row.step_number} went out {row.attempts}{" "}
@@ -130,7 +130,7 @@ export function StalledRepair() {
                         }`
                       : ""}
                     {row.outcome.startsWith("error:") ? (
-                      <span className="text-[var(--color-danger)]"> — {row.outcome}</span>
+                      <span className="text-danger"> — {row.outcome}</span>
                     ) : null}
                   </li>
                 ))}

@@ -70,7 +70,7 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
 
   if (items.length === 0) {
     return (
-      <p className="px-4 py-6 text-[var(--color-ink-3)]">
+      <p className="px-4 py-6 text-ink-3">
         Nothing waiting. Near-duplicates from an import land here.
       </p>
     );
@@ -79,7 +79,7 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
   return (
     <div className="space-y-4 p-4">
       {error && (
-        <p role="alert" className={PANEL + " text-[var(--color-danger)]"}>
+        <p role="alert" className={PANEL + " text-danger"}>
           {error}
         </p>
       )}
@@ -89,25 +89,25 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
         return (
           <div key={item.id} className={PANEL}>
             <div className="mb-3 flex items-baseline gap-3">
-              <span className="text-[var(--color-warn)]">
+              <span className="text-warn">
                 {MATCH_LABEL[item.match_kind] ?? item.match_kind}
               </span>
-              <span className="font-[family-name:var(--font-mono)] text-[var(--color-ink-2)]">
+              <span className="font-[family-name:var(--font-mono)] text-ink-2">
                 {item.match_value}
               </span>
-              <span className="ml-auto text-[var(--color-ink-3)]">
+              <span className="ml-auto text-ink-3">
                 {formatYours(item.created_at, zone)}
               </span>
             </div>
 
             <table className="w-full border-collapse">
               <thead>
-                <tr className="text-left text-[var(--color-ink-3)]">
+                <tr className="text-left text-ink-3">
                   <th className="w-40 py-1 font-normal">Field</th>
                   <th className="py-1 font-normal">
                     Existing lead
                     {item.existing && (
-                      <span className="ml-2 text-[var(--color-ink-3)]">
+                      <span className="ml-2 text-ink-3">
                         ({item.existing.status.replace(/_/g, " ")})
                       </span>
                     )}
@@ -126,12 +126,12 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
                     show(incomingValue).toLowerCase();
 
                   return (
-                    <tr key={key} className="border-t border-[var(--color-line)]">
-                      <td className="py-1 text-[var(--color-ink-3)]">{label}</td>
+                    <tr key={key} className="border-t border-line">
+                      <td className="py-1 text-ink-3">{label}</td>
                       <td className="py-1">{show(existingValue)}</td>
                       <td
                         className={
-                          "py-1 " + (differs ? "text-[var(--color-warn)]" : "")
+                          "py-1 " + (differs ? "text-warn" : "")
                         }
                       >
                         {show(incomingValue)}

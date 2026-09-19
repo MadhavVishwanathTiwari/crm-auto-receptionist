@@ -31,7 +31,7 @@ export default async function LoginPage({
 
   return (
     <main className="flex h-full flex-col items-center justify-center gap-6">
-      <h1 className="text-[15px] tracking-wide text-[var(--color-ink-2)]">
+      <h1 className="text-[15px] tracking-wide text-ink-2">
         Outreach Ops
       </h1>
       <Suspense>

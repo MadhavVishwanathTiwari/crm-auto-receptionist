@@ -18,10 +18,10 @@ function CardSkeleton() {
   return (
     <section
       aria-busy="true"
-      className="flex h-full min-w-0 flex-1 flex-col border-l border-[var(--color-line)] bg-[var(--color-surface)]"
+      className="flex h-full min-w-0 flex-1 flex-col border-l border-line bg-surface"
     >
-      <header className="flex shrink-0 items-center gap-3 border-b border-[var(--color-line)] px-4 py-2">
-        <span className="text-[var(--color-ink-3)]">Loading contact</span>
+      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
+        <span className="text-ink-3">Loading contact</span>
       </header>
     </section>
   );
@@ -59,15 +59,15 @@ export default async function ContactsPage({
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Contacts</h1>
-        <span className="text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Contacts</h1>
+        <span className="text-ink-3">
           Who these people are and how to reach them. What the machine should do
           with them is on Leads.
         </span>
       </header>
 
       {error ? (
-        <p role="alert" className="px-4 py-6 text-[var(--color-danger)]">
+        <p role="alert" className="px-4 py-6 text-danger">
           Could not load contacts: {error.message}
         </p>
       ) : (

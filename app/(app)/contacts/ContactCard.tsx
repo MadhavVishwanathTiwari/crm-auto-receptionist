@@ -65,8 +65,8 @@ export interface NoteRow {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-2">
-      <span className="w-[92px] shrink-0 text-[var(--color-ink-3)]">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-[var(--color-ink)]">
+      <span className="w-[92px] shrink-0 text-ink-3">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-ink">
         {children}
       </span>
     </div>
@@ -128,18 +128,18 @@ export function ContactCard({
     .join(", ");
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden border-l border-[var(--color-line)] bg-[var(--color-surface)]">
-      <header className="flex shrink-0 items-baseline gap-3 border-b border-[var(--color-line)] px-4 py-2">
-        <h2 className="truncate text-[var(--color-ink)]">
+    <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden border-l border-line bg-surface">
+      <header className="flex shrink-0 items-baseline gap-3 border-b border-line px-4 py-2">
+        <h2 className="truncate text-ink">
           {name || contact.company_name || "Unnamed"}
         </h2>
-        <span className={STATUS_TONE[contact.status] ?? "text-[var(--color-ink-3)]"}>
+        <span className={STATUS_TONE[contact.status] ?? "text-ink-3"}>
           {contact.status.replace(/_/g, " ")}
         </span>
         {/* The seam. Everything this screen does not do is one click away. */}
         <Link
           href={{ pathname: "/leads", query: { lead: contact.id } }}
-          className="ml-auto text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+          className="ml-auto text-ink-2 hover:text-ink hover:underline"
         >
           Open in Leads →
         </Link>
@@ -151,7 +151,7 @@ export function ContactCard({
       {error && (
         <p
           role="alert"
-          className="shrink-0 border-b border-[var(--color-line)] px-4 py-1 text-[var(--color-danger)]"
+          className="shrink-0 border-b border-line px-4 py-1 text-danger"
         >
           {error}
         </p>
@@ -169,7 +169,7 @@ export function ContactCard({
                 {contact.work_email}
               </a>
             ) : (
-              <span className="text-[var(--color-ink-3)]">none on file</span>
+              <span className="text-ink-3">none on file</span>
             )}
           </Field>
 
@@ -179,7 +179,7 @@ export function ContactCard({
                 {contact.phone_e164 ?? contact.phone}
               </a>
             ) : (
-              <span className="text-[var(--color-ink-3)]">none on file</span>
+              <span className="text-ink-3">none on file</span>
             )}
           </Field>
 
@@ -212,7 +212,7 @@ export function ContactCard({
                   >
                     {link.label}
                     {link.scope === "company" && (
-                      <span className="text-[var(--color-ink-3)]"> (co)</span>
+                      <span className="text-ink-3"> (co)</span>
                     )}
                   </a>
                 ))}
@@ -221,9 +221,9 @@ export function ContactCard({
           )}
         </section>
 
-        <section className="space-y-2 border-t border-[var(--color-line)] pt-3">
+        <section className="space-y-2 border-t border-line pt-3">
           <div className="flex items-center gap-2">
-            <span className="w-[92px] shrink-0 text-[var(--color-ink-3)]">Stage</span>
+            <span className="w-[92px] shrink-0 text-ink-3">Stage</span>
             {closed ? (
               <span className={STAGE_TONE[columnFor(contact)] ?? ""}>
                 {COLUMN_LABEL[columnFor(contact)]}
@@ -251,7 +251,7 @@ export function ContactCard({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="w-[92px] shrink-0 text-[var(--color-ink-3)]">Owner</span>
+            <span className="w-[92px] shrink-0 text-ink-3">Owner</span>
             {!contact.claimed_by ? (
               <button
                 type="button"
@@ -263,7 +263,7 @@ export function ContactCard({
               </button>
             ) : mine ? (
               <>
-                <span className="text-[var(--color-ink)]">you</span>
+                <span className="text-ink">you</span>
                 <button
                   type="button"
                   disabled={pending}
@@ -274,13 +274,13 @@ export function ContactCard({
                 </button>
               </>
             ) : (
-              <span className="text-[var(--color-ink-2)]">somebody else</span>
+              <span className="text-ink-2">somebody else</span>
             )}
           </div>
         </section>
 
-        <section className="space-y-2 border-t border-[var(--color-line)] pt-3">
-          <p className="text-[var(--color-ink-3)]">Next action</p>
+        <section className="space-y-2 border-t border-line pt-3">
+          <p className="text-ink-3">Next action</p>
           <input
             value={action}
             disabled={pending || !editable}
@@ -326,14 +326,14 @@ export function ContactCard({
             </button>
           </div>
           {!editable && (
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               Somebody else owns this lead, so their follow-up is theirs to set.
             </p>
           )}
         </section>
 
-        <section className="space-y-2 border-t border-[var(--color-line)] pt-3">
-          <p className="text-[var(--color-ink-3)]">Notes</p>
+        <section className="space-y-2 border-t border-line pt-3">
+          <p className="text-ink-3">Notes</p>
           <div className="flex gap-2">
             <input
               value={note}
@@ -357,15 +357,15 @@ export function ContactCard({
           </div>
 
           {notes.length === 0 ? (
-            <p className="text-[var(--color-ink-3)]">Nothing written down yet.</p>
+            <p className="text-ink-3">Nothing written down yet.</p>
           ) : (
             <ul className="space-y-1">
               {notes.map((entry) => (
-                <li key={entry.id} className="border-l border-[var(--color-line-2)] pl-2">
-                  <p className="text-[var(--color-ink)]">
+                <li key={entry.id} className="border-l border-line-2 pl-2">
+                  <p className="text-ink">
                     {String(entry.payload?.body ?? "")}
                   </p>
-                  <p className="text-[var(--color-ink-3)]">
+                  <p className="text-ink-3">
                     {relativeTo(entry.occurred_at, renderedAt)}
                   </p>
                 </li>

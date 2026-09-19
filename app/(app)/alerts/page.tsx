@@ -43,8 +43,8 @@ export default async function AlertsPage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Alerts</h1>
-        <span className="tabular text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Alerts</h1>
+        <span className="tabular text-ink-3">
           {open} open · {rows.length} in the last {LIMIT}
         </span>
       </header>
@@ -52,14 +52,14 @@ export default async function AlertsPage() {
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="max-w-[1100px] space-y-4">
           {error && (
-            <p role="alert" className={PANEL + " text-[var(--color-danger)]"}>
+            <p role="alert" className={PANEL + " text-danger"}>
               Could not load the alerts: {error.message}
             </p>
           )}
           <AlertList rows={rows} />
 
           {!pushIsConfigured() && (
-            <p className={PANEL + " text-[var(--color-ink-3)]"}>
+            <p className={PANEL + " text-ink-3"}>
               Nothing is pushed to a phone yet, so a reply waits until somebody
               opens this page. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_IDS (or
               NTFY_TOPIC) and the poller starts sending each new alert on as it

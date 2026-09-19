@@ -35,18 +35,18 @@ export default async function AuditPage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Audit</h1>
-        <span className="tabular text-[var(--color-ink-3)]">
+        <h1 className="text-ink">Audit</h1>
+        <span className="tabular text-ink-3">
           {leads.length} waiting
         </span>
-        <span className="ml-auto text-[var(--color-ink-3)]">
+        <span className="ml-auto text-ink-3">
           Times shown are the prospect&apos;s, not yours.
         </span>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-[var(--color-danger)]">
+          <p role="alert" className="px-4 py-6 text-danger">
             Could not load the audit queue: {error.message}
           </p>
         ) : (

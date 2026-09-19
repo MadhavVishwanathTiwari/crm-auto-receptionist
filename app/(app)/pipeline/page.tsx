@@ -77,11 +77,11 @@ export default async function PipelinePage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Pipeline</h1>
+        <h1 className="text-ink">Pipeline</h1>
       </header>
 
       {cards.error ? (
-        <p role="alert" className="px-4 py-6 text-[var(--color-danger)]">
+        <p role="alert" className="px-4 py-6 text-danger">
           Could not load the pipeline: {cards.error.message}
         </p>
       ) : (

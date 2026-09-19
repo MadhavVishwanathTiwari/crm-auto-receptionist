@@ -77,8 +77,8 @@ export async function LeadDrawerData({ leadId }: { leadId: string }) {
   // covers both "deleted" and "not yours".
   if (detail.error || !detail.data) {
     return (
-      <aside className="w-[520px] shrink-0 border-l border-[var(--color-line)] bg-[var(--color-surface)] p-4">
-        <p className="text-[var(--color-ink-3)]">
+      <aside className="w-[520px] shrink-0 border-l border-line bg-surface p-4">
+        <p className="text-ink-3">
           That lead is not available.
           {detail.error ? ` ${detail.error.message}` : ""}
         </p>

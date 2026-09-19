@@ -32,17 +32,17 @@ function CheckLine({ check }: { check: Check }) {
         aria-hidden
         className={
           "w-4 shrink-0 " +
-          (check.ok ? "text-[var(--color-ok)]" : "text-[var(--color-warn)]")
+          (check.ok ? "text-ok" : "text-warn")
         }
       >
         {check.ok ? "+" : "!"}
       </span>
-      <span className="w-64 shrink-0 text-[var(--color-ink)]">{check.label}</span>
-      <span className="text-[var(--color-ink-2)]">{check.detail}</span>
+      <span className="w-64 shrink-0 text-ink">{check.label}</span>
+      <span className="text-ink-2">{check.detail}</span>
       {check.href && !check.ok && (
         <Link
           href={check.href}
-          className="ml-auto shrink-0 text-[var(--color-info)] hover:underline"
+          className="ml-auto shrink-0 text-info hover:underline"
         >
           {check.linkLabel ?? "fix"}
         </Link>
@@ -187,12 +187,12 @@ export default async function SettingsPage() {
   return (
     <div className={PAGE}>
       <header className={PAGE_HEADER}>
-        <h1 className="text-[var(--color-ink)]">Settings</h1>
+        <h1 className="text-ink">Settings</h1>
         <span
           className={
             blocking === 0
-              ? "text-[var(--color-ok)]"
-              : "text-[var(--color-warn)]"
+              ? "text-ok"
+              : "text-warn"
           }
         >
           {blocking === 0
@@ -204,7 +204,7 @@ export default async function SettingsPage() {
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="max-w-[1100px] space-y-4">
           <div className={PANEL}>
-            <h2 className="text-[var(--color-ink)]">Before the first send</h2>
+            <h2 className="text-ink">Before the first send</h2>
             <ul className="mt-2">
               {checks.map((check) => (
                 <CheckLine key={check.label} check={check} />
@@ -213,7 +213,7 @@ export default async function SettingsPage() {
           </div>
 
           {settingsError && (
-            <p role="alert" className={PANEL + " text-[var(--color-danger)]"}>
+            <p role="alert" className={PANEL + " text-danger"}>
               Could not load the settings: {settingsError.message}
             </p>
           )}
@@ -222,7 +222,7 @@ export default async function SettingsPage() {
             <SettingsForm settings={settings} canEdit={role === "admin"} />
           ) : (
             !settingsError && (
-              <p className={PANEL + " text-[var(--color-danger)]"}>
+              <p className={PANEL + " text-danger"}>
                 This org has no settings row, so the planner has no window to
                 place slots in. That row is created with the org; its absence is
                 a provisioning bug rather than something to fix here.

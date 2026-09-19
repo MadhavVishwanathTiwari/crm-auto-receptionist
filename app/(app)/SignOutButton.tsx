@@ -15,7 +15,7 @@ export function SignOutButton() {
         router.refresh();
         router.replace("/login");
       }}
-      className="hover:text-[var(--color-ink)]"
+      className="hover:text-ink"
     >
       Sign out
     </button>

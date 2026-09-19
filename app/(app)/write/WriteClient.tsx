@@ -332,24 +332,24 @@ export function WriteClient({
   return (
     <div className="flex h-full min-h-0">
       {/* ------------------------------------------------ the worklist */}
-      <aside className="flex w-[280px] shrink-0 flex-col border-r border-[var(--color-line)] bg-[var(--color-surface)]">
-        <div className="shrink-0 border-b border-[var(--color-line)] px-3 py-2">
+      <aside className="flex w-[280px] shrink-0 flex-col border-r border-line bg-surface">
+        <div className="shrink-0 border-b border-line px-3 py-2">
           <div className="flex items-baseline gap-2">
-            <h1 className="text-[var(--color-ink)]">Write</h1>
-            <span className="tabular text-[var(--color-ink-3)]">
+            <h1 className="text-ink">Write</h1>
+            <span className="tabular text-ink-3">
               {drafts.length} to go
             </span>
           </div>
-          <p className="mt-0.5 text-[var(--color-ink-3)]">
+          <p className="mt-0.5 text-ink-3">
             You write it. The app picks the hour.
           </p>
           {/* Whose outbox this session is. Standing context, so it does not
               have to be re-read per lead. */}
-          <p className="mt-0.5 truncate text-[var(--color-ink-3)]">
+          <p className="mt-0.5 truncate text-ink-3">
             {myMailboxEmail ? (
               <>sending as {myMailboxEmail}</>
             ) : (
-              <span className="text-[var(--color-warn)]">no mailbox of yours</span>
+              <span className="text-warn">no mailbox of yours</span>
             )}
           </p>
         </div>
@@ -363,31 +363,31 @@ export function WriteClient({
                   type="button"
                   onClick={() => select(position)}
                   className={
-                    "block w-full border-b border-[var(--color-line)] px-3 py-2 text-left " +
+                    "block w-full border-b border-line px-3 py-2 text-left " +
                     (position === index
-                      ? "bg-[var(--color-surface-3)]"
-                      : "hover:bg-[var(--color-surface-2)]")
+                      ? "bg-surface-3"
+                      : "hover:bg-surface-2")
                   }
                 >
                   <div className="flex items-baseline gap-2">
-                    <span className="min-w-0 flex-1 truncate text-[var(--color-ink)]">
+                    <span className="min-w-0 flex-1 truncate text-ink">
                       {item.company ?? item.workEmail}
                     </span>
-                    <span className="tabular shrink-0 text-[var(--color-ink-3)]">
+                    <span className="tabular shrink-0 text-ink-3">
                       T{item.step}
                     </span>
                   </div>
-                  <div className="truncate text-[var(--color-ink-3)]">
+                  <div className="truncate text-ink-3">
                     {item.city ?? "—"}
                     {item.state ? `, ${item.state}` : ""}
                   </div>
-                  <div className="tabular truncate text-[var(--color-ink-2)]">
+                  <div className="tabular truncate text-ink-2">
                     {item.slot
                       ? `${theirTime(item.slot.local)} their time`
                       : (item.slotProblem ?? "no slot")}
                   </div>
                   {(started || item.replacesWasWritten) && (
-                    <div className="text-[var(--color-info)]">
+                    <div className="text-info">
                       {item.replacesWasWritten ? "already queued" : "draft started"}
                     </div>
                   )}
@@ -397,7 +397,7 @@ export function WriteClient({
           })}
 
           {drafts.length === 0 && (
-            <li className="px-3 py-4 text-[var(--color-ink-3)]">
+            <li className="px-3 py-4 text-ink-3">
               Nothing left to write. Claim more leads on the Leads screen.
             </li>
           )}
@@ -407,7 +407,7 @@ export function WriteClient({
       {/* ------------------------------------------------ the composer */}
       <section className="flex min-w-0 flex-1 flex-col">
         {loadError && (
-          <p role="alert" className="border-b border-[var(--color-line)] px-4 py-2 text-[var(--color-danger)]">
+          <p role="alert" className="border-b border-line px-4 py-2 text-danger">
             Could not load the worklist: {loadError}
           </p>
         )}
@@ -415,7 +415,7 @@ export function WriteClient({
         {notice && (
           <p
             role="status"
-            className="border-b border-[var(--color-line)] px-4 py-2 text-[var(--color-warn)]"
+            className="border-b border-line px-4 py-2 text-warn"
           >
             {notice.message}{" "}
             <Link href={`/leads?lead=${notice.leadId}`} className="underline">
@@ -430,9 +430,9 @@ export function WriteClient({
                 used to live only in the composer's footer, which is gone by
                 the time the last one is queued, so the last send of a session
                 was the one send nobody saw confirmed. */}
-            {flash && <p className="text-[var(--color-ok)]">{flash}</p>}
+            {flash && <p className="text-ok">{flash}</p>}
             <div className={PANEL}>
-              <p className="text-[var(--color-ink-2)]">
+              <p className="text-ink-2">
                 Nothing to write. This list holds leads you have claimed that are
                 qualified, have a work email and a timezone, and are not
                 suppressed or halted.
@@ -441,34 +441,34 @@ export function WriteClient({
           </div>
         ) : (
           <>
-            <header className="shrink-0 border-b border-[var(--color-line)] px-4 py-2">
+            <header className="shrink-0 border-b border-line px-4 py-2">
               <div className="flex items-baseline gap-3">
-                <h2 className="truncate text-[var(--color-ink)]">
+                <h2 className="truncate text-ink">
                   {draft.company ?? draft.workEmail}
                 </h2>
-                <span className="tabular text-[var(--color-ink-3)]">
+                <span className="tabular text-ink-3">
                   touch {draft.step} of 4
                 </span>
                 {draft.replacesSendId && !draft.replacesWasWritten && (
-                  <span className="text-[var(--color-warn)]">
+                  <span className="text-warn">
                     replaces the template email already queued for this step
                   </span>
                 )}
                 {draft.replacesWasWritten && (
-                  <span className="text-[var(--color-info)]">
+                  <span className="text-info">
                     editing the email you already queued
                   </span>
                 )}
               </div>
-              <div className="tabular text-[var(--color-ink-2)]">
+              <div className="tabular text-ink-2">
                 To: {draft.contactName ? `${draft.contactName}, ` : ""}
                 {draft.workEmail}
               </div>
             </header>
 
             {starters.length > 0 && (
-              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-line)] px-4 py-2">
-                <span className="text-[var(--color-ink-3)]">Start from:</span>
+              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
+                <span className="text-ink-3">Start from:</span>
                 {starters.map((template) => (
                   <button
                     key={template.id}
@@ -478,11 +478,11 @@ export function WriteClient({
                   >
                     {template.name}
                     {!template.is_active && (
-                      <span className="ml-1 text-[var(--color-ink-3)]">draft</span>
+                      <span className="ml-1 text-ink-3">draft</span>
                     )}
                   </button>
                 ))}
-                <span className="text-[var(--color-ink-3)]">
+                <span className="text-ink-3">
                   filled in with this lead&rsquo;s details, then yours to rewrite
                 </span>
               </div>
@@ -505,7 +505,7 @@ export function WriteClient({
                 onKeyDown={onBodyKeyDown}
               />
               {draft.replySubject !== null && (
-                <p className="text-[var(--color-ink-3)]">
+                <p className="text-ink-3">
                   Goes into the same thread as your last email, so the subject is theirs.
                 </p>
               )}
@@ -519,29 +519,29 @@ export function WriteClient({
                 }
                 onKeyDown={onBodyKeyDown}
               />
-              <p className="text-[var(--color-ink-3)]">
+              <p className="text-ink-3">
                 A link with words on it: [hear it for yourself](https://…). They see
                 the words; a mail app showing plain text shows the address beside them.
               </p>
             </div>
 
             {/* ---------------------------------------------- the footer */}
-            <footer className="shrink-0 border-t border-[var(--color-line)] px-4 py-2">
+            <footer className="shrink-0 border-t border-line px-4 py-2">
               {error && (
-                <p role="alert" className="mb-1 text-[var(--color-danger)]">
+                <p role="alert" className="mb-1 text-danger">
                   {error}
                 </p>
               )}
               {flash && !error && (
-                <p className="mb-1 text-[var(--color-ok)]">{flash}</p>
+                <p className="mb-1 text-ok">{flash}</p>
               )}
               {holes.length > 0 && !error && (
-                <p className="mb-1 text-[var(--color-warn)]">
+                <p className="mb-1 text-warn">
                   Still to fill in: {holes.join(", ")}
                 </p>
               )}
               {standIns.length > 0 && !error && (
-                <p className="mb-1 text-[var(--color-warn)]">
+                <p className="mb-1 text-warn">
                   Looks like a placeholder: {standIns.map((w) => `“${w}”`).join(", ")}
                 </p>
               )}
@@ -556,7 +556,7 @@ export function WriteClient({
                   {draft.replacesWasWritten ? "Update it" : "Send it"}
                 </button>
 
-                <span className="tabular text-[var(--color-ink-2)]">
+                <span className="tabular text-ink-2">
                   {draft.replacesWasWritten ? (
                     draft.slot ? (
                       <>
@@ -572,13 +572,13 @@ export function WriteClient({
                       is {formatYours(draft.slot.at, zone)} for you
                     </>
                   ) : (
-                    <span className="text-[var(--color-warn)]">
+                    <span className="text-warn">
                       {draft.slotProblem}
                     </span>
                   )}
                 </span>
 
-                <span className="ml-auto text-[var(--color-ink-3)]">
+                <span className="ml-auto text-ink-3">
                   Ctrl+Enter sends and opens the next one
                 </span>
               </div>
@@ -591,10 +591,10 @@ export function WriteClient({
                 three emails from a colleague's mailbox without noticing.
               */}
               {draft.slot?.mailboxEmail && (
-                <p className="mt-1 text-[var(--color-ink-2)]">
+                <p className="mt-1 text-ink-2">
                   from {draft.slot.mailboxEmail}
                   {draft.slot.pinned ? (
-                    <span className="text-[var(--color-ink-3)]">
+                    <span className="text-ink-3">
                       {" "}
                       to stay on the thread this lead already has
                     </span>
@@ -603,7 +603,7 @@ export function WriteClient({
               )}
 
               {(dryRun || mailboxCount === 0 || !senderName) && (
-                <p className="mt-1 text-[var(--color-warn)]">
+                <p className="mt-1 text-warn">
                   {mailboxCount === 0
                     ? "You have no connected mailbox, so nothing you write can go out. Connect one on Mailboxes."
                     : !senderName
@@ -618,9 +618,9 @@ export function WriteClient({
 
       {/* ------------------------------------------------ what to say it about */}
       {draft && (
-        <aside className="w-[300px] shrink-0 space-y-3 overflow-y-auto border-l border-[var(--color-line)] bg-[var(--color-surface)] p-3">
+        <aside className="w-[300px] shrink-0 space-y-3 overflow-y-auto border-l border-line bg-surface p-3">
           <div>
-            <h3 className="text-[var(--color-ink-3)]">The business</h3>
+            <h3 className="text-ink-3">The business</h3>
             <dl className="mt-1 space-y-0.5">
               <Fact label="Where" value={[draft.city, draft.state].filter(Boolean).join(", ") || null} />
               <Fact label="Trade" value={draft.industry} />
@@ -642,7 +642,7 @@ export function WriteClient({
                 href={draft.website}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="mt-1 block truncate text-[var(--color-info)] underline"
+                className="mt-1 block truncate text-info underline"
               >
                 {draft.website}
               </a>
@@ -651,12 +651,12 @@ export function WriteClient({
 
           {draft.demoUrl && (
             <div>
-              <h3 className="text-[var(--color-ink-3)]">Their demo</h3>
+              <h3 className="text-ink-3">Their demo</h3>
               <a
                 href={draft.demoUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="block truncate text-[var(--color-info)] underline"
+                className="block truncate text-info underline"
               >
                 {draft.demoUrl}
               </a>
@@ -665,8 +665,8 @@ export function WriteClient({
 
           {!draft.demoUrl && draft.demoFailure && (
             <div>
-              <h3 className="text-[var(--color-ink-3)]">No demo</h3>
-              <p className="text-[var(--color-warn)]">
+              <h3 className="text-ink-3">No demo</h3>
+              <p className="text-warn">
                 The builder could not make one: {draft.demoFailure.reason}
               </p>
             </div>
@@ -674,34 +674,34 @@ export function WriteClient({
 
           {draft.audit ? (
             <div>
-              <h3 className="text-[var(--color-ink-3)]">What happened when we called</h3>
-              <p className="text-[var(--color-ink)]">
+              <h3 className="text-ink-3">What happened when we called</h3>
+              <p className="text-ink">
                 {DateTime.fromISO(draft.audit.localTime).toFormat("cccc h:mma").toLowerCase()},{" "}
                 {delayLabel(draft.audit.responseDelaySeconds)}
               </p>
               {draft.audit.outcome && (
-                <p className="text-[var(--color-ink-2)]">{draft.audit.outcome}</p>
+                <p className="text-ink-2">{draft.audit.outcome}</p>
               )}
               {draft.audit.notes && (
-                <p className="text-[var(--color-ink-3)]">{draft.audit.notes}</p>
+                <p className="text-ink-3">{draft.audit.notes}</p>
               )}
             </div>
           ) : (
-            <p className="text-[var(--color-ink-3)]">
+            <p className="text-ink-3">
               Nobody audited this one, so there is no callback to quote. Write it
               from what you can see about the business.
             </p>
           )}
 
           <div>
-            <h3 className="text-[var(--color-ink-3)]">House rules</h3>
-            <ul className="mt-1 space-y-0.5 text-[var(--color-ink-2)]">
+            <h3 className="text-ink-3">House rules</h3>
+            <ul className="mt-1 space-y-0.5 text-ink-2">
               <li>No em dashes.</li>
               <li>Say what they are losing, not what we sell.</li>
               <li>One question, and it offers two answers.</li>
               <li>Sign off as {senderName ?? "your mailbox display name"}.</li>
             </ul>
-            <p className="mt-1 text-[var(--color-ink-3)]">
+            <p className="mt-1 text-ink-3">
               These are the rules the templates are held to. Yours are not
               checked against them, because a person writing to one business can
               see things a rule cannot.
@@ -717,8 +717,8 @@ function Fact({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
     <div className="flex gap-2">
-      <dt className="w-20 shrink-0 text-[var(--color-ink-3)]">{label}</dt>
-      <dd className="min-w-0 flex-1 break-words text-[var(--color-ink-2)]">{value}</dd>
+      <dt className="w-20 shrink-0 text-ink-3">{label}</dt>
+      <dd className="min-w-0 flex-1 break-words text-ink-2">{value}</dd>
     </div>
   );
 }
