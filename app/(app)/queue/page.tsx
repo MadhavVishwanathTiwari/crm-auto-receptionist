@@ -225,23 +225,25 @@ export default async function QueuePage() {
             return (
               <div key={blocker} className={PANEL}>
                 <div className="mb-1 flex items-baseline gap-3">
-                  <h2 className={copy.tone}>{copy.label}</h2>
-                  <span className="tabular text-ink-2">
+                  <h2 className={"text-xl font-semibold " + copy.tone}>
+                    {copy.label}
+                  </h2>
+                  <span className="tabular rounded-sm bg-surface-3 px-1.5 text-xs text-ink-2">
                     {bucket.length}
                   </span>
                 </div>
                 <p className="mb-3 text-ink-3">{copy.hint}</p>
 
-                <ul className="space-y-0.5">
+                <ul className="-mx-2">
                   {bucket.slice(0, 50).map((lead) => (
                     <li key={lead.id}>
                       {/* Straight into the drawer, which is where every one of
                           these blockers is actually resolved. */}
                       <Link
                         href={`/leads?lead=${lead.id}`}
-                        className="flex gap-3 hover:bg-surface-2"
+                        className="flex gap-3 rounded-md px-2 py-1 hover:bg-surface-2"
                       >
-                        <span className="w-64 truncate">
+                        <span className="w-64 truncate text-ink">
                           {lead.company_name ?? "—"}
                         </span>
                         <span className="w-64 truncate text-ink-2">

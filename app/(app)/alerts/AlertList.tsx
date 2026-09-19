@@ -17,6 +17,8 @@ import type { Tone } from "@/lib/ui/tones";
 import { useViewerZone } from "../ViewerZone";
 import { acknowledgeAlert, acknowledgeAllAlerts } from "./actions";
 
+import { toast } from "@/lib/ui/toast";
+
 export interface AlertRow {
   id: string;
   kind: string;
@@ -168,7 +170,11 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
       ),
     );
     startTransition(async () => {
-      await acknowledgeAlert(id);
+      // The result used to be discarded, so an acknowledge that RLS refused
+      // looked exactly like one that worked -- the row greyed out optimistically
+      // and came back on the next reload.
+      const result = await acknowledgeAlert(id);
+      if (!result.ok) toast.error("Could not mark that done", result.error);
     });
   }
 
@@ -180,7 +186,8 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
       ),
     );
     startTransition(async () => {
-      await acknowledgeAllAlerts();
+      const result = await acknowledgeAllAlerts();
+      if (!result.ok) toast.error("Could not mark them done", result.error);
     });
   }
 

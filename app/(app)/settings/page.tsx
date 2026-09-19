@@ -1,3 +1,4 @@
+import { ArrowRight, CircleCheck, TriangleAlert } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
@@ -18,6 +19,7 @@ import { type OrgSettingsRow, SettingsForm } from "./SettingsForm";
 import { Badge } from "@/components/ui/Badge";
 import { LoadError } from "@/components/ui/LoadError";
 import { Page, PageHeader } from "@/components/ui/PageShell";
+import { buttonClasses } from "@/components/ui/Button";
 
 export const dynamic = "force-dynamic";
 
@@ -30,25 +32,23 @@ interface Check {
 }
 
 function CheckLine({ check }: { check: Check }) {
+  const Icon = check.ok ? CircleCheck : TriangleAlert;
   return (
-    <li className="flex gap-3 py-0.5">
-      <span
-        aria-hidden
-        className={
-          "w-4 shrink-0 " +
-          (check.ok ? "text-ok" : "text-warn")
-        }
-      >
-        {check.ok ? "+" : "!"}
-      </span>
-      <span className="w-64 shrink-0 text-ink">{check.label}</span>
-      <span className="text-ink-2">{check.detail}</span>
+    <li className="flex items-center gap-3 border-b border-line py-2 last:border-0">
+      <Icon
+        size={15}
+        aria-hidden="true"
+        className={check.ok ? "shrink-0 text-ok" : "shrink-0 text-warn"}
+      />
+      <span className="w-64 shrink-0 font-medium text-ink">{check.label}</span>
+      <span className="min-w-0 flex-1 text-ink-2">{check.detail}</span>
       {check.href && !check.ok && (
         <Link
           href={check.href}
-          className="ml-auto shrink-0 text-info hover:underline"
+          className={buttonClasses("secondary", "sm", "ml-auto shrink-0")}
         >
-          {check.linkLabel ?? "fix"}
+          {check.linkLabel ?? "Fix"}
+          <ArrowRight size={12} />
         </Link>
       )}
     </li>

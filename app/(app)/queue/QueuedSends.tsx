@@ -11,6 +11,8 @@ import { cancelSend } from "../write/actions";
 
 import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
 
+import { toast } from "@/lib/ui/toast";
+
 export interface QueuedSend {
   id: string;
   step_number: number;
@@ -51,8 +53,10 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
 
     startTransition(async () => {
       const result = await cancelSend(id);
+      if (result.ok) toast.success("Booked send cancelled");
       if (!result.ok) {
         setError(result.error ?? "That send could not be cancelled.");
+        toast.error("Could not cancel it", result.error);
         return;
       }
       setRows((current) => current.filter((row) => row.id !== id));

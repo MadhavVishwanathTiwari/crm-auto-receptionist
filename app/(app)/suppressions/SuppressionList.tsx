@@ -13,6 +13,8 @@ import { SUPPRESSION_REASONS, type SuppressionReason } from "./reasons";
 
 import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
 
+import { toast } from "@/lib/ui/toast";
+
 export interface SuppressionRow {
   id: string;
   email_norm: string | null;
@@ -53,11 +55,13 @@ export function SuppressionList({
     setError(null);
     startTransition(async () => {
       const result = await addSuppression({ ...classify(target), reason, notes });
+      if (result.ok) toast.success(`${target.trim()} will not be contacted`);
       if (result.ok) {
         setTarget("");
         setNotes("");
       } else {
         setError(result.error ?? "That did not save.");
+        toast.error("Could not add it", result.error);
       }
     });
   }

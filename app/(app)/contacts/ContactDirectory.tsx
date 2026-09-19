@@ -1,5 +1,6 @@
 "use client";
 
+import { UserSearch } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -7,7 +8,11 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { displayName } from "@/lib/contacts/links";
 import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
 
-import { INPUT } from "../ui";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Input, Select } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { cn } from "@/lib/cn";
+
 
 export interface ContactRow {
   id: string;
@@ -153,43 +158,46 @@ export function ContactDirectory({
   });
 
   return (
-    <div className="flex w-[380px] shrink-0 flex-col border-r border-line">
+    <div className="flex w-[380px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <input
+        <Input
           type="search"
           placeholder="Name, company, title, email, phone"
+          aria-label="Search contacts"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className={INPUT + " w-full"}
         />
-        <select
+        <SegmentedControl
+          ariaLabel="Whose contacts"
           value={ownership}
-          onChange={(event) => setOwnership(event.target.value as Ownership)}
-          className={INPUT}
-        >
-          <option value="all">Everyone</option>
-          <option value="mine">Mine</option>
-          <option value="unclaimed">Unclaimed</option>
-        </select>
+          onChange={setOwnership}
+          options={[
+            { value: "all", label: "Everyone" },
+            { value: "mine", label: "Mine" },
+            { value: "unclaimed", label: "Pool" },
+          ]}
+        />
         {/* Reachability is this screen's question. There is deliberately no
             status filter: that is the ops question and /leads owns it. */}
-        <select
+        <Select
           value={reach}
+          aria-label="Reachable by"
           onChange={(event) => setReach(event.target.value as Reach)}
-          className={INPUT}
+          className="w-[128px]"
         >
           <option value="any">Any contact</option>
           <option value="email">Has email</option>
           <option value="phone">Has phone</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={order}
+          aria-label="Order"
           onChange={(event) => setOrder(event.target.value as Order)}
-          className={INPUT}
+          className="w-[148px]"
         >
           <option value="name">A to Z</option>
           <option value="recent">Recently touched</option>
-        </select>
+        </Select>
         <span className="tabular ml-auto text-ink-3">
           {rows.length} of {liveContacts.length}
         </span>
@@ -197,7 +205,12 @@ export function ContactDirectory({
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         {rows.length === 0 ? (
-          <p className="px-3 py-4 text-ink-3">Nobody matches that.</p>
+          <EmptyState
+            compact
+            icon={<UserSearch size={16} />}
+            title="Nobody matches that"
+            body="Try a shorter search, or switch back to Everyone."
+          />
         ) : (
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -220,12 +233,17 @@ export function ContactDirectory({
                     height: ROW_HEIGHT,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
-                  className={
-                    "flex items-baseline gap-2 px-3 text-left hover:bg-surface-2 " +
-                    (selected ? "bg-surface-3" : "")
-                  }
+                  className={cn(
+                    "flex items-baseline gap-2 px-3 text-left",
+                    selected ? "bg-accent-soft" : "hover:bg-surface-2",
+                  )}
                 >
-                  <span className="truncate text-ink">
+                  <span
+                    className={cn(
+                      "truncate",
+                      selected ? "font-medium text-ink" : "text-ink",
+                    )}
+                  >
                     {name || contact.company_name || "Unnamed"}
                   </span>
                   {name && (

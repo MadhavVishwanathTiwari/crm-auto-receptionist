@@ -7,6 +7,8 @@ import { createBrowserSupabase } from "@/lib/supabase/client";
 import { BUTTON, INPUT, PANEL } from "../ui";
 import { recordAudit, type AngleType } from "./actions";
 
+import { toast } from "@/lib/ui/toast";
+
 const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
 
 export interface AuditLead {
@@ -142,7 +144,12 @@ function AuditRow({ lead, orgId }: { lead: AuditLead; orgId: string }) {
         notes,
         screenshotPath,
       });
-      if (!result.ok) setError(result.error ?? "That did not save.");
+      if (!result.ok) {
+        setError(result.error ?? "That did not save.");
+        toast.error("Could not save the audit", result.error);
+      } else {
+        toast.success(`Audit recorded for ${lead.company_name ?? "this lead"}`);
+      }
     });
   }
 

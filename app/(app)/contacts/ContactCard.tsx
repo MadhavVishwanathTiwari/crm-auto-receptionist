@@ -23,6 +23,8 @@ import { addNote, setNextAction, setStage } from "../pipeline/actions";
 import { BUTTON, BUTTON_QUIET, INPUT, STAGE_TONE, STATUS_TONE } from "../ui";
 import { useViewerZone } from "../ViewerZone";
 
+import { toast } from "@/lib/ui/toast";
+
 export interface ContactDetail {
   id: string;
   company_name: string | null;
@@ -108,7 +110,10 @@ export function ContactCard({
     setError(null);
     startTransition(async () => {
       const result = await work();
-      if (!result.ok) setError(result.error ?? "That did not work.");
+      if (!result.ok) {
+        setError(result.error ?? "That did not work.");
+        toast.error("Could not do that", result.error);
+      }
     });
   }
 

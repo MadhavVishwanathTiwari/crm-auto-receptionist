@@ -10,6 +10,8 @@ import { decideReview, type Decision } from "./actions";
 
 import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
 
+import { toast } from "@/lib/ui/toast";
+
 export interface ReviewItem {
   id: string;
   match_kind: string;
@@ -65,7 +67,18 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
     setWorking(reviewId);
     startTransition(async () => {
       const result = await decideReview(reviewId, decision);
-      if (!result.ok) setError(result.error ?? "That did not work.");
+      if (!result.ok) {
+        setError(result.error ?? "That did not work.");
+        toast.error("Could not record that decision", result.error);
+      } else {
+        toast.success(
+          decision === "inserted_anyway"
+            ? "Added as a separate lead"
+            : decision === "merged"
+              ? "Kept the existing lead"
+              : "Discarded",
+        );
+      }
       setWorking(null);
     });
   }
