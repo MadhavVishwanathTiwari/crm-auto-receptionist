@@ -8,6 +8,11 @@ import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
 import { useViewerZone } from "../ViewerZone";
 import { setMailboxPaused, updateMailboxSettings } from "./actions";
 
+import { Badge } from "@/components/ui/Badge";
+import type { Tone } from "@/lib/ui/tones";
+
+import { Gauge } from "../dashboard/Charts";
+
 export interface MailboxRow {
   id: string;
   email: string;
@@ -61,19 +66,25 @@ function MailboxCard({ row }: { row: MailboxRow }) {
     });
   }
 
-  const state = row.disconnected_at
-    ? { label: "needs reconnecting", tone: "text-danger" }
+  const state: { label: string; tone: Tone } = row.disconnected_at
+    ? { label: "needs reconnecting", tone: "danger" }
     : row.paused_at
-      ? { label: "paused", tone: "text-warn" }
-      : { label: "sending", tone: "text-ok" };
+      ? { label: "paused", tone: "warn" }
+      : { label: "sending", tone: "ok" };
+
+  // Amber once a mailbox is three quarters through its day, red at the cap: a
+  // cap that has run out is why a send sat in the queue.
+  const share = row.daily_cap > 0 ? row.used_today / row.daily_cap : 0;
+  const capTone: Tone = share >= 1 ? "danger" : share >= 0.75 ? "warn" : "accent";
 
   return (
     <div className={PANEL}>
       <div className="flex flex-wrap items-baseline gap-3">
         <h2 className="text-xl font-semibold text-ink">{row.email}</h2>
-        <span className={state.tone}>{state.label}</span>
-        <span className="tabular text-ink-3">
-          {row.used_today} of {row.daily_cap} used today
+        <Badge tone={state.tone}>{state.label}</Badge>
+        <span className="flex items-center gap-1.5 text-ink-3">
+          <Gauge used={row.used_today} cap={row.daily_cap} tone={capTone} />
+          <span>today</span>
         </span>
         <div className="ml-auto flex gap-2">
           {!row.disconnected_at && (

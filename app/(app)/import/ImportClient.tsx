@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FieldStats, MappingWarning } from "@/lib/csv/inspect";
 import { FIELD_SPECS, type CanonicalField } from "@/lib/csv/mapping";
 
+import { inputClasses } from "@/components/ui/Input";
+
 import { BUTTON, INPUT, OUTCOME_TONE, PANEL } from "../ui";
 
 type Mapping = Partial<Record<CanonicalField, string>>;
@@ -239,7 +241,11 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
           accept=".csv,text/csv"
           disabled={busy}
           onChange={onPick}
-          className={INPUT + " w-[400px] file:mr-3 file:border-0 file:bg-transparent file:text-ink-2"}
+          className={
+            inputClasses("w-[420px] h-8 py-1 cursor-pointer") +
+            " file:mr-3 file:h-6 file:cursor-pointer file:rounded-sm file:border-0" +
+            " file:bg-surface-4 file:px-2.5 file:font-medium file:text-ink"
+          }
         />
         <p className="mt-2 text-ink-3">
           Clay exports and the legacy outreach sheet are both recognised, and any
