@@ -1,5 +1,7 @@
 "use client";
 
+import { ClipboardCheck } from "lucide-react";
+
 import { useEffect, useState, useTransition } from "react";
 
 import { createBrowserSupabase } from "@/lib/supabase/client";
@@ -8,6 +10,11 @@ import { BUTTON, INPUT, PANEL } from "../ui";
 import { recordAudit, type AngleType } from "./actions";
 
 import { toast } from "@/lib/ui/toast";
+
+import Link from "next/link";
+
+import { buttonClasses } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
 
@@ -293,10 +300,16 @@ export function AuditList({
 }) {
   if (leads.length === 0) {
     return (
-      <p className="px-4 py-6 text-ink-3">
-        Nothing to audit. A lead shows up here once you have claimed it, it is
-        qualified, and it has a timezone.
-      </p>
+      <EmptyState
+        icon={<ClipboardCheck size={18} />}
+        title="Nothing to audit"
+        body="A lead shows up here once you have claimed it, it is qualified, and it has a timezone. An audit is optional — you can also write to a lead without one."
+        action={
+          <Link href="/leads" className={buttonClasses("primary", "md")}>
+            Claim some leads
+          </Link>
+        }
+      />
     );
   }
 
