@@ -5,10 +5,11 @@ import { useState, useTransition } from "react";
 
 import { formatYours } from "@/lib/time/format";
 
-import { BUTTON_QUIET } from "../ui";
 import { useViewerZone } from "../ViewerZone";
 import { cancelSend } from "../write/actions";
 
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
 
 import { toast } from "@/lib/ui/toast";
@@ -112,22 +113,23 @@ export function QueuedSends({ sends }: { sends: QueuedSend[] }) {
                 </TD>
                 <TD>
                   {send.status === "blocked" ? (
-                    <span className="text-warn">
+                    <Badge tone="warn">
                       blocked: {send.outcome_reason ?? "no capacity"}
-                    </span>
+                    </Badge>
                   ) : (
-                    <span className="text-ink-3">planned</span>
+                    <Badge tone="info">planned</Badge>
                   )}
                 </TD>
                 <TD className="text-right">
-                  <button
-                    type="button"
-                    className={BUTTON_QUIET}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-danger hover:bg-danger-soft"
                     disabled={pending}
                     onClick={() => cancel(send.id, send.company)}
                   >
-                    cancel
-                  </button>
+                    Cancel
+                  </Button>
                 </TD>
               </TR>
             );

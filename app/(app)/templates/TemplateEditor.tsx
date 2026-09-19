@@ -9,6 +9,7 @@ import { placeholderWords } from "@/lib/write/placeholders";
 import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
 import { deleteTemplate, saveTemplate, setTemplateActive } from "./actions";
 
+import { Badge } from "@/components/ui/Badge";
 import { Table, TD, TH, THead, TR } from "@/components/ui/Table";
 
 export interface TemplateRow {
@@ -304,11 +305,9 @@ export function TemplateEditor({
                     {row.subject}
                   </TD>
                   <TD>
-                    {row.is_active ? (
-                      <span className="text-ok">active</span>
-                    ) : (
-                      <span className="text-ink-3">draft</span>
-                    )}
+                    <Badge tone={row.is_active ? "ok" : "muted"}>
+                      {row.is_active ? "active" : "draft"}
+                    </Badge>
                   </TD>
                   <TD className="text-right">
                     <button

@@ -45,7 +45,7 @@ export function Badge({
     <span
       className={cn(
         "inline-flex max-w-full items-center gap-1 rounded-sm px-1.5 py-px",
-        "text-xs font-medium whitespace-nowrap capitalize",
+        "text-xs font-medium whitespace-nowrap first-letter:uppercase",
         variant === "outline"
           ? cn("border border-current/30", TONE_TEXT[tone])
           : TONE_SOFT[tone],

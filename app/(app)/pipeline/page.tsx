@@ -80,7 +80,7 @@ export default async function PipelinePage() {
     <Page>
       <PageHeader
         title="Pipeline"
-        note="Drag a card, or use the menu on it. Closing cannot be undone."
+        note="Drag a card, or use the menu on it."
       />
 
       {cards.error ? (

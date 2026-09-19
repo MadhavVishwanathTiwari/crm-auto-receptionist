@@ -161,6 +161,81 @@ shortening them. If a page gets slow again, count the round trips first.
   leads grid. The subquery makes it an InitPlan evaluated once. `0030` converted
   all 41 policies; write new ones the same way.
 
+## The interface
+
+Dark, dense, desktop-only, and still all of those — but it is a product now
+rather than a prototype. The rules:
+
+- **`components/ui/` is the design system, and it is real components.** It
+  replaced `app/(app)/ui.ts`, which was six exported class-name *strings* and
+  described itself as "not a component library". Variants were string
+  concatenation — `BUTTON + " text-danger"` was the destructive button — and a
+  caller could not override one utility without a specificity coin flip,
+  because Tailwind utilities for the same property have equal specificity and
+  the winner is decided by stylesheet order. `cn()` in `lib/cn.ts` (clsx +
+  tailwind-merge) settles that by dropping the loser. `ui.ts` survives as a
+  shim whose constants are the new components' class strings; nothing new may
+  import it, and it goes when the last screen stops.
+- **Write `text-ink-3`, never `text-[var(--color-ink-3)]`.** Tailwind v4 has
+  been generating the short form from the `@theme` block all along — it
+  compiles to the identical `color: var(--color-ink-3)` — and the codebase
+  simply never used it, 642 times. Both forms still work; only one is readable.
+- **Never name a colour token after a scale step.** `@theme { --color-base }`
+  makes `.text-base` a *colour* rather than a font size, app-wide and silently,
+  because the colour lookup wins. `base`, `xs`, `sm`, `md`, `lg`, `xl`, `none`,
+  `auto`, `current` and the position and border-style keywords are all
+  poisoned. Every existing token name is clear of them.
+- **`--color-accent` is the one colour that does not mean a status.** It marks
+  intent: the primary action, the row you are on, the thing focus is sitting
+  on. Everything chromatic other than accent still encodes a fact about a row,
+  which is why the grid uses `Badge variant="dot"` rather than fifteen filled
+  pills — a coloured cell there has to be worth looking at.
+- **The type scale is compressed, and its names track role rather than size.**
+  `--text-base` is 13px because the grid is 13px; `text-lg` is 14px and is the
+  "comfortable" step that forms, drawers, the dashboard and the composer opt
+  into via `PageBody density="comfortable"`.
+
+### Traps
+
+- **Escape is consumed, and listeners check before acting.** The lead drawer,
+  the contact card and the board's pending close each listen on `window` and
+  navigate away on Escape — correctly, since none of them is modal and the
+  platform will not close them. But with a dialog, a menu or the command
+  palette open on one of those screens, one Escape would dismiss the overlay
+  *and* take the drawer with it. Every overlay in `components/ui` calls
+  `stopPropagation` and `preventDefault`; every window listener goes through
+  `useEscape` in `lib/ui/useEscape.ts`, which skips a `defaultPrevented` event.
+  Add an overlay without doing both and you ship that bug.
+- **`min-w-0` on the content wrapper in `app/(app)/layout.tsx` is
+  load-bearing.** The leads grid is `w-max min-w-full` and a flex child's
+  min-width defaults to `auto`, so without it a wide grid pushes the sidebar off
+  the left edge — and there are no responsive breakpoints here to catch it.
+- **The Toaster mounts in the ROOT layout, above `ViewerZone`.** ViewerZone
+  keys its children by zone and remounts them the first time a browser reports
+  a zone the cookie disagrees with, which is the first-visit path. A provider
+  inside that takes an in-flight toast with it. `lib/ui/toast.ts` is a
+  module-level store rather than a context for the same reason.
+- **`ROW_HEIGHT = 30` is mirrored in three places** — `--row-height` in
+  `globals.css`, and a JS const in `LeadsGrid.tsx` and `ContactDirectory.tsx`,
+  both of which write it inline as `style={{ height: ROW_HEIGHT }}` and feed it
+  to `estimateSize`. Changing the CSS variable alone changes only the skeleton.
+  Any padding or border added to a grid ROW rather than to its CELLS desyncs
+  the virtualizer and the scrollbar drifts over five thousand rows.
+- **A cookie read by the server and written by the client needs its name in an
+  import-free module.** `lib/ui/prefs.ts` is `server-only`; the sidebar is a
+  client component; `SIDEBAR_COOKIE` therefore lives in `lib/ui/cookies.ts`.
+  Same shape as `SUPPRESSION_REASONS` and as `ZONE_COOKIE`.
+- **`npm run verify` now runs `next build`.** It had to: vitest here is
+  node-only with no jsdom and no `.tsx` tests, so nothing in the suite can
+  catch a Tailwind error or a client/server boundary violation, and `main`
+  auto-deploys. A manual pass of the fourteen routes is still part of done.
+- **`nav.ts` annotates `{ href: Route }[]` and must not use `as const`** — with
+  typed routes, a bare union of a dozen literal hrefs makes `Link` infer its
+  generic from the wrong member and reject every other one.
+- **`app/no-access/page.tsx` imports `SignOutButton` from `(app)`.** It is
+  unreachable in normal operation, so if that export goes away nobody notices
+  for months.
+
 ## The send path (Phase 2)
 
 Two things write into `scheduled_sends`, and only the first line differs:
