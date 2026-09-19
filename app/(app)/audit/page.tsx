@@ -1,8 +1,10 @@
 import { accountsOf, type OperatorGroup } from "@/lib/dashboard/operators";
 import { requireOrgContext } from "@/lib/org";
 
-import { PAGE, PAGE_HEADER } from "../ui";
 import { AuditList, type AuditLead } from "./AuditList";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -33,26 +35,20 @@ export default async function AuditPage() {
   const leads = (data ?? []) as AuditLead[];
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Audit</h1>
-        <span className="tabular text-ink-3">
-          {leads.length} waiting
-        </span>
-        <span className="ml-auto text-ink-3">
-          Times shown are the prospect&apos;s, not yours.
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Audit"
+        subtitle={`${leads.length} waiting`}
+        note="Times shown are the prospect’s, not yours."
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-danger">
-            Could not load the audit queue: {error.message}
-          </p>
+          <LoadError what="the audit queue" message={error.message} />
         ) : (
           <AuditList leads={leads} orgId={orgId} />
         )}
       </div>
-    </div>
+    </Page>
   );
 }

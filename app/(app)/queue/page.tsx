@@ -12,8 +12,11 @@ import {
 import { weekdayLabel } from "@/lib/scheduler/weekdays";
 import { selectAll } from "@/lib/supabase/paginate";
 
-import { PAGE, PAGE_HEADER, PANEL } from "../ui";
+import { PANEL } from "../ui";
 import { QueuedSends, type QueuedSend } from "./QueuedSends";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -154,22 +157,19 @@ export default async function QueuePage() {
   }
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Queue</h1>
-        <span className="tabular text-ink-3">
-          {buckets.get("ready")?.length ?? 0} ready ·{" "}
-          {buckets.get("booked")?.length ?? 0} booked · {inFlight.length} already
-          out
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Queue"
+        subtitle={`${buckets.get("ready")?.length ?? 0} ready · ${buckets.get("booked")?.length ?? 0} booked · ${inFlight.length} already out`}
+        note="Times shown are the prospect’s, not yours."
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="max-w-[1100px] space-y-4">
           {scheduled.length > 0 && (
             <div className={PANEL}>
               <div className="mb-1 flex items-baseline gap-3">
-                <h2 className="text-ink">Booked</h2>
+                <h2 className="text-xl font-semibold text-ink">Booked</h2>
                 <span className="tabular text-ink-2">
                   {scheduled.length}
                 </span>
@@ -214,9 +214,7 @@ export default async function QueuePage() {
           </div>
 
           {error && (
-            <p role="alert" className={PANEL + " text-danger"}>
-              Could not load the queue: {error.message}
-            </p>
+            <LoadError compact what="the queue" message={error.message} />
           )}
 
           {BLOCKER_ORDER.map((blocker) => {
@@ -272,6 +270,6 @@ export default async function QueuePage() {
           )}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

@@ -71,7 +71,7 @@ export function SuppressionList({
   return (
     <div className="space-y-4 p-4">
       <div className={PANEL}>
-        <h2 className="mb-3 text-ink">Add to the list</h2>
+        <h2 className="mb-3 text-xl font-semibold text-ink">Add to the list</h2>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-ink-3">
@@ -130,7 +130,7 @@ export function SuppressionList({
       </div>
 
       <div className={PANEL}>
-        <h2 className="mb-3 text-ink">
+        <h2 className="mb-3 text-xl font-semibold text-ink">
           On the list{" "}
           <span className="tabular text-ink-3">{rows.length}</span>
         </h2>

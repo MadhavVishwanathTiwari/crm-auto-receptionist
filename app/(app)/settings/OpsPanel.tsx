@@ -54,7 +54,7 @@ export function OpsPanel({ jobs }: { jobs: JobDescriptor[] }) {
   return (
     <div className={PANEL}>
       <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="text-ink">Jobs</h2>
+        <h2 className="text-xl font-semibold text-ink">Jobs</h2>
         <span
           className={
             unscheduled === 0

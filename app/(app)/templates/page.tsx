@@ -1,7 +1,9 @@
 import { requireOrgContext } from "@/lib/org";
 
-import { PAGE, PAGE_HEADER } from "../ui";
 import { TemplateEditor, type TemplateRow } from "./TemplateEditor";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -17,19 +19,15 @@ export default async function TemplatesPage() {
     .order("name", { ascending: true });
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Templates</h1>
-        <span className="ml-auto text-ink-3">
-          No em dashes. Loss-framed. One binary-choice ask.
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Templates"
+        note="No em dashes. Loss-framed. One binary-choice ask."
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-danger">
-            Could not load templates: {error.message}
-          </p>
+          <LoadError what="templates" message={error.message} />
         ) : (
           <TemplateEditor
             rows={(data ?? []) as TemplateRow[]}
@@ -37,6 +35,6 @@ export default async function TemplatesPage() {
           />
         )}
       </div>
-    </div>
+    </Page>
   );
 }

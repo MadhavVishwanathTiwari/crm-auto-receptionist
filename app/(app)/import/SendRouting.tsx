@@ -53,7 +53,7 @@ export function SendRouting() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-ink">Sends queued on the wrong mailbox</h2>
+      <h2 className="mb-2 text-xl font-semibold text-ink">Sends queued on the wrong mailbox</h2>
       <p className="mb-3 max-w-[70ch] text-ink-3">
         Until now a send went out from whichever mailbox had the most room that
         day, not from the person who owns the lead. This moves anything still

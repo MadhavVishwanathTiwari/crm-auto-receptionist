@@ -1,7 +1,9 @@
 import { requireOrgContext } from "@/lib/org";
 
-import { PAGE, PAGE_HEADER } from "../ui";
 import { ReviewList, type ReviewItem } from "./ReviewList";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -41,23 +43,20 @@ export default async function ReviewPage() {
   }));
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Review</h1>
-        <span className="tabular text-ink-3">
-          {items.length} pending
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Review"
+        subtitle={`${items.length} pending`}
+        note="Near-duplicates the import could not decide about."
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-danger">
-            Could not load the review queue: {error.message}
-          </p>
+          <LoadError what="the review queue" message={error.message} />
         ) : (
           <ReviewList items={items} />
         )}
       </div>
-    </div>
+    </Page>
   );
 }

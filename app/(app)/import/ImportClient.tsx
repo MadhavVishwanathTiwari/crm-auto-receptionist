@@ -256,7 +256,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
 
       {result && (
         <div className={PANEL}>
-          <h2 className="mb-2 text-ink">
+          <h2 className="mb-2 text-xl font-semibold text-ink">
             Imported {result.totalRows} rows
           </h2>
           <ul className="tabular space-y-1">
@@ -341,7 +341,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
 
           {readiness.length > 0 && (
             <div className={PANEL}>
-              <h2 className="mb-2 text-ink">
+              <h2 className="mb-2 text-xl font-semibold text-ink">
                 These leads will import, but
               </h2>
               <ul className="max-w-[80ch] space-y-1 text-warn">
@@ -354,7 +354,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
 
           <div className={PANEL}>
             <div className="mb-3 flex items-baseline gap-3">
-              <h2 className="text-ink">Column mapping</h2>
+              <h2 className="text-xl font-semibold text-ink">Column mapping</h2>
               <span className="text-ink-3">
                 {recomputing
                   ? "checking..."
@@ -435,7 +435,7 @@ export function ImportClient({ saved = [] }: { saved?: SavedMapping[] }) {
           </div>
 
           <div className={PANEL + " overflow-x-auto"}>
-            <h2 className="mb-3 text-ink">First rows</h2>
+            <h2 className="mb-3 text-xl font-semibold text-ink">First rows</h2>
             <table className="w-max border-collapse">
               <thead>
                 <tr>

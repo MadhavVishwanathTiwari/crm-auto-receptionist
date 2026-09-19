@@ -29,8 +29,12 @@ import {
 } from "@/lib/queue/blockers";
 import { selectAll } from "@/lib/supabase/paginate";
 
-import { PAGE, PAGE_HEADER, PANEL, STAGE_TONE } from "../ui";
+import { PANEL, STAGE_TONE } from "../ui";
 import { Funnel, SendHistory, Stat, type DayCount } from "./Charts";
+
+import { Badge } from "@/components/ui/Badge";
+import { LoadError } from "@/components/ui/LoadError";
+import { Page, PageHeader } from "@/components/ui/PageShell";
 
 export const dynamic = "force-dynamic";
 
@@ -180,32 +184,30 @@ export default async function DashboardPage() {
   const sentWindow = activity?.sends.sent ?? 0;
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Dashboard</h1>
-        {activity && (
-          <span className="text-ink-3">
-            Last {activity.days} days, counted in {activity.zone}
-          </span>
-        )}
-        {settings.data?.dry_run && (
-          <span className="text-warn">
-            Dry run is on, so nothing is actually sending
-          </span>
-        )}
-      </header>
+    <Page>
+      <PageHeader
+        title="Dashboard"
+        subtitle={
+          activity ? `Last ${activity.days} days, in ${activity.zone}` : undefined
+        }
+        actions={
+          settings.data?.dry_run ? (
+            <Badge tone="warn">
+              Dry run is on, so nothing is actually sending
+            </Badge>
+          ) : undefined
+        }
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {activityResult.error ? (
-          <p role="alert" className="px-1 py-4 text-danger">
-            Could not load activity: {activityResult.error.message}
-          </p>
+          <LoadError compact what="activity" message={activityResult.error.message} />
         ) : null}
 
         <div className="grid grid-cols-2 gap-3">
           {/* --- outbound activity ------------------------------------------ */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-ink">Outbound</h2>
+            <h2 className="mb-3 text-xl font-semibold text-ink">Outbound</h2>
 
             {activity && <SendHistory series={activity.series} />}
 
@@ -260,7 +262,7 @@ export default async function DashboardPage() {
 
           {/* --- mailbox headroom ------------------------------------------- */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-ink">Mailboxes</h2>
+            <h2 className="mb-3 text-xl font-semibold text-ink">Mailboxes</h2>
             {(activity?.mailboxes.length ?? 0) === 0 ? (
               <p className="text-ink-3">
                 No mailbox connected.{" "}
@@ -294,7 +296,7 @@ export default async function DashboardPage() {
 
           {/* --- pipeline ---------------------------------------------------- */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-ink">Pipeline</h2>
+            <h2 className="mb-3 text-xl font-semibold text-ink">Pipeline</h2>
 
             <div className="mb-4 flex flex-wrap gap-4">
               {/* Computed by lib/pipeline/stages.ts, the same functions the
@@ -359,7 +361,7 @@ export default async function DashboardPage() {
 
           {/* --- work to do now ---------------------------------------------- */}
           <section className={PANEL}>
-            <h2 className="mb-3 text-ink">Now</h2>
+            <h2 className="mb-3 text-xl font-semibold text-ink">Now</h2>
 
             <div className="mb-4 flex flex-wrap gap-4">
               <Stat
@@ -401,7 +403,7 @@ export default async function DashboardPage() {
 
           {/* --- per operator ------------------------------------------------ */}
           <section className={PANEL + " col-span-2"}>
-            <h2 className="mb-3 text-ink">By operator</h2>
+            <h2 className="mb-3 text-xl font-semibold text-ink">By operator</h2>
             {perOperator.length === 0 ? (
               <p className="text-ink-3">Nobody in this org yet.</p>
             ) : (
@@ -457,6 +459,6 @@ export default async function DashboardPage() {
           event, so any such line would be a guess drawn confidently.
         </p>
       </div>
-    </div>
+    </Page>
   );
 }

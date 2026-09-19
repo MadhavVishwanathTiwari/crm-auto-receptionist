@@ -3,8 +3,10 @@ import { DateTime } from "luxon";
 import { requireOrgContext } from "@/lib/org";
 import { buildMailboxSenders } from "@/lib/scheduler/routing";
 
-import { PAGE, PAGE_HEADER } from "../ui";
 import { MailboxList, type MailboxRow } from "./MailboxList";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -120,23 +122,19 @@ export default async function MailboxesPage({
       : null;
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Mailboxes</h1>
-        <span className="ml-auto text-ink-3">
-          Caps reset in the mailbox&rsquo;s own timezone, not the prospect&rsquo;s.
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Mailboxes"
+        note="Caps reset in the mailbox’s own timezone, not the prospect’s."
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-danger">
-            Could not load mailboxes: {error.message}
-          </p>
+          <LoadError what="mailboxes" message={error.message} />
         ) : (
           <MailboxList rows={rows} notice={notice} />
         )}
       </div>
-    </div>
+    </Page>
   );
 }

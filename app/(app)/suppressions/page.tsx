@@ -1,8 +1,10 @@
 import { requireOrgContext } from "@/lib/org";
 import { selectUpTo } from "@/lib/supabase/paginate";
 
-import { PAGE, PAGE_HEADER } from "../ui";
 import { SuppressionList, type SuppressionRow } from "./SuppressionList";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -25,19 +27,15 @@ export default async function SuppressionsPage() {
   );
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Suppressions</h1>
-        <span className="ml-auto text-ink-3">
-          Anyone can add. Only an admin can remove.
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Suppressions"
+        note="Anyone can add. Only an admin can remove."
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p role="alert" className="px-4 py-6 text-danger">
-            Could not load the list: {error.message}
-          </p>
+          <LoadError what="the list" message={error.message} />
         ) : (
           <SuppressionList
             rows={(data ?? []) as SuppressionRow[]}
@@ -45,6 +43,6 @@ export default async function SuppressionsPage() {
           />
         )}
       </div>
-    </div>
+    </Page>
   );
 }

@@ -70,7 +70,7 @@ function MailboxCard({ row }: { row: MailboxRow }) {
   return (
     <div className={PANEL}>
       <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="text-ink">{row.email}</h2>
+        <h2 className="text-xl font-semibold text-ink">{row.email}</h2>
         <span className={state.tone}>{state.label}</span>
         <span className="tabular text-ink-3">
           {row.used_today} of {row.daily_cap} used today
@@ -195,7 +195,7 @@ export function MailboxList({
 
       <div className={PANEL}>
         <div className="flex items-baseline gap-3">
-          <h2 className="text-ink">Connect a sending mailbox</h2>
+          <h2 className="text-xl font-semibold text-ink">Connect a sending mailbox</h2>
           <a href="/api/auth/google/start" className={BUTTON + " ml-auto"}>
             Connect with Google
           </a>

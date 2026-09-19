@@ -124,7 +124,7 @@ export function TemplateEditor({
     <div className="space-y-4 p-4">
       <div className={PANEL}>
         <div className="mb-3 flex items-baseline gap-3">
-          <h2 className="text-ink">
+          <h2 className="text-xl font-semibold text-ink">
             {draft.id ? "Edit template" : "New template"}
           </h2>
           {draft.id && (
@@ -270,7 +270,7 @@ export function TemplateEditor({
       </div>
 
       <div className={PANEL}>
-        <h2 className="mb-3 text-ink">
+        <h2 className="mb-3 text-xl font-semibold text-ink">
           Templates{" "}
           <span className="tabular text-ink-3">{rows.length}</span>
         </h2>

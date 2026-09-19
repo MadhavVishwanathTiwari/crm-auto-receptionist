@@ -49,7 +49,7 @@ export function WebsiteRepair() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-ink">Websites that are maps links</h2>
+      <h2 className="mb-2 text-xl font-semibold text-ink">Websites that are maps links</h2>
       <p className="mb-3 max-w-[70ch] text-ink-3">
         Finds leads whose <code>website</code> is a Google Maps or directory link
         and reads the real company site back out of the stored import row. Those

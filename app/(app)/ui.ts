@@ -1,73 +1,42 @@
-// Shared class strings for the app chrome.
+// Shared class strings for the screens that have not been converted to
+// components/ui yet.
 //
-// Not a component library: four pages share a handful of surfaces and controls,
-// and repeating the same twelve Tailwind utilities in each one is how they
-// quietly drift apart.
+// This file used to be the whole design system. It is now a compatibility
+// shim: each constant is the new component's class string, so a screen still
+// writing `className={BUTTON}` gets the new button without being touched, and
+// the tone maps keep their old Record<string, string> shape on top of the one
+// real table in lib/ui/tones.ts.
+//
+// Nothing new should import from here. It goes away when the last screen does.
 
-export const BUTTON =
-  "border border-line-2 bg-surface-3 px-3 py-1 " +
-  "text-ink hover:border-line-strong " +
-  "disabled:opacity-40 disabled:hover:border-line-2";
+import { buttonClasses } from "@/components/ui/Button";
+import { inputClasses } from "@/components/ui/Input";
+import {
+  OUTCOME_TONE as OUTCOME_TONES,
+  STAGE_TONE as STAGE_TONES,
+  STATUS_TONE as STATUS_TONES,
+  TONE_TEXT,
+  type Tone,
+} from "@/lib/ui/tones";
 
-export const BUTTON_QUIET =
-  "border border-transparent px-2 py-0.5 text-ink-2 " +
-  "hover:border-line-2 hover:text-ink " +
-  "disabled:opacity-40";
+export const BUTTON = buttonClasses("secondary", "md");
+export const BUTTON_QUIET = buttonClasses("ghost", "sm");
+export const INPUT = inputClasses();
 
-export const INPUT =
-  "bg-surface-2 border border-line px-2 py-1 " +
-  "text-ink placeholder:text-ink-3 " +
-  "focus:border-focus";
-
-export const PANEL =
-  "border border-line bg-surface p-4";
+export const PANEL = "rounded-lg border border-line bg-surface p-4";
 
 /** Every page is a full-height column whose body owns its own scrolling. */
 export const PAGE = "flex h-full flex-col overflow-hidden";
 
 export const PAGE_HEADER =
-  "flex shrink-0 items-center gap-3 border-b border-line px-4 py-2";
+  "flex shrink-0 items-center gap-3 border-b border-line bg-surface px-4 py-2.5";
 
-/** Colour only ever encodes meaning, per the design note in globals.css. */
-export const STATUS_TONE: Record<string, string> = {
-  imported: "text-ink-3",
-  qualified: "text-ink-2",
-  claimed: "text-info",
-  audited: "text-info",
-  queued: "text-info",
-  sent: "text-ink",
-  delivered: "text-ink",
-  opened: "text-ok",
-  replied: "text-ok",
-  bounced: "text-danger",
-  unsubscribed: "text-danger",
-  closed_won: "text-ok",
-  closed_lost: "text-ink-3",
-  do_not_contact: "text-danger",
-  // Not a status. The lead timeline colours event types from this map too,
-  // and a refused demo build is the one event worth a warning there.
-  demo_failed: "text-warn",
-};
+function asClasses(map: Record<string, Tone>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(map).map(([key, tone]) => [key, TONE_TEXT[tone]]),
+  );
+}
 
-export const OUTCOME_TONE: Record<string, string> = {
-  inserted: "text-ok",
-  skipped_duplicate: "text-ink-3",
-  flagged_review: "text-warn",
-  failed_validation: "text-danger",
-};
-
-/**
- * Board columns. Same rule as STATUS_TONE: colour encodes meaning, so the
- * live-conversation stages read forward, nurture reads parked, and the two
- * terminals keep the tone close_lead() already gave them.
- */
-export const STAGE_TONE: Record<string, string> = {
-  prospect: "text-ink-3",
-  engaged: "text-info",
-  meeting: "text-ok",
-  proposal: "text-ok",
-  nurture: "text-warn",
-  closed_won: "text-ok",
-  closed_lost: "text-ink-3",
-  do_not_contact: "text-danger",
-};
+export const STATUS_TONE = asClasses(STATUS_TONES);
+export const OUTCOME_TONE = asClasses(OUTCOME_TONES);
+export const STAGE_TONE = asClasses(STAGE_TONES);

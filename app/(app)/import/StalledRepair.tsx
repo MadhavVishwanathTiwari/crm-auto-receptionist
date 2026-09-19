@@ -55,7 +55,7 @@ export function StalledRepair() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-ink">Emails that went out unrecorded</h2>
+      <h2 className="mb-2 text-xl font-semibold text-ink">Emails that went out unrecorded</h2>
       <p className="mb-3 max-w-[70ch] text-ink-3">
         Finds sends that reached Gmail but were never marked sent, so the planner
         booked the same touch again. Each lead&apos;s touch is recorded once, dated

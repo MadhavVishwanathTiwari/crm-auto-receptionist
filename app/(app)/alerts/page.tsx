@@ -1,8 +1,11 @@
 import { pushIsConfigured } from "@/lib/notify/push";
 import { requireOrgContext } from "@/lib/org";
 
-import { PAGE, PAGE_HEADER, PANEL } from "../ui";
+import { PANEL } from "../ui";
 import { type AlertRow, AlertList } from "./AlertList";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -41,20 +44,17 @@ export default async function AlertsPage() {
   const open = rows.filter((row) => !row.acknowledged_at).length;
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Alerts</h1>
-        <span className="tabular text-ink-3">
-          {open} open · {rows.length} in the last {LIMIT}
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Alerts"
+        subtitle={`${open} open`}
+        note={`${rows.length} in the last ${LIMIT}`}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="max-w-[1100px] space-y-4">
           {error && (
-            <p role="alert" className={PANEL + " text-danger"}>
-              Could not load the alerts: {error.message}
-            </p>
+            <LoadError compact what="the alerts" message={error.message} />
           )}
           <AlertList rows={rows} />
 
@@ -68,6 +68,6 @@ export default async function AlertsPage() {
           )}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

@@ -22,7 +22,20 @@ import { createBrowserSupabase, subscribeAsUser } from "@/lib/supabase/client";
 import { formatCount, relativeTo } from "@/lib/time/format";
 
 import { closeLead } from "../leads/actions";
-import { BUTTON, BUTTON_QUIET, STAGE_TONE } from "../ui";
+import { TriangleAlert } from "lucide-react";
+
+import { Badge } from "@/components/ui/Badge";
+
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { StatTile } from "@/components/ui/StatTile";
+import { cn } from "@/lib/cn";
+import {
+  humanise,
+  STAGE_TONE,
+  STATUS_TONE,
+  TONE_TEXT,
+  toneFor,
+} from "@/lib/ui/tones";
 import { useViewerZone } from "../ViewerZone";
 import { setStage } from "./actions";
 
@@ -228,67 +241,27 @@ export function PipelineBoard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-4 border-b border-line px-4 py-1.5 text-ink-3">
-        <span>
-          Open pipeline{" "}
-          <span className="tabular text-ink">{formatMoney(open)}</span>
-        </span>
-        <span>
-          Weighted{" "}
-          <span className="tabular text-ink-2">
-            {formatMoney(weighted)}
-          </span>
-        </span>
-        <span>
-          Won{" "}
-          <span className="tabular text-ok">{formatMoney(won)}</span>
-        </span>
+      <div className="flex shrink-0 items-center gap-8 border-b border-line bg-surface px-4 py-2.5">
+        <StatTile label="Open pipeline" value={formatMoney(open)} size="sm" />
+        <StatTile
+          label="Weighted"
+          value={formatMoney(weighted)}
+          tone="muted"
+          size="sm"
+        />
+        <StatTile label="Won" value={formatMoney(won)} tone="ok" size="sm" />
         {/* Prospect is excluded from every figure above: thousands of unworked
             leads at the default value is a number nobody believes. Cards in that
             column do not change this, because countsTowardPipeline still
             excludes the stage. */}
-        <span className="ml-auto">
-          <span className="tabular">{formatCount(prospectCount)}</span> not yet
-          replied
-        </span>
+        <StatTile
+          className="ml-auto text-right"
+          label="Not yet replied"
+          value={formatCount(prospectCount)}
+          tone="muted"
+          size="sm"
+        />
       </div>
-
-      {confirming && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
-          <span className="text-ink">
-            Close {confirming.lead.company_name ?? "this lead"} as{" "}
-            <span className={STAGE_TONE[confirming.outcome] ?? ""}>
-              {COLUMN_LABEL[confirming.outcome]}
-            </span>
-            ?
-          </span>
-          {/* The same sentence the drawer prints for the same action, so the app
-              says one thing about what closing costs. */}
-          <span className="text-ink-3">
-            Closing cannot be undone from the app. A terminal outcome wins over
-            every later event, so reopening would need a database change.
-          </span>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => {
-              const target = confirming;
-              setConfirming(null);
-              commitClose(target);
-            }}
-            className={BUTTON + " text-danger"}
-          >
-            Yes, close it
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirming(null)}
-            className={BUTTON_QUIET}
-          >
-            cancel
-          </button>
-        </div>
-      )}
 
       {error && (
         <p
@@ -298,6 +271,25 @@ export function PipelineBoard({
           {error}
         </p>
       )}
+
+      {/* Closing used to be confirmed by a bar pushed into the page above the
+          board, which moved every column down by its own height at the moment
+          you were reading it. */}
+      <ConfirmDialog
+        open={confirming !== null}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => {
+          const target = confirming;
+          setConfirming(null);
+          if (target) commitClose(target);
+        }}
+        destructive
+        pending={pending}
+        title={`Close ${confirming?.lead.company_name ?? "this lead"} as ${confirming ? COLUMN_LABEL[confirming.outcome] : ""}?`}
+        description="Closing cannot be undone from the app. A terminal outcome wins over every later event, so reopening would need a database change."
+        confirmLabel="Yes, close it"
+        cancelLabel="Leave it open"
+      />
 
       <div className="min-h-0 flex-1 overflow-x-auto">
         <div className="flex h-full min-w-max gap-2 p-2">
@@ -324,28 +316,37 @@ export function PipelineBoard({
                   const leadId = event.dataTransfer.getData(DRAG_TYPE);
                   if (leadId) requestMove(leadId, column);
                 }}
-                className="flex h-full w-[240px] shrink-0 flex-col border border-line bg-surface"
+                className="flex h-full w-[248px] shrink-0 flex-col rounded-lg border border-line bg-surface"
               >
-                <header className="flex shrink-0 items-baseline gap-2 border-b border-line px-2 py-1">
-                  <span className={STAGE_TONE[column] ?? ""}>
-                    {COLUMN_LABEL[column]}
-                  </span>
-                  <span className="tabular ml-auto text-ink-3">
-                    {isProspect
-                      ? `${rows.length} / ${formatCount(prospectCount)}`
-                      : rows.length}
-                  </span>
+                <header className="shrink-0 border-b border-line px-2.5 py-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full bg-current",
+                        TONE_TEXT[toneFor(STAGE_TONE, column)],
+                      )}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium text-ink">
+                      {COLUMN_LABEL[column]}
+                    </span>
+                    <span className="tabular shrink-0 rounded-sm bg-surface-3 px-1.5 text-xs text-ink-2">
+                      {isProspect
+                        ? `${rows.length} / ${formatCount(prospectCount)}`
+                        : rows.length}
+                    </span>
+                  </div>
                   {/* Prospect must still never show a value, cards or not. */}
                   {!isProspect && rows.length > 0 && (
-                    <span className="tabular text-ink-3">
+                    <p className="tabular mt-0.5 text-ink-3">
                       {formatMoney(value)}
-                    </span>
+                    </p>
                   )}
                 </header>
 
-                <div className="min-h-0 flex-1 overflow-y-auto p-1">
+                <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
                   {rows.length === 0 ? (
-                    <p className="px-1 py-2 text-ink-3">Empty.</p>
+                    <p className="px-1 py-6 text-center text-ink-3">Empty</p>
                   ) : (
                     rows.map((lead) => (
                       <Card
@@ -426,47 +427,59 @@ function Card({
         onDragStateChange(lead.id);
       }}
       onDragEnd={() => onDragStateChange(null)}
-      className={
-        "mb-1 border border-line bg-surface-2 px-2 py-1.5 " +
-        (draggable ? "cursor-grab " : "") +
-        (dragging ? "opacity-40" : "")
-      }
+      className={cn(
+        "mb-1.5 rounded-md border border-line bg-surface-2 px-2.5 py-2 shadow-sm",
+        "transition-colors duration-(--duration-fast)",
+        draggable && "cursor-grab hover:border-line-2 hover:bg-surface-3",
+        dragging && "opacity-40",
+      )}
     >
       {/* An <a> is natively draggable and would hijack the gesture with a URL
           payload, so the card never starts a drag when you grab the name. */}
       <Link
         href={{ pathname: "/leads", query: { lead: lead.id } }}
         draggable={false}
-        className="block truncate text-ink hover:underline"
+        className="block truncate font-medium text-ink hover:underline"
       >
         {lead.company_name ?? "Unnamed"}
       </Link>
 
-      <p className="truncate text-ink-3">
+      <p className="mt-0.5 truncate text-ink-3">
         {owner}
         {lead.city ? ` · ${lead.city}` : ""}
         {lead.state ? `, ${lead.state}` : ""}
       </p>
 
-      <p className="truncate text-ink-3">
-        {lead.status} {relativeTo(lead.status_updated_at, renderedAt)}
+      <p className="mt-1">
+        <Badge tone={toneFor(STATUS_TONE, lead.status)} variant="dot">
+          {humanise(lead.status)}{" "}
+          <span className="text-ink-3">
+            {relativeTo(lead.status_updated_at, renderedAt)}
+          </span>
+        </Badge>
       </p>
 
       {lead.next_action && (
         <p
-          className={
-            "truncate " +
-            (overdue ? "text-danger" : "text-warn")
-          }
+          className={cn(
+            "mt-1 flex items-start gap-1 truncate",
+            overdue ? "text-danger" : "text-warn",
+          )}
         >
-          {overdue ? "⚠ " : ""}
-          {lead.next_action}
-          {lead.next_action_at ? ` · ${relativeTo(lead.next_action_at, renderedAt)}` : ""}
+          {overdue && (
+            <TriangleAlert size={11} className="mt-0.5 shrink-0" aria-label="Overdue" />
+          )}
+          <span className="truncate">
+            {lead.next_action}
+            {lead.next_action_at
+              ? ` · ${relativeTo(lead.next_action_at, renderedAt)}`
+              : ""}
+          </span>
         </p>
       )}
 
-      <div className="mt-1 flex items-center gap-2">
-        <span className="tabular text-ink-2">
+      <div className="mt-2 flex items-center gap-2 border-t border-line pt-1.5">
+        <span className="tabular font-medium text-ink-2">
           {formatMoney(dealValue(lead, defaultDealValue))}
         </span>
 
@@ -479,7 +492,7 @@ function Card({
           value={columnFor(lead)}
           disabled={pending || frozen || closed}
           onChange={(event) => onMove(lead.id, event.target.value as BoardColumn)}
-          className="ml-auto border border-line bg-surface-3 px-1 py-0.5 text-ink disabled:opacity-40"
+          className="ml-auto cursor-pointer rounded-sm border border-line bg-surface-3 px-1 py-0.5 text-xs text-ink-2 hover:text-ink disabled:opacity-40"
         >
           {BOARD_COLUMNS.map((column) => (
             <option key={column} value={column}>

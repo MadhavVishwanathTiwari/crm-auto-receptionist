@@ -1,7 +1,9 @@
 import { requireOrgContext } from "@/lib/org";
 
-import { PAGE, PAGE_HEADER } from "../ui";
 import { PipelineBoard, type BoardRow } from "./PipelineBoard";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -75,15 +77,14 @@ export default async function PipelinePage() {
   for (const row of (prospectCards.data ?? []) as BoardRow[]) merged.set(row.id, row);
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Pipeline</h1>
-      </header>
+    <Page>
+      <PageHeader
+        title="Pipeline"
+        note="Drag a card, or use the menu on it. Closing cannot be undone."
+      />
 
       {cards.error ? (
-        <p role="alert" className="px-4 py-6 text-danger">
-          Could not load the pipeline: {cards.error.message}
-        </p>
+        <LoadError what="the pipeline" message={cards.error.message} />
       ) : (
         <PipelineBoard
           leads={[...merged.values()]}
@@ -92,6 +93,6 @@ export default async function PipelinePage() {
           currentUserId={userId}
         />
       )}
-    </div>
+    </Page>
   );
 }

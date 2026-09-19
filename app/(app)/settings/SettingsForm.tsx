@@ -183,7 +183,7 @@ export function SettingsForm({
     <div className="space-y-4">
       <div className={PANEL}>
         <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-ink">Sending</h2>
+          <h2 className="text-xl font-semibold text-ink">Sending</h2>
           <span
             className={
               form.dryRun
@@ -216,7 +216,7 @@ export function SettingsForm({
       </div>
 
       <div className={PANEL}>
-        <h2 className="text-ink">Send window, prospect-local</h2>
+        <h2 className="text-xl font-semibold text-ink">Send window, prospect-local</h2>
         <p className="mt-1 mb-3 text-ink-3">
           Every slot lands inside these hours in the PROSPECT&rsquo;s zone. Ends
           are exclusive, so 07:00 to 11:00 means the last start is 10:59. That
@@ -264,7 +264,7 @@ export function SettingsForm({
       </div>
 
       <div className={PANEL}>
-        <h2 className="text-ink">Your clock, and the timers</h2>
+        <h2 className="text-xl font-semibold text-ink">Your clock, and the timers</h2>
         <p className="mt-1 mb-3 text-ink-3">
           The operator zone is what the queue shows &ldquo;your time&rdquo; in.
           Mailbox caps reset in each mailbox&rsquo;s own zone, set on the
@@ -308,7 +308,7 @@ export function SettingsForm({
       </div>
 
       <div className={PANEL}>
-        <h2 className="text-ink">Spacing between sends</h2>
+        <h2 className="text-xl font-semibold text-ink">Spacing between sends</h2>
         <p className="mt-1 mb-3 text-ink-3">
           After a mailbox sends, it waits a random number of minutes between these
           two before it sends again, and never sends two in one run. Bookings on

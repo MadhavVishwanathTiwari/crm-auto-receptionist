@@ -3,9 +3,11 @@ import { Suspense } from "react";
 import { requireOrgContext } from "@/lib/org";
 import { selectUpTo } from "@/lib/supabase/paginate";
 
-import { PAGE, PAGE_HEADER } from "../ui";
 import { ContactCardData } from "./ContactCardData";
 import { ContactDirectory, type ContactRow } from "./ContactDirectory";
+
+import { Page, PageHeader } from "@/components/ui/PageShell";
+import { LoadError } from "@/components/ui/LoadError";
 
 export const dynamic = "force-dynamic";
 
@@ -57,19 +59,14 @@ export default async function ContactsPage({
   );
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Contacts</h1>
-        <span className="text-ink-3">
-          Who these people are and how to reach them. What the machine should do
-          with them is on Leads.
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Contacts"
+        note="Who these people are and how to reach them. What the machine should do with them is on Leads."
+      />
 
       {error ? (
-        <p role="alert" className="px-4 py-6 text-danger">
-          Could not load contacts: {error.message}
-        </p>
+        <LoadError what="contacts" message={error.message} />
       ) : (
         <div className="flex min-h-0 flex-1">
           <ContactDirectory
@@ -88,6 +85,6 @@ export default async function ContactsPage({
           )}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

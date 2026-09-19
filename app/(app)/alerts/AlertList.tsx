@@ -181,7 +181,7 @@ export function AlertList({ rows }: { rows: AlertRow[] }) {
     <div className="space-y-4">
       <div className={PANEL}>
         <div className="flex items-baseline gap-3">
-          <h2 className="text-ink">Open</h2>
+          <h2 className="text-xl font-semibold text-ink">Open</h2>
           <span className="tabular text-ink-2">{open.length}</span>
           {open.length > 0 && (
             <button

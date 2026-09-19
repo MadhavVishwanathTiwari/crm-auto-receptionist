@@ -11,9 +11,13 @@ import {
 } from "@/lib/queue/blockers";
 import { selectAll } from "@/lib/supabase/paginate";
 
-import { PAGE, PAGE_HEADER, PANEL } from "../ui";
+import { PANEL } from "../ui";
 import { OpsPanel, type ScheduledJob } from "./OpsPanel";
 import { type OrgSettingsRow, SettingsForm } from "./SettingsForm";
+
+import { Badge } from "@/components/ui/Badge";
+import { LoadError } from "@/components/ui/LoadError";
+import { Page, PageHeader } from "@/components/ui/PageShell";
 
 export const dynamic = "force-dynamic";
 
@@ -185,26 +189,22 @@ export default async function SettingsPage() {
   const blocking = checks.filter((check) => !check.ok).length;
 
   return (
-    <div className={PAGE}>
-      <header className={PAGE_HEADER}>
-        <h1 className="text-ink">Settings</h1>
-        <span
-          className={
-            blocking === 0
-              ? "text-ok"
-              : "text-warn"
-          }
-        >
-          {blocking === 0
-            ? "ready to send"
-            : `${blocking} thing${blocking === 1 ? "" : "s"} between here and the first email`}
-        </span>
-      </header>
+    <Page>
+      <PageHeader
+        title="Settings"
+        actions={
+          <Badge tone={blocking === 0 ? "ok" : "warn"}>
+            {blocking === 0
+              ? "Ready to send"
+              : `${blocking} thing${blocking === 1 ? "" : "s"} between here and the first email`}
+          </Badge>
+        }
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="max-w-[1100px] space-y-4">
           <div className={PANEL}>
-            <h2 className="text-ink">Before the first send</h2>
+            <h2 className="text-xl font-semibold text-ink">Before the first send</h2>
             <ul className="mt-2">
               {checks.map((check) => (
                 <CheckLine key={check.label} check={check} />
@@ -213,9 +213,7 @@ export default async function SettingsPage() {
           </div>
 
           {settingsError && (
-            <p role="alert" className={PANEL + " text-danger"}>
-              Could not load the settings: {settingsError.message}
-            </p>
+            <LoadError compact what="the settings" message={settingsError.message} />
           )}
 
           {settings ? (
@@ -238,6 +236,6 @@ export default async function SettingsPage() {
           />
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

@@ -54,7 +54,7 @@ export function OwnershipBackfill() {
 
   return (
     <div className={PANEL}>
-      <h2 className="mb-2 text-ink">Ownership from the legacy sheet</h2>
+      <h2 className="mb-2 text-xl font-semibold text-ink">Ownership from the legacy sheet</h2>
       <p className="mb-3 max-w-[70ch] text-ink-3">
         Reads <code>lead_owner</code> back out of each lead&apos;s stored import
         row and claims it for that operator. Only touches leads nobody holds, so
