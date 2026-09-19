@@ -1,6 +1,14 @@
 "use client";
 
 import { DateTime } from "luxon";
+import {
+  CircleAlert,
+  Clock,
+  FileWarning,
+  Inbox,
+  Send,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 
@@ -10,7 +18,13 @@ import { renderTemplate, type TemplateValues } from "@/lib/templates/render";
 import { formatYours } from "@/lib/time/format";
 import { placeholderWords } from "@/lib/write/placeholders";
 
-import { BUTTON, BUTTON_QUIET, INPUT, PANEL } from "../ui";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { inputClasses } from "@/components/ui/Input";
+import { Kbd } from "@/components/ui/Kbd";
+import { cn } from "@/lib/cn";
+
 import { useViewerZone } from "../ViewerZone";
 import { queueWrittenEmail, reviseWrittenEmail } from "./actions";
 
@@ -333,9 +347,9 @@ export function WriteClient({
     <div className="flex h-full min-h-0">
       {/* ------------------------------------------------ the worklist */}
       <aside className="flex w-[280px] shrink-0 flex-col border-r border-line bg-surface">
-        <div className="shrink-0 border-b border-line px-3 py-2">
+        <div className="shrink-0 border-b border-line px-3 py-2.5">
           <div className="flex items-baseline gap-2">
-            <h1 className="text-ink">Write</h1>
+            <h1 className="text-xl font-semibold text-ink">Write</h1>
             <span className="tabular text-ink-3">
               {drafts.length} to go
             </span>
@@ -361,19 +375,35 @@ export function WriteClient({
               <li key={item.leadId}>
                 <button
                   type="button"
+                  aria-current={position === index ? "true" : undefined}
                   onClick={() => select(position)}
-                  className={
-                    "block w-full border-b border-line px-3 py-2 text-left " +
-                    (position === index
-                      ? "bg-surface-3"
-                      : "hover:bg-surface-2")
-                  }
+                  className={cn(
+                    "relative block w-full border-b border-line px-3 py-2 text-left",
+                    "transition-colors duration-(--duration-fast)",
+                    position === index
+                      ? "bg-accent-soft"
+                      : "hover:bg-surface-2",
+                  )}
                 >
+                  {/* The one you are writing, findable without reading. */}
+                  {position === index && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-0 left-0 w-0.5 bg-accent"
+                    />
+                  )}
                   <div className="flex items-baseline gap-2">
-                    <span className="min-w-0 flex-1 truncate text-ink">
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate",
+                        position === index
+                          ? "font-medium text-ink"
+                          : "text-ink",
+                      )}
+                    >
                       {item.company ?? item.workEmail}
                     </span>
-                    <span className="tabular shrink-0 text-ink-3">
+                    <span className="tabular shrink-0 rounded-sm bg-surface-3 px-1 text-xs text-ink-3">
                       T{item.step}
                     </span>
                   </div>
@@ -381,15 +411,30 @@ export function WriteClient({
                     {item.city ?? "—"}
                     {item.state ? `, ${item.state}` : ""}
                   </div>
-                  <div className="tabular truncate text-ink-2">
-                    {item.slot
-                      ? `${theirTime(item.slot.local)} their time`
-                      : (item.slotProblem ?? "no slot")}
+                  <div
+                    className={cn(
+                      "tabular flex items-center gap-1 truncate",
+                      item.slot ? "text-ink-2" : "text-warn",
+                    )}
+                  >
+                    {item.slot ? (
+                      <Clock size={11} className="shrink-0" aria-hidden="true" />
+                    ) : (
+                      <TriangleAlert size={11} className="shrink-0" aria-hidden="true" />
+                    )}
+                    <span className="truncate">
+                      {item.slot
+                        ? `${theirTime(item.slot.local)} their time`
+                        : (item.slotProblem ?? "no slot")}
+                    </span>
                   </div>
                   {(started || item.replacesWasWritten) && (
-                    <div className="text-info">
+                    <Badge
+                      tone={item.replacesWasWritten ? "info" : "accent"}
+                      className="mt-1"
+                    >
                       {item.replacesWasWritten ? "already queued" : "draft started"}
-                    </div>
+                    </Badge>
                   )}
                 </button>
               </li>
@@ -397,8 +442,8 @@ export function WriteClient({
           })}
 
           {drafts.length === 0 && (
-            <li className="px-3 py-4 text-ink-3">
-              Nothing left to write. Claim more leads on the Leads screen.
+            <li className="px-3 py-6 text-center text-ink-3">
+              Nothing left to write.
             </li>
           )}
         </ul>
@@ -425,43 +470,45 @@ export function WriteClient({
         )}
 
         {!draft ? (
-          <div className="space-y-3 p-4">
+          <div className="flex min-h-0 flex-1 flex-col justify-center p-4">
             {/* The confirmation for the lead that just emptied the list. It
                 used to live only in the composer's footer, which is gone by
                 the time the last one is queued, so the last send of a session
                 was the one send nobody saw confirmed. */}
-            {flash && <p className="text-ok">{flash}</p>}
-            <div className={PANEL}>
-              <p className="text-ink-2">
-                Nothing to write. This list holds leads you have claimed that are
-                qualified, have a work email and a timezone, and are not
-                suppressed or halted.
+            {flash && (
+              <p className="mx-auto mb-4 rounded-md bg-ok-soft px-3 py-2 text-ok">
+                {flash}
               </p>
-            </div>
+            )}
+            <EmptyState
+              icon={<Inbox size={18} />}
+              title="Nothing left to write"
+              body="This list holds leads you have claimed that are qualified, have a work email and a timezone, and are not suppressed or halted."
+              action={
+                <Link href="/leads" className={buttonClasses("primary", "md")}>
+                  Claim more leads
+                </Link>
+              }
+            />
           </div>
         ) : (
           <>
-            <header className="shrink-0 border-b border-line px-4 py-2">
-              <div className="flex items-baseline gap-3">
-                <h2 className="truncate text-ink">
+            <header className="shrink-0 border-b border-line bg-surface px-4 py-2.5">
+              <div className="flex items-center gap-3">
+                <h2 className="min-w-0 truncate text-xl font-semibold text-ink">
                   {draft.company ?? draft.workEmail}
                 </h2>
-                <span className="tabular text-ink-3">
-                  touch {draft.step} of 4
-                </span>
+                <Badge tone="neutral">touch {draft.step} of 4</Badge>
                 {draft.replacesSendId && !draft.replacesWasWritten && (
-                  <span className="text-warn">
-                    replaces the template email already queued for this step
-                  </span>
+                  <Badge tone="warn">replaces a queued template email</Badge>
                 )}
                 {draft.replacesWasWritten && (
-                  <span className="text-info">
-                    editing the email you already queued
-                  </span>
+                  <Badge tone="info">editing what you queued</Badge>
                 )}
               </div>
-              <div className="tabular text-ink-2">
-                To: {draft.contactName ? `${draft.contactName}, ` : ""}
+              <div className="tabular mt-1 truncate text-ink-2">
+                <span className="text-ink-3">To </span>
+                {draft.contactName ? `${draft.contactName}, ` : ""}
                 {draft.workEmail}
               </div>
             </header>
@@ -470,17 +517,16 @@ export function WriteClient({
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
                 <span className="text-ink-3">Start from:</span>
                 {starters.map((template) => (
-                  <button
+                  <Button
                     key={template.id}
-                    type="button"
-                    className={BUTTON_QUIET}
+                    size="sm"
                     onClick={() => startFrom(template)}
                   >
                     {template.name}
                     {!template.is_active && (
-                      <span className="ml-1 text-ink-3">draft</span>
+                      <span className="text-ink-3">draft</span>
                     )}
-                  </button>
+                  </Button>
                 ))}
                 <span className="text-ink-3">
                   filled in with this lead&rsquo;s details, then yours to rewrite
@@ -490,7 +536,7 @@ export function WriteClient({
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 p-4">
               <input
-                className={INPUT + " w-full"}
+                className={inputClasses("h-9 w-full text-lg font-medium")}
                 placeholder="Subject"
                 value={subjectLine}
                 readOnly={draft.replySubject !== null}
@@ -511,7 +557,9 @@ export function WriteClient({
               )}
               <textarea
                 ref={bodyRef}
-                className={INPUT + " min-h-0 w-full flex-1 resize-none leading-relaxed"}
+                className={inputClasses(
+                  "min-h-0 w-full flex-1 resize-none px-3 py-2.5 text-lg leading-relaxed",
+                )}
                 placeholder={`Write to ${draft.company ?? "them"}. Whatever you type is exactly what they get.`}
                 value={editing.body}
                 onChange={(event) =>
@@ -528,33 +576,43 @@ export function WriteClient({
             {/* ---------------------------------------------- the footer */}
             <footer className="shrink-0 border-t border-line px-4 py-2">
               {error && (
-                <p role="alert" className="mb-1 text-danger">
+                <p
+                  role="alert"
+                  className="mb-2 flex items-start gap-1.5 rounded-md bg-danger-soft px-2.5 py-1.5 text-danger"
+                >
+                  <CircleAlert size={13} className="mt-0.5 shrink-0" />
                   {error}
                 </p>
               )}
               {flash && !error && (
-                <p className="mb-1 text-ok">{flash}</p>
+                <p className="mb-2 rounded-md bg-ok-soft px-2.5 py-1.5 text-ok">
+                  {flash}
+                </p>
               )}
               {holes.length > 0 && !error && (
-                <p className="mb-1 text-warn">
+                <p className="mb-2 flex items-start gap-1.5 rounded-md bg-warn-soft px-2.5 py-1.5 text-warn">
+                  <FileWarning size={13} className="mt-0.5 shrink-0" />
                   Still to fill in: {holes.join(", ")}
                 </p>
               )}
               {standIns.length > 0 && !error && (
-                <p className="mb-1 text-warn">
+                <p className="mb-2 flex items-start gap-1.5 rounded-md bg-warn-soft px-2.5 py-1.5 text-warn">
+                  <FileWarning size={13} className="mt-0.5 shrink-0" />
                   Looks like a placeholder: {standIns.map((w) => `“${w}”`).join(", ")}
                 </p>
               )}
 
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className={BUTTON}
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={<Send size={14} />}
+                  loading={pending}
                   onClick={send}
                   disabled={pending || (!draft.slot && !draft.replacesWasWritten)}
                 >
                   {draft.replacesWasWritten ? "Update it" : "Send it"}
-                </button>
+                </Button>
 
                 <span className="tabular text-ink-2">
                   {draft.replacesWasWritten ? (
@@ -578,8 +636,10 @@ export function WriteClient({
                   )}
                 </span>
 
-                <span className="ml-auto text-ink-3">
-                  Ctrl+Enter sends and opens the next one
+                <span className="ml-auto flex shrink-0 items-center gap-1.5 text-ink-3">
+                  <Kbd>Ctrl</Kbd>
+                  <Kbd>Enter</Kbd>
+                  sends and opens the next one
                 </span>
               </div>
 
@@ -620,7 +680,7 @@ export function WriteClient({
       {draft && (
         <aside className="w-[300px] shrink-0 space-y-3 overflow-y-auto border-l border-line bg-surface p-3">
           <div>
-            <h3 className="text-ink-3">The business</h3>
+            <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">The business</h3>
             <dl className="mt-1 space-y-0.5">
               <Fact label="Where" value={[draft.city, draft.state].filter(Boolean).join(", ") || null} />
               <Fact label="Trade" value={draft.industry} />
@@ -651,7 +711,7 @@ export function WriteClient({
 
           {draft.demoUrl && (
             <div>
-              <h3 className="text-ink-3">Their demo</h3>
+              <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">Their demo</h3>
               <a
                 href={draft.demoUrl}
                 target="_blank"
@@ -665,7 +725,7 @@ export function WriteClient({
 
           {!draft.demoUrl && draft.demoFailure && (
             <div>
-              <h3 className="text-ink-3">No demo</h3>
+              <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">No demo</h3>
               <p className="text-warn">
                 The builder could not make one: {draft.demoFailure.reason}
               </p>
@@ -674,7 +734,7 @@ export function WriteClient({
 
           {draft.audit ? (
             <div>
-              <h3 className="text-ink-3">What happened when we called</h3>
+              <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">What happened when we called</h3>
               <p className="text-ink">
                 {DateTime.fromISO(draft.audit.localTime).toFormat("cccc h:mma").toLowerCase()},{" "}
                 {delayLabel(draft.audit.responseDelaySeconds)}
@@ -694,7 +754,7 @@ export function WriteClient({
           )}
 
           <div>
-            <h3 className="text-ink-3">House rules</h3>
+            <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">House rules</h3>
             <ul className="mt-1 space-y-0.5 text-ink-2">
               <li>No em dashes.</li>
               <li>Say what they are losing, not what we sell.</li>

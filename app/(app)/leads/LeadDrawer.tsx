@@ -308,7 +308,7 @@ export function LeadDrawer({
             <Badge tone={toneFor(STATUS_TONE, lead.status)}>
               {humanise(lead.status)}
             </Badge>
-            <Badge tone={toneFor(STAGE_TONE, lead.stage)} variant="dot">
+            <Badge tone={toneFor(STAGE_TONE, lead.stage)} variant="outline">
               {humanise(lead.stage)}
             </Badge>
           </div>

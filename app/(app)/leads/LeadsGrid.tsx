@@ -205,7 +205,7 @@ export function LeadsGrid({
       {
         id: "owner",
         header: "Owner",
-        size: 90,
+        size: 96,
         accessorFn: (row) =>
           row.claimed_by === null
             ? "pool"
@@ -254,21 +254,21 @@ export function LeadsGrid({
         id: "rating",
         accessorKey: "rating",
         header: "Rating",
-        size: 60,
+        size: 76,
         cell: (info) => info.getValue<number | null>() ?? "—",
       },
       {
         id: "reviews_count",
         accessorKey: "reviews_count",
         header: "Reviews",
-        size: 70,
+        size: 84,
         cell: (info) => info.getValue<number | null>() ?? "—",
       },
       {
         id: "lead_score",
         accessorKey: "lead_score",
         header: "Score",
-        size: 60,
+        size: 72,
         cell: (info) => info.getValue<number | null>() ?? "—",
       },
       {
@@ -501,7 +501,7 @@ export function LeadsGrid({
                         : undefined
                   }
                   className={cn(
-                    "group flex h-full items-center gap-1 px-2 text-left text-xs font-medium tracking-wide uppercase",
+                    "group flex h-full items-center gap-1 px-2 text-left text-xs font-medium uppercase",
                     "disabled:cursor-default",
                     sorted ? "text-ink" : "text-ink-3",
                     sortable && "cursor-pointer hover:text-ink",
