@@ -1,6 +1,7 @@
 import {
   Ban,
   Bell,
+  BookOpen,
   CalendarClock,
   ClipboardCheck,
   FileText,
@@ -18,7 +19,7 @@ import {
 import type { Route } from "next";
 
 /**
- * The fourteen screens, grouped.
+ * The fifteen screens, grouped.
  *
  * Ordering is the pipeline's, not the alphabet's, and that is a decision worth
  * carrying forward rather than losing to a component: Write is first because it
@@ -79,6 +80,7 @@ export const NAV: NavGroup[] = [
     label: "Setup",
     items: [
       { href: "/templates", label: "Templates", icon: FileText },
+      { href: "/knowledge", label: "Knowledge", icon: BookOpen },
       { href: "/mailboxes", label: "Mailboxes", icon: Mailbox },
       { href: "/suppressions", label: "Suppressions", icon: Ban },
       { href: "/settings", label: "Settings", icon: Settings2 },

@@ -145,7 +145,7 @@ function toLocalInput(iso: string | null, zone: string | null): string {
 }
 
 /**
- * The part of an event worth reading, for the three types that carry one.
+ * The part of an event worth reading, for the types that carry one.
  *
  * Every other entry in the log is a state change whose name says all there is
  * to say, which is how the timeline got away with rendering only the type until
@@ -156,6 +156,10 @@ function eventDetail(event: EventRow): string {
   const note = payload.note ? ` — ${String(payload.note)}` : "";
 
   if (event.type === "note") return String(payload.body ?? "");
+  // The assistant's own replies. A separate type from `note` on purpose: a
+  // cron-written note has actor_id null and would be indistinguishable in this
+  // timeline from one an operator typed.
+  if (event.type === "ai_replied") return String(payload.body ?? "");
   if (event.type === "closed") return `${String(payload.outcome ?? "")}${note}`;
   if (event.type === "stage_changed") {
     const from = payload.from ? `${String(payload.from)} → ` : "";

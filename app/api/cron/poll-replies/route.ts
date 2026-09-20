@@ -347,6 +347,11 @@ async function settleMessage(
         mailbox_id: mailbox.id,
         gmail_message_id: message.id,
         gmail_thread_id: message.threadId,
+        // When the mail ARRIVED, as opposed to occurred_at, which is when this
+        // poller got round to writing the row. They are the same thing on a
+        // quiet afternoon and hours apart after a backlog, and ai-replies
+        // measures its delay against this one. Epoch millis, as Gmail sends it.
+        internal_date: message.internalDate,
         from,
         subject: message.headers["subject"] ?? null,
         snippet: message.snippet.slice(0, 500),

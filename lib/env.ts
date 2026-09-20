@@ -68,5 +68,11 @@ export function serverEnv() {
     // Phase 2. Absent during Phase 1, so deliberately not `required`.
     googleOAuthClientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
     googleOAuthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+
+    // The assistant that answers replies. Not `required` for the same reason as
+    // the Google pair: the app runs, and every other job runs, without it. The
+    // ai-replies route says so in its report rather than throwing, and
+    // org_settings.ai_reply_mode is off by default anyway.
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   };
 }

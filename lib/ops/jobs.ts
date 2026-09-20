@@ -53,7 +53,14 @@ export const JOBS = [
     label: "Poll replies",
     blurb:
       "Reads the mailboxes for replies, bounces and unsubscribes, and halts those sequences.",
-    cadence: "*/10 * * * *",
+    cadence: "*/5 * * * *",
+  },
+  {
+    name: "ai-replies",
+    label: "Answer replies",
+    blurb:
+      "Answers a prospect nobody has replied to in five minutes. Does nothing at all while the mode is off.",
+    cadence: "*/2 * * * *",
   },
   {
     name: "reconcile-mailboxes",

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyInbound, newText } from "@/lib/gmail/classify";
 import {
   addressFromHeader,
+  fetchThread,
   referencedMessageIds,
 } from "@/lib/gmail/messages";
 import { buildAuthUrl, GMAIL_SCOPES, grantIsComplete } from "@/lib/gmail/oauth";
@@ -400,6 +401,21 @@ describe("the unsubscribe header", () => {
     expect(raw).not.toContain("List-Unsubscribe-Post");
     expect(raw).not.toMatch(/<img|https?:\/\/[^\s]*unsub/i);
   });
+
+  it("takes it off a 1:1 reply, and says the reply is automated instead", () => {
+    // Right on outbound a prospect did not ask for, absurd on an answer to
+    // "yes, send me a time": Gmail would draw an Unsubscribe control beside
+    // your name in the middle of a conversation. Auto-Submitted is RFC 3834,
+    // so everybody else's loop prevention can see what this is -- our own
+    // classifyInbound() reads exactly that header for exactly that purpose.
+    const raw = buildMimeMessage({ ...base, autoReply: true });
+    expect(raw).not.toContain("List-Unsubscribe");
+    expect(raw).toContain("Auto-Submitted: auto-replied");
+  });
+
+  it("does not mark an ordinary touch as automated", () => {
+    expect(buildMimeMessage(base)).not.toContain("Auto-Submitted");
+  });
 });
 
 describe("a reply that quotes our own email back", () => {
@@ -468,5 +484,75 @@ describe("newText", () => {
 
   it("leaves a message with nothing quoted alone", () => {
     expect(newText("Happy to talk Thursday.")).toBe("Happy to talk Thursday.");
+  });
+});
+
+describe("reading a whole thread", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function encoded(text: string): string {
+    return Buffer.from(text, "utf8").toString("base64url");
+  }
+
+  it("decodes each message and puts them oldest first", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: "thread-1",
+            messages: [
+              {
+                id: "b",
+                threadId: "thread-1",
+                labelIds: ["INBOX"],
+                internalDate: "2000",
+                snippet: "theirs",
+                payload: {
+                  mimeType: "text/plain",
+                  headers: [{ name: "Subject", value: "Re: hello" }],
+                  body: { data: encoded("yes please") },
+                },
+              },
+              {
+                id: "a",
+                threadId: "thread-1",
+                labelIds: ["SENT"],
+                internalDate: "1000",
+                snippet: "ours",
+                payload: {
+                  mimeType: "text/plain",
+                  headers: [{ name: "Subject", value: "hello" }],
+                  body: { data: encoded("the first touch") },
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const thread = await fetchThread("token", "thread-1");
+
+    expect(thread.messages.map((message) => message.id)).toEqual(["a", "b"]);
+    expect(thread.messages[0]!.labelIds).toContain("SENT");
+    expect(thread.messages[0]!.internalDate).toBe("1000");
+    expect(thread.messages[1]!.text).toContain("yes please");
+    expect(thread.messages[1]!.headers["subject"]).toBe("Re: hello");
+  });
+
+  it("asks threads.get, which gmail.readonly already covers", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      void url;
+      return new Response(JSON.stringify({ id: "t", messages: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchThread("token", "t");
+
+    expect(String(fetchMock.mock.calls[0]![0])).toContain("/threads/t?format=full");
   });
 });

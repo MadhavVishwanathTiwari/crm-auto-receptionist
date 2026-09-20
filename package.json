@@ -23,6 +23,7 @@
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.0",
     "@tanstack/react-table": "^8.21.3",

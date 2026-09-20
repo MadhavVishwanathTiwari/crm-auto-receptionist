@@ -197,13 +197,19 @@ async function makeContactedLead(
 }
 
 /** An inbound message, registered with the fake mailbox. */
-function inbound(input: { threadId?: string; from?: string; text?: string }): string {
+function inbound(input: {
+  threadId?: string;
+  from?: string;
+  text?: string;
+  internalDate?: string;
+}): string {
   const id = `msg-${randomUUID()}`;
   const text = input.text ?? "Sounds good. What times work next week?";
   gmail.messages.set(id, {
     id,
     threadId: input.threadId ?? `thread-${randomUUID()}`,
     labelIds: ["INBOX"],
+    internalDate: input.internalDate ?? String(Date.now()),
     headers: {
       from: `Dana <${input.from ?? `someone-${randomUUID().slice(0, 6)}@elsewhere.test`}>`,
       subject: "Re: Bright Smile Dental and the calls that ring out",

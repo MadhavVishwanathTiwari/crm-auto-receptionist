@@ -47,6 +47,17 @@ export interface MessageInput {
   /** The previous touch's Message-ID, when this is a follow-up. */
   inReplyTo?: string | null;
   references?: string[];
+  /**
+   * A 1:1 answer to somebody who wrote to us, rather than a cold touch.
+   *
+   * Two headers change. List-Unsubscribe comes off: it is right on outbound a
+   * prospect did not ask for, and absurd on a reply to "yes, send me a time" --
+   * Gmail would draw an Unsubscribe control beside your name in the middle of a
+   * conversation. And `Auto-Submitted: auto-replied` goes on, per RFC 3834, so
+   * every other autoresponder's loop prevention can see what this is. Our own
+   * classifyInbound() reads exactly that header for exactly that purpose.
+   */
+  autoReply?: boolean;
 }
 
 const ASCII_ONLY = /^[\x20-\x7E]*$/;
@@ -95,6 +106,17 @@ export function buildMimeMessage(input: MessageInput): string {
     `From: ${formatAddress(input.from)}`,
     `To: ${formatAddress(input.to)}`,
     `Subject: ${encodeHeaderValue(input.subject)}`,
+    `Message-ID: ${input.messageId}`,
+    `Date: ${new Date().toUTCString()}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+  ];
+
+  if (input.autoReply) {
+    // RFC 3834. Without it this assistant is invisible to everybody else's
+    // loop prevention, which is the one failure mode that multiplies.
+    headers.push("Auto-Submitted: auto-replied");
+  } else {
     // An "Unsubscribe" link next to our name, so somebody who wants out presses
     // that rather than "Report spam". A spam report costs the sending domain's
     // reputation for every later prospect; an unsubscribe costs one lead. The
@@ -103,12 +125,10 @@ export function buildMimeMessage(input: MessageInput): string {
     // unsubscribe. No https form, so no List-Unsubscribe-Post: one-click needs
     // an endpoint that acts without a human, and a mailto Gmail sends for the
     // reader is the same promise without one.
-    `List-Unsubscribe: <mailto:${input.from.email}?subject=unsubscribe>`,
-    `Message-ID: ${input.messageId}`,
-    `Date: ${new Date().toUTCString()}`,
-    "MIME-Version: 1.0",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-  ];
+    headers.push(
+      `List-Unsubscribe: <mailto:${input.from.email}?subject=unsubscribe>`,
+    );
+  }
 
   if (input.inReplyTo) {
     headers.push(`In-Reply-To: ${input.inReplyTo}`);

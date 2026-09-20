@@ -19,6 +19,10 @@ export interface OrgSettingsRow {
   stall_minutes: number;
   send_gap_min_minutes: number;
   send_gap_max_minutes: number;
+  ai_reply_mode: "off" | "draft" | "send";
+  ai_reply_delay_minutes: number;
+  ai_reply_daily_cap: number;
+  booking_url: string | null;
 }
 
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -44,6 +48,10 @@ function toInput(row: OrgSettingsRow): OrgSettingsInput {
     stallMinutes: row.stall_minutes,
     sendGapMinMinutes: row.send_gap_min_minutes,
     sendGapMaxMinutes: row.send_gap_max_minutes,
+    aiReplyMode: row.ai_reply_mode,
+    aiReplyDelayMinutes: row.ai_reply_delay_minutes,
+    aiReplyDailyCap: row.ai_reply_daily_cap,
+    bookingUrl: row.booking_url ?? "",
   };
 }
 
@@ -213,6 +221,89 @@ export function SettingsForm({
             Send real email from the connected mailboxes
           </span>
         </label>
+      </div>
+
+      <div className={PANEL}>
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-xl font-semibold text-ink">Answering replies</h2>
+          <span
+            className={
+              form.aiReplyMode === "send"
+                ? "text-ok"
+                : form.aiReplyMode === "draft"
+                  ? "text-info"
+                  : "text-ink-3"
+            }
+          >
+            {form.aiReplyMode === "send"
+              ? "live: the assistant replies to prospects"
+              : form.aiReplyMode === "draft"
+                ? "draft: it writes, you read, nothing sends"
+                : "off: nothing is read and nothing is spent"}
+          </span>
+        </div>
+
+        <p className="mt-2 text-ink-2">
+          When a prospect replies and neither of you has answered within the
+          head start, the assistant reads the thread and decides whether there
+          is anything worth saying. It only ever answers an address that belongs
+          to one of your leads, it never answers the same thread twice, and it
+          counts against the sending mailbox&rsquo;s daily cap like any other
+          email. What it knows is on{" "}
+          <a href="/knowledge" className="underline">
+            Knowledge
+          </a>
+          .
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-start gap-6">
+          <label className="flex flex-col gap-1">
+            <span className="text-ink-3">Mode</span>
+            <select
+              value={form.aiReplyMode}
+              disabled={!canEdit}
+              onChange={(e) =>
+                set("aiReplyMode", e.target.value as "off" | "draft" | "send")
+              }
+              className={INPUT + " w-40"}
+            >
+              <option value="off">Off</option>
+              <option value="draft">Draft only</option>
+              <option value="send">Send</option>
+            </select>
+            <span className="text-ink-3">
+              Start on draft. Read a dozen before you move it.
+            </span>
+          </label>
+
+          <Number_
+            label="Head start"
+            hint="Minutes you get before it answers, from when the mail arrived."
+            value={form.aiReplyDelayMinutes}
+            onChange={(v) => set("aiReplyDelayMinutes", v)}
+          />
+
+          <Number_
+            label="Daily cap"
+            hint="Replies a day, in your zone. The fuse, not the plan."
+            value={form.aiReplyDailyCap}
+            onChange={(v) => set("aiReplyDailyCap", v)}
+          />
+
+          <label className="flex flex-col gap-1">
+            <span className="text-ink-3">Booking link</span>
+            <input
+              value={form.bookingUrl}
+              onChange={(e) => set("bookingUrl", e.target.value)}
+              placeholder="https://cal.com/you/intro"
+              disabled={!canEdit}
+              className={INPUT + " w-72"}
+            />
+            <span className="text-ink-3">
+              The one link it is allowed to send. Required before it can answer.
+            </span>
+          </label>
+        </div>
       </div>
 
       <div className={PANEL}>

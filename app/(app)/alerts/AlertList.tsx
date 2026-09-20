@@ -51,6 +51,7 @@ const KIND_COPY: Record<string, { label: string; tone: Tone }> = {
   dedupe_review: { label: "dedupe review", tone: "info" },
   demo_missing: { label: "demo missing", tone: "warn" },
   pre_send_review: { label: "pre-send review", tone: "info" },
+  ai_reply: { label: "assistant", tone: "info" },
   new_pool_leads: { label: "new pool leads", tone: "info" },
 };
 

@@ -71,6 +71,7 @@ export const ALERT_TONE: Record<string, Tone> = {
   cap_exhausted: "warn",
   orphan_demo: "warn",
   pre_send_review: "warn",
+  ai_reply: "info",
   send_failed: "danger",
 };
 

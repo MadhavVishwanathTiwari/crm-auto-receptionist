@@ -27,6 +27,11 @@ export interface OrgSettingsInput {
   /** The random gap between two sends from one mailbox, min to max (0041). */
   sendGapMinMinutes: number;
   sendGapMaxMinutes: number;
+  /** off | draft | send. The assistant that answers replies (0053). */
+  aiReplyMode: "off" | "draft" | "send";
+  aiReplyDelayMinutes: number;
+  aiReplyDailyCap: number;
+  bookingUrl: string;
 }
 
 const HOUR = (value: number) => Number.isInteger(value) && value >= 0 && value <= 23;
@@ -108,6 +113,54 @@ export async function updateOrgSettings(
     };
   }
 
+  const { data: current } = await context.supabase
+    .from("org_settings")
+    .select("ai_reply_mode")
+    .eq("org_id", context.orgId)
+    .maybeSingle();
+  const settings = current as { ai_reply_mode: string } | null;
+
+  // Mirrors org_settings_ai_reply_delay and _daily_cap.
+  if (
+    !Number.isInteger(input.aiReplyDelayMinutes) ||
+    input.aiReplyDelayMinutes < 1 ||
+    input.aiReplyDelayMinutes > 1440
+  ) {
+    return {
+      ok: false,
+      error: "The head start has to be whole minutes, at least 1 and at most 1440.",
+    };
+  }
+  if (
+    !Number.isInteger(input.aiReplyDailyCap) ||
+    input.aiReplyDailyCap < 0 ||
+    input.aiReplyDailyCap > 200
+  ) {
+    return { ok: false, error: "The daily cap has to be a whole number from 0 to 200." };
+  }
+
+  const bookingUrl = input.bookingUrl.trim();
+  if (bookingUrl && !/^https:\/\/\S+$/.test(bookingUrl)) {
+    return { ok: false, error: "The booking link has to be a whole https:// address." };
+  }
+
+  // Refused here as well as in the route, because a mode set with nowhere to
+  // book means an interested prospect gets an answer with no way to act on it,
+  // and finding that out from a job report is finding it out too late.
+  if (input.aiReplyMode !== "off" && !bookingUrl) {
+    return {
+      ok: false,
+      error: "Set the booking link before turning the assistant on: an interested reply needs somewhere to go.",
+    };
+  }
+
+  // Nothing older than the moment it was switched on is ever answered, so
+  // enabling it does not reply to a day of backlog in one tick.
+  const enabledAt =
+    input.aiReplyMode !== "off" && settings?.ai_reply_mode === "off"
+      ? new Date().toISOString()
+      : undefined;
+
   const { data, error } = await context.supabase
     .from("org_settings")
     .update({
@@ -124,6 +177,11 @@ export async function updateOrgSettings(
       stall_minutes: input.stallMinutes,
       send_gap_min_minutes: input.sendGapMinMinutes,
       send_gap_max_minutes: input.sendGapMaxMinutes,
+      ai_reply_mode: input.aiReplyMode,
+      ai_reply_delay_minutes: input.aiReplyDelayMinutes,
+      ai_reply_daily_cap: input.aiReplyDailyCap,
+      booking_url: bookingUrl || null,
+      ...(enabledAt ? { ai_reply_enabled_at: enabledAt } : {}),
     })
     .eq("org_id", context.orgId)
     .select("org_id");
@@ -140,6 +198,7 @@ export async function updateOrgSettings(
 
   revalidatePath("/settings");
   revalidatePath("/queue");
+  revalidatePath("/knowledge");
   return { ok: true };
 }
 

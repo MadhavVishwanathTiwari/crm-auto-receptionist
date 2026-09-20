@@ -23,6 +23,7 @@ const FORBIDDEN_NAMES = [
   "AR_INGEST_SECRET",
   "CRON_SECRET",
   "GOOGLE_OAUTH_CLIENT_SECRET",
+  "ANTHROPIC_API_KEY",
 ];
 
 // Actual secret values from the environment, when present. Short values are

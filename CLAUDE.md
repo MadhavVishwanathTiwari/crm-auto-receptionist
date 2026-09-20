@@ -228,7 +228,7 @@ rather than a prototype. The rules:
 - **`npm run verify` now runs `next build`.** It had to: vitest here is
   node-only with no jsdom and no `.tsx` tests, so nothing in the suite can
   catch a Tailwind error or a client/server boundary violation, and `main`
-  auto-deploys. A manual pass of the fourteen routes is still part of done.
+  auto-deploys. A manual pass of the fifteen routes is still part of done.
 - **`nav.ts` annotates `{ href: Route }[]` and must not use `as const`** — with
   typed routes, a bare union of a dozen literal hrefs makes `Link` infer its
   generic from the wrong member and reject every other one.
@@ -805,7 +805,9 @@ each accepts an optional `?org=<uuid>` to scope a run to one org. Cadence, as
 scheduled by `0020`: `resolve-timezones` hourly, `plan-sends` every 15 minutes,
 `dispatch-sends` every minute since `0041` (at most one send per mailbox per
 run, so `?limit=` now only caps how many mailboxes one run serves),
-`poll-replies` every 10, and `reconcile-mailboxes` once a night at 23:30 UTC
+`poll-replies` every 5 since `0054` (it was 10, and the AI replier's
+five-minute promise cannot be kept behind a ten-minute poll), `ai-replies`
+every 2 since `0054`, and `reconcile-mailboxes` once a night at 23:30 UTC
 since `0044` (`?days=` widens its three-day lookback, up to 14).
 
 ```bash
@@ -928,6 +930,99 @@ threw on every run and answered a row of zeros under a 200, so pg_cron said
 A cursor Gmail has aged out still rebaselines to "now", and now says which
 window was never read: `scripts/reconcile-mailbox-history.mjs` recovers
 replies, bounces and unsubscribes from it.
+
+## The assistant that answers replies (`0052`/`0053`/`0054`)
+
+A prospect replies, the sequence halts, an alert fires, a phone buzzes, and then
+nothing happens until a human opens Gmail. Between two operators in IST and
+prospects in US business hours that gap is routinely hours. `ai-replies` closes
+it: five minutes after a reply arrives, if nobody has answered, it reads the
+thread and decides whether there is anything worth saying.
+
+- **It cannot answer a stranger, structurally.** Its candidates are `replied`
+  `lead_events`, and `poll-replies` only writes one for mail `matchLead()`
+  resolved to a lead in this org; everything else is `unmatched` and dropped
+  before it could become an event. The route then narrows again, because
+  `matchLead()` will attribute a thread by its References chain to a message
+  sent from *any* address: the sender has to be the lead's own `work_email_norm`
+  or a colleague on its `website_domain`, or it is skipped with an alert.
+- **Off, draft, send** — `org_settings.ai_reply_mode`, default `off`, the same
+  shape as `dry_run`. With it off the route returns before its first Gmail call
+  and its first model call. `draft` writes the exact email it would have sent
+  and sends nothing; `/knowledge` is where you read them.
+- **Five minutes is measured from Gmail's `internalDate`**, not from
+  `lead_events.occurred_at`, which is when the poller got round to writing the
+  row. Those are the same on a quiet afternoon and hours apart after a backlog,
+  and gating on the wrong one makes a whole day's replies eligible in one tick.
+  `poll-replies` now stores it as `payload.internal_date`; an event from before
+  `0053` falls back to `occurred_at`, which is late rather than wrong.
+- **`claim_ai_reply()` writes the row BEFORE Gmail is called**, under a
+  per-mailbox `pg_advisory_xact_lock`, and `unique (org_id, inbound_message_id)`
+  arbitrates between two overlapping ticks. Same rule as the dispatcher marking
+  `sending` before the Gmail call, for the same reason. pg_cron does not
+  serialize invocations, and a two-minute tick with a model call in it will
+  overlap.
+- **An AI reply is not a `scheduled_sends` row**, because `step_number` is 1..4
+  and a reply is not a step, `claim_due_sends()` refuses anything for a lead that
+  reached Gmail in the last 20 hours (`0042`) and a reply is usually hours after
+  the touch it answers, and the `replied` event has already halted that lead.
+- **It is still a real email out of a real Gmail account, and that part is not
+  exempt.** `ai_replies` carries `cap_date` exactly as `scheduled_sends` does,
+  `claim_ai_reply()` honours `mailboxes.next_send_not_before` and closes it
+  behind itself, and `claim_due_sends()` was restated in `0053` to count both
+  tables. Without that the claimer believes in headroom that does not exist —
+  the cap is a reputation limit on the *account*, not an outreach budget — and
+  two emails could leave one mailbox in the same second, which is the bug `0041`
+  exists to prevent. A paused mailbox does not auto-reply, matching
+  `dispatch-sends`; that candidate is deferred rather than consumed.
+- **Every outcome writes a row**, including every refusal, so the next tick two
+  minutes later skips the event rather than paying to re-decide it. The skips
+  are the majority and they carry the reason, which is the only way to answer
+  "why did it not reply to this one". Transient failures — a paused mailbox, a
+  token that would not refresh, a Gmail read that errored, a suppression list
+  that could not be read — write nothing and retry.
+- **Only a 4xx from Gmail is a failure.** A timeout, a 5xx or a 200 with no id
+  parks the row as `stalled` with an alert saying to check the Sent folder,
+  never retried, exactly as the dispatcher does. A wrong guess is a second email.
+- **The guard is what actually binds, not the prompt.** `lib/ai/reply/guard.ts`
+  refuses a leftover `{{variable}}`, a body over 1500 characters, any email
+  address that is not the sending mailbox, and any URL that is not the booking
+  link or this lead's demo. It reads links through `linkedUrls()` in
+  `lib/gmail/body.ts`, which returns **both** the `[words](url)` form and a bare
+  URL in the prose, because `toHtml()` anchors both — a guard that only knew the
+  bracket form would pass `just go to https://wherever` and then send it live.
+- **No `List-Unsubscribe` on a 1:1 reply, and `Auto-Submitted: auto-replied` on
+  it instead.** The unsubscribe header is right on outbound a prospect did not
+  ask for and absurd on an answer to "yes, send me a time". RFC 3834 is what
+  lets everybody else's autoresponder loop prevention see what this is — our own
+  `classifyInbound()` reads that header for exactly that purpose.
+- **Once per thread, then it hands off.** `claim_ai_reply()` refuses a lead that
+  already has a `sending`/`sent`/`stalled` row. A prospect who writes twice is a
+  conversation, and the route also stands down if a newer inbound or any `SENT`
+  message appeared in the thread while it was deciding.
+- **The nightly reconciler never sees these sends**, and that property is
+  load-bearing: `reconcile-mailboxes` filters `.is("halted_at", null)`, and the
+  `replied` event that triggered the assistant is what sets `halted_at`. Delete
+  that filter and the assistant becomes a sequence-corrupter, so
+  `tests/integration/ai-replies.test.ts` asserts it rather than assuming it.
+- **A sent reply writes an `ai_replied` event**, not a `note`. It ranks 0 so it
+  moves no status, but it is its own type because a cron-written `note` has
+  `actor_id` null and would be indistinguishable in the drawer timeline from one
+  an operator typed.
+- **`/knowledge` is the whole surface**: the business context, the answers it may
+  give, and the last 50 things it did with them. Writing there is admin-only,
+  same authority as `org_settings`, because it is what an autonomous sender says
+  in somebody's name. `ai_replies` has no insert or update policy for
+  `authenticated` at all — there is no approve-and-send button, and a row an
+  operator could edit stops being a record of what happened.
+- **`ANTHROPIC_API_KEY`** is server-only, not `required` (the app and every other
+  job run without it), and is in `FORBIDDEN_NAMES` in the bundle check. The one
+  model call is `lib/ai/reply/decide.ts` — `claude-opus-5`, adaptive thinking,
+  structured output through `zodOutputFormat`. **No `fallbacks` parameter, on
+  purpose:** on a refusal the right move for an email going out in somebody's
+  name is to stop and tell a person, not to re-run it on another model and send
+  whatever comes back. A refusal, a truncation, or an answer that will not parse
+  all resolve to a row and an alert.
 
 ## Where the tests run
 

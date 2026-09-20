@@ -70,7 +70,7 @@ export default async function SettingsPage() {
     supabase
       .from("org_settings")
       .select(
-        "dry_run, operator_timezone, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, first_touch_weekdays, followup_weekdays, max_lookahead_days, slot_grace_minutes, stall_minutes, send_gap_min_minutes, send_gap_max_minutes",
+        "dry_run, operator_timezone, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, first_touch_weekdays, followup_weekdays, max_lookahead_days, slot_grace_minutes, stall_minutes, send_gap_min_minutes, send_gap_max_minutes, ai_reply_mode, ai_reply_delay_minutes, ai_reply_daily_cap, booking_url",
       )
       .eq("org_id", orgId)
       .maybeSingle(),
@@ -131,6 +131,7 @@ export default async function SettingsPage() {
     templates.filter((t) => t.is_active).map((t) => t.step_number as number),
   );
   const missingSteps = [1, 2, 3, 4].filter((step) => !activeSteps.has(step));
+  const aiMode = settings?.ai_reply_mode ?? "off";
 
   // Ordered the way they block: no mailbox stops everything, no template stops
   // planning, no ready lead means there is nothing to plan, and dry run is last
@@ -183,6 +184,23 @@ export default async function SettingsPage() {
       detail: settings?.dry_run
         ? "On, so claim_due_sends() returns nothing and the dispatcher has nothing to send. This is the last switch."
         : "Off. Mail goes out.",
+    },
+    {
+      // Off is a complete, valid state, so it is green: this line only turns
+      // amber when the assistant is switched on and cannot actually answer.
+      // A deployment that never wants it must not carry a permanent warning.
+      ok: aiMode === "off" || Boolean(settings?.booking_url?.trim()),
+      label: "Answering replies",
+      detail:
+        aiMode === "off"
+          ? "Off. A prospect's reply waits for one of you, as it always has."
+          : settings?.booking_url?.trim()
+            ? aiMode === "draft"
+              ? `Draft only: it writes what it would send after ${settings?.ai_reply_delay_minutes ?? 5} minutes and sends nothing. Read them on Knowledge before you move it to Send.`
+              : `Live. A reply neither of you answers within ${settings?.ai_reply_delay_minutes ?? 5} minutes gets one, up to ${settings?.ai_reply_daily_cap ?? 20} a day.`
+            : "On, but no booking link is set, so an interested prospect would have nowhere to go and the job refuses to run.",
+      href: "/knowledge",
+      linkLabel: "set it up",
     },
   ];
 

@@ -116,6 +116,12 @@ export interface GmailMessage {
   id: string;
   threadId: string;
   labelIds: string[];
+  /**
+   * Epoch millis as a string, which is how Gmail sends it: when the message
+   * ARRIVED. Never read a date off a message id -- its top bits are when the
+   * message was created, which for a scheduled send is when it was scheduled.
+   */
+  internalDate: string | null;
   /** Lowercased header names. Duplicates keep the first occurrence. */
   headers: Record<string, string>;
   /** Every text/plain part, concatenated. Empty when the mail is HTML only. */
@@ -136,6 +142,7 @@ interface RawMessage {
   threadId?: string;
   labelIds?: string[];
   snippet?: string;
+  internalDate?: string;
   payload?: RawPart;
 }
 
@@ -161,15 +168,8 @@ function collectText(part: RawPart | undefined, out: string[]): void {
   for (const child of part.parts ?? []) collectText(child, out);
 }
 
-export async function fetchMessage(
-  accessToken: string,
-  messageId: string,
-): Promise<GmailMessage> {
-  const raw = await get<RawMessage>(
-    `/messages/${encodeURIComponent(messageId)}?format=full`,
-    accessToken,
-  );
-
+/** One `format=full` message, decoded. Shared by fetchMessage and fetchThread. */
+function toGmailMessage(raw: RawMessage, fallbackId: string): GmailMessage {
   const headers: Record<string, string> = {};
   for (const header of raw.payload?.headers ?? []) {
     const name = header.name?.toLowerCase();
@@ -180,13 +180,54 @@ export async function fetchMessage(
   collectText(raw.payload, parts);
 
   return {
-    id: raw.id ?? messageId,
+    id: raw.id ?? fallbackId,
     threadId: raw.threadId ?? "",
     labelIds: raw.labelIds ?? [],
+    internalDate: raw.internalDate ?? null,
     headers,
     text: parts.join("\n"),
     snippet: raw.snippet ?? "",
   };
+}
+
+export async function fetchMessage(
+  accessToken: string,
+  messageId: string,
+): Promise<GmailMessage> {
+  const raw = await get<RawMessage>(
+    `/messages/${encodeURIComponent(messageId)}?format=full`,
+    accessToken,
+  );
+  return toGmailMessage(raw, messageId);
+}
+
+/**
+ * A whole conversation, oldest first.
+ *
+ * One request answers three questions the assistant has to ask before it may
+ * write anything: what the prospect actually said, whether one of us has
+ * already answered (a SENT message newer than theirs -- the only honest test,
+ * because an operator replying from their own Gmail leaves no trace in this
+ * database), and whether they have written again since.
+ *
+ * gmail.readonly already covers threads.get, so this needs no new consent.
+ */
+export async function fetchThread(
+  accessToken: string,
+  threadId: string,
+): Promise<{ id: string; messages: GmailMessage[] }> {
+  const raw = await get<{ id?: string; messages?: RawMessage[] }>(
+    `/threads/${encodeURIComponent(threadId)}?format=full`,
+    accessToken,
+  );
+
+  const messages = (raw.messages ?? [])
+    .map((message, index) => toGmailMessage(message, `${threadId}:${index}`))
+    // Gmail returns them in order already, but the ordering is load-bearing
+    // here and costs nothing to guarantee.
+    .sort((a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0));
+
+  return { id: raw.id ?? threadId, messages };
 }
 
 /**

@@ -87,6 +87,25 @@ export function toHtml(body: string): string {
   return `<div dir="ltr">${inner}</div>`;
 }
 
+/**
+ * Every address that becomes a live link when this body goes out.
+ *
+ * Both shapes, because toHtml() anchors both: the `[words](address)` form and a
+ * bare `https://…` sitting in the prose. A guard that only read the bracket
+ * form would pass `just go to https://wherever` and then send it as a link.
+ *
+ * Here rather than in the caller so there is one definition of "what counts as
+ * a link", the same argument that keeps the capacity arithmetic in book.ts.
+ */
+export function linkedUrls(body: string): string[] {
+  const urls: string[] = [];
+  for (const match of body.matchAll(new RegExp(TOKEN.source, "g"))) {
+    // Group 2 is the bracket form's address; no group means a bare URL.
+    urls.push(match[2] ?? match[0]);
+  }
+  return urls;
+}
+
 /** Every `[words](address)` whose address would not become a link. */
 export function brokenLinks(body: string): string[] {
   const broken: string[] = [];
