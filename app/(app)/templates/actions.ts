@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getOrgContext } from "@/lib/org";
+import { MAX_STEP } from "@/lib/scheduler/slots";
 import { lintTemplateRules } from "@/lib/templates/lint";
 
 export interface ActionResult {
@@ -50,8 +51,12 @@ export async function saveTemplate(input: TemplateInput): Promise<ActionResult> 
 
   const name = input.name.trim();
   if (!name) return { ok: false, error: "Give the template a name." };
-  if (!Number.isInteger(input.stepNumber) || input.stepNumber < 1 || input.stepNumber > 4) {
-    return { ok: false, error: "A step is 1, 2, 3 or 4." };
+  if (
+    !Number.isInteger(input.stepNumber) ||
+    input.stepNumber < 1 ||
+    input.stepNumber > MAX_STEP
+  ) {
+    return { ok: false, error: `A step is 1 to ${MAX_STEP}. The sequence is ${MAX_STEP} touches.` };
   }
 
   // Checked here as well as in the trigger so the message is about the copy

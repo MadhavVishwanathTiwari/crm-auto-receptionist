@@ -347,7 +347,7 @@ export function SettingsForm({
           />
           <Weekdays
             label="Follow-ups on"
-            hint="T2 to T4, which are already a thread rather than a cold arrival."
+            hint="T2 and T3, which are already a thread rather than a cold arrival."
             selected={form.followupWeekdays}
             onChange={(v) => set("followupWeekdays", v)}
           />

@@ -52,7 +52,7 @@ const NEEDS_A_PERSON: Record<string, string> = {
   conflict:
     "This lead was written to from both mailboxes. A thread lives in one account, so its history was not recorded; decide whose conversation it is.",
   too_many_touches:
-    "The Sent folders show more than four emails to this lead, more than the sequence has steps. Its history was not recorded.",
+    "The Sent folders show more than four emails to this lead, more than any sequence it could have had. Its history was not recorded.",
   inconsistent_existing:
     "This lead's recorded steps disagree with their dates, so the emails found in Gmail were not recorded.",
   outcome_unknown:

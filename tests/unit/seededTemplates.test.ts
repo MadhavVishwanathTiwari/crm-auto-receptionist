@@ -59,6 +59,14 @@ describe("the seeded templates", () => {
         expect(set.bodies).toHaveLength(4);
       });
 
+      // 0055 cut the sequence to three and moved the seeded close (the fourth
+      // body here) up to step 3 with requires_demo = false. That is only right
+      // while the close says nothing about the demo.
+      it("closes without the demo link, so the close can stand at step 3", () => {
+        expect(set.bodies[3]).not.toContain("{{demo_url}}");
+        expect(set.subjects[3]).not.toContain("{{demo_url}}");
+      });
+
       for (let i = 0; i < 4; i++) {
         it(`lints clean at step ${i + 1}`, () => {
           expect(lintTemplateRules(set.subjects[i]!, set.bodies[i]!)).toEqual([]);

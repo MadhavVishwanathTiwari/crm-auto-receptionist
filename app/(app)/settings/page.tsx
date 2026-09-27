@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { requireOrgContext } from "@/lib/org";
 import { JOBS } from "@/lib/ops/jobs";
+import { MAX_STEP } from "@/lib/scheduler/slots";
 import {
   type BlockerLead,
   classifyLead,
@@ -130,7 +131,9 @@ export default async function SettingsPage() {
   const activeSteps = new Set(
     templates.filter((t) => t.is_active).map((t) => t.step_number as number),
   );
-  const missingSteps = [1, 2, 3, 4].filter((step) => !activeSteps.has(step));
+  const missingSteps = Array.from({ length: MAX_STEP }, (_, i) => i + 1).filter(
+    (step) => !activeSteps.has(step),
+  );
   const aiMode = settings?.ai_reply_mode ?? "off";
 
   // Ordered the way they block: no mailbox stops everything, no template stops
@@ -162,7 +165,7 @@ export default async function SettingsPage() {
       label: "An active first-touch template, for the automated touches",
       detail: activeSteps.has(1)
         ? missingSteps.length === 0
-          ? "All four touches are live."
+          ? "All three touches are live."
           : `T1 is live. Still drafts: ${missingSteps.map((s) => `T${s}`).join(", ")}. The planner skips a step with no active template, and T2 is the one carrying the demo link.`
         : "None, so the planner skips every lead as skipped_no_template. This does not block the Write screen: an email you type yourself carries its own words and needs no template at all.",
       href: "/templates",

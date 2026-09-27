@@ -181,14 +181,16 @@ export function nextSlot(request: SlotRequest): SlotResult {
  * Business days between touches, counted from the PREVIOUS step's actual send
  * rather than from when it was planned. A T2 that was meant to follow three
  * days after a T1 which itself slipped two days must not arrive one day later.
+ *
+ * Three touches since 0055: T1, the demo at T2, the close at T3. The database
+ * refuses a bookable step 4 as well, so raising this alone books nothing.
  */
 export const CADENCE_BUSINESS_DAYS: Record<number, number> = {
   2: 3,
   3: 4,
-  4: 5,
 };
 
-export const MAX_STEP = 4;
+export const MAX_STEP = 3;
 
 /** Windows from org_settings, in chronological order. Ends stay exclusive. */
 export function windowsFromSettings(settings: {

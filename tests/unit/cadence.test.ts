@@ -10,13 +10,13 @@ import {
 import { addBusinessDays, businessDaysBetween } from "@/lib/timezone/businessDays";
 import { holidaySet } from "@/lib/timezone/holidays";
 
-// The whole four-touch sequence, composed the way the planner composes it.
+// The whole three-touch sequence, composed the way the planner composes it.
 //
 // The other unit suites test the pieces: that one slot lands in a window, that
 // business-day arithmetic steps over Thanksgiving. This one asserts the thing
 // an operator actually cares about, which is a property of the SEQUENCE rather
-// than of any one call: four touches for one lead, each in that lead's own
-// morning or afternoon, spaced exactly 3 then 4 then 5 business days from the
+// than of any one call: three touches for one lead, each in that lead's own
+// morning or afternoon, spaced exactly 3 then 4 business days from the
 // touch before it, never two on one local date, never on a weekend or a federal
 // holiday, and never on a first-touch weekday the org has switched off.
 //
@@ -57,7 +57,7 @@ interface Touch {
 }
 
 /**
- * Walks all four touches for one lead, as the planner would.
+ * Walks every touch for one lead, as the planner would.
  *
  * Each step is planned from the PREVIOUS step's actual send, which is what the
  * planner does with lastSent.sent_at. Here every send is assumed to go out
@@ -109,13 +109,13 @@ function inAWindow(local: DateTime): boolean {
 // A Sunday, so nothing is handed a convenient starting weekday.
 const START = DateTime.fromISO("2026-08-16T21:40:00", { zone: "Asia/Kolkata" });
 
-describe("the four-touch cadence, per lead", () => {
+describe("the three-touch cadence, per lead", () => {
   for (const zone of ZONES) {
     describe(zone, () => {
       const touches = walk(zone, `lead-${zone}`, START);
 
-      it("plans all four touches", () => {
-        expect(touches.map((t) => t.step)).toEqual([1, 2, 3, 4]);
+      it("plans all three touches", () => {
+        expect(touches.map((t) => t.step)).toEqual([1, 2, 3]);
       });
 
       it("lands every touch inside a send window, prospect-local", () => {

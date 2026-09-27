@@ -126,7 +126,8 @@ describe("sheet touch history", () => {
 
     expect(row?.outcome).toBe("recorded");
     expect(row?.touches).toBe(3);
-    expect(row?.next_step).toBe(4);
+    // Three touches is the whole sequence since 0055.
+    expect(row?.next_step).toBeNull();
 
     // --- the sends ----------------------------------------------------------
     const sends = await sendsFor(id);
@@ -193,9 +194,10 @@ describe("sheet touch history", () => {
     expect(lead?.status).toBe("sent");
 
     // --- and the thing all of it exists for ---------------------------------
+    // Three recorded touches is a finished sequence, so /write offers no
+    // fourth: the backfill is what stops a restart at T1.
     const step = nextStepFor(sends);
-    expect(step.ok).toBe(true);
-    expect(step.ok && step.step).toBe(4);
+    expect(step).toEqual({ ok: false, reason: "sequence_finished" });
   }, 120_000);
 
   // The 21 rows that made this worth checking: the sheet's own status column
@@ -212,10 +214,10 @@ describe("sheet touch history", () => {
     const row = rowFor(await runBackfill(), id);
     expect(row?.sheet_status).toBe("first_touch");
     expect(row?.touches).toBe(3);
-    expect(row?.next_step).toBe(4);
+    expect(row?.next_step).toBeNull();
 
     const step = nextStepFor(await sendsFor(id));
-    expect(step.ok && step.step).toBe(4);
+    expect(step).toEqual({ ok: false, reason: "sequence_finished" });
   }, 120_000);
 
   // 121 of the real values have a first component above 12 and none has a

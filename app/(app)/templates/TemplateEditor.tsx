@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 
 // Both come from a plain module, never through the "use server" actions file.
+import { MAX_STEP } from "@/lib/scheduler/slots";
 import { lintTemplate, TEMPLATE_VARIABLES } from "@/lib/templates/lint";
 import { placeholderWords } from "@/lib/write/placeholders";
 
@@ -161,7 +162,7 @@ export function TemplateEditor({
               }
               className={INPUT}
             >
-              {[1, 2, 3, 4].map((step) => (
+              {Array.from({ length: MAX_STEP }, (_, i) => i + 1).map((step) => (
                 <option key={step} value={step}>
                   T{step}
                 </option>

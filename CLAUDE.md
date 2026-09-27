@@ -442,6 +442,30 @@ unchanged. The only difference is where the words came from.
   `composed_body`; requiring a template there would strand a hand-written email
   forever the moment its step had no active one.
 
+## Three touches, not four (`0055`)
+
+T1, the demo link at T2, the close at T3, spaced +3 and +4 business days.
+`MAX_STEP` and `CADENCE_BUSINESS_DAYS` in `lib/scheduler/slots.ts` are the
+whole cadence; the planner, `/write`, `/templates` and `/settings` all read
+them rather than repeating a number.
+
+- **The cut was a merge, not a delete.** The old T3 ("still live") was a
+  second nudge about the demo and T4 was the email that asked for a decision,
+  so T4's copy moved to step 3 with `requires_demo = false` and the nudge was
+  retired, in both template sets. The originals stay as inactive rows because
+  sends point at them.
+- **Step 4 may exist and may not be booked.** `scheduled_sends_step_range` is
+  still 1..4: six T4s went out, and a Sent folder with four emails is history
+  `0042` has to record. `app.scheduled_sends_three_touches()` refuses a
+  step-4 row on insert, or a move onto step 4, unless it is `sent`, service
+  role included. `templates_live_steps` refuses an active step-4 template.
+- **The eleven T4s booked before the cut were left to go out** (1-2 Oct 2026),
+  because the close is what the new sequence ends on. The trigger ignores a
+  status change, so they walk to `sent` normally; one that misses its slot is
+  cancelled by the planner rather than re-timed.
+- **`queue_composed_send()` still says "between 1 and 4"** in its own check.
+  It was not restated for one number; the trigger refuses step 4 underneath it.
+
 ## An audit is a choice, not a precondition
 
 Two template sets exist per step, and `templateFor()` picks between them on
@@ -661,7 +685,8 @@ would do rather than an estimate of it.
 - **Steps are renumbered by date.** An earlier email turning up moves the app's
   own row up a step, highest-first so two live rows never share one. More than
   four distinct touches is refused (`too_many_touches`), not squeezed in:
-  `step_number` is 1 to 4.
+  `step_number` is 1 to 4. Four stays recordable after `0055` cut the sequence
+  to three, because six real T4s went out before it.
 - **Recorded history means hand-written follow-ups.** `hasRecordedHistory()` in
   `plan-sends`: a `sent` row with neither a template nor a body is an email a
   person sent from their own mailbox, so the planner cancels any template
@@ -830,8 +855,9 @@ you and the first email. In the order they block:
    header and `{{sender_name}}`; a template using that variable refuses to send
    rather than putting an email address where a human name belongs.
 2. **An active T1 template** — for the *automated* touches only. `0019` seeds
-   the audit set, `0022` the generic set, both as drafts. T2 and T3 carry
-   `requires_demo`, so they wait for the demo ingest; T1 and T4 do not. `/write`
+   the audit set, `0022` the generic set, both as drafts. T2 carries
+   `requires_demo`, so it waits for the demo ingest; T1 and the T3 close do
+   not (`0055`). `/write`
    needs none of this: an email you type carries its own words, and the
    templates show up there as starters you can fill in and rewrite.
 3. **A lead that is ready.** For the planner: claimed, qualified, zoned, not
@@ -962,8 +988,8 @@ thread and decides whether there is anything worth saying.
   `sending` before the Gmail call, for the same reason. pg_cron does not
   serialize invocations, and a two-minute tick with a model call in it will
   overlap.
-- **An AI reply is not a `scheduled_sends` row**, because `step_number` is 1..4
-  and a reply is not a step, `claim_due_sends()` refuses anything for a lead that
+- **An AI reply is not a `scheduled_sends` row**, because `step_number` is a
+  touch in the sequence and a reply is not a step, `claim_due_sends()` refuses anything for a lead that
   reached Gmail in the last 20 hours (`0042`) and a reply is usually hours after
   the touch it answers, and the `replied` event has already halted that lead.
 - **It is still a real email out of a real Gmail account, and that part is not

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { brokenLinks } from "@/lib/gmail/body";
 import { getOrgContext } from "@/lib/org";
 import { bookSlot } from "@/lib/scheduler/book";
+import { MAX_STEP } from "@/lib/scheduler/slots";
 import {
   mailboxesForSend,
   pinnedMailboxIdFor,
@@ -138,7 +139,7 @@ export async function queueWrittenEmail(input: {
           ? "That lead already has an email on its way out. Wait for it to land."
           : step.reason === "outcome_unknown"
             ? "An earlier email to this lead may already have gone out. Open the lead and say whether it did before writing another."
-            : "That lead has had all four touches.",
+            : `That lead has had all ${MAX_STEP} touches.`,
     };
   }
 

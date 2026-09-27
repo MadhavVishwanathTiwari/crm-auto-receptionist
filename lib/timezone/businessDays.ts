@@ -1,6 +1,6 @@
 // Business-day arithmetic, in PROSPECT-local calendar days.
 //
-// The cadence is T1 -> +3 business days -> T2 -> +4 -> T3 -> +5 -> T4, and each
+// The cadence is T1 -> +3 business days -> T2 -> +4 -> T3, and each
 // offset is counted from the previous step's ACTUAL send. Counting in the
 // prospect's calendar rather than the operator's is what keeps a send from
 // drifting a day when the two are on opposite sides of midnight.

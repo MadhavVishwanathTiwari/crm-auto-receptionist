@@ -525,7 +525,26 @@ async function planOrg(
       ? rollingForward.step_number
       : (lastSent?.step_number ?? 0) + 1;
 
-    if (step > MAX_STEP) continue;
+    if (step > MAX_STEP) {
+      // Only a booking from before the sequence was cut to three (0055) gets
+      // here with a row in hand. One still in the future is left to go out;
+      // one that missed its slot is not re-timed, because the database would
+      // refuse the rebooked step anyway and a stranded `planned` row reads as
+      // "on its way" everywhere.
+      if (rollingForward) {
+        const { data: cancelled } = await supabase
+          .from("scheduled_sends")
+          .update({
+            status: "cancelled",
+            outcome_reason: `the sequence is ${MAX_STEP} touches now, and this step missed its slot`,
+          })
+          .eq("id", rollingForward.id)
+          .in("status", ["planned", "blocked"])
+          .select("id");
+        report.cancelled += cancelled?.length ?? 0;
+      }
+      continue;
+    }
 
     // A written email that missed its slot. It already has its words, so
     // neither the template lookup nor the demo gate applies to it: this pass is

@@ -18,6 +18,7 @@ import { accountsOf, type OperatorGroup } from "@/lib/dashboard/operators";
 import { requireOrgContext, type OrgContext } from "@/lib/org";
 import { bookSlot, reserve } from "@/lib/scheduler/book";
 import { mailboxesForSend, pinnedMailboxIdFor } from "@/lib/scheduler/routing";
+import { MAX_STEP } from "@/lib/scheduler/slots";
 import { selectAll } from "@/lib/supabase/paginate";
 import { buildTemplateValues, type EvidenceForRender } from "@/lib/templates/render";
 import {
@@ -429,7 +430,7 @@ const SKIP_MESSAGE: Record<SkipReason, string> = {
     "has an email on its way out right now. It comes back here once that one has landed.",
   outcome_unknown:
     "has an earlier email that may have gone out without being recorded. Say whether it did on the lead before writing another.",
-  sequence_finished: "has had all four emails.",
+  sequence_finished: `has had all ${MAX_STEP} emails.`,
 };
 
 /**

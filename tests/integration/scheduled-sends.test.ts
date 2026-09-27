@@ -282,6 +282,124 @@ describe("planning", () => {
   }, 180_000);
 });
 
+// 0055. Step 4 may exist as history and may never be booked.
+describe("three touches", () => {
+  function sendRow(input: {
+    orgId: string;
+    leadId: string;
+    mailboxId: string;
+    templateId: string;
+    step: number;
+    status: "planned" | "sent";
+    daysAgo?: number;
+  }) {
+    const at = DateTime.now().minus({ days: input.daysAgo ?? 0 });
+    return {
+      org_id: input.orgId,
+      lead_id: input.leadId,
+      mailbox_id: input.mailboxId,
+      template_id: input.templateId,
+      step_number: input.step,
+      touch_kind: input.step === 1 ? "first" : "followup",
+      status: input.status,
+      scheduled_at: at.toUTC().toISO(),
+      scheduled_local: at.setZone("America/Chicago").toFormat("yyyy-MM-dd'T'HH:mm:ss"),
+      prospect_timezone: "America/Chicago",
+      sent_at: input.status === "sent" ? at.toUTC().toISO() : null,
+    };
+  }
+
+  it("refuses to book a fourth touch, even from the service role", async () => {
+    const org = await makeOrg("three-touch-book");
+    const mailboxId = await makeMailbox(org.id);
+    const templateId = await makeTemplate(org.id, 3);
+    const lead = await makeLead(org.id);
+
+    const { error } = await admin()
+      .from("scheduled_sends")
+      .insert(sendRow({ orgId: org.id, leadId: lead.id, mailboxId, templateId, step: 4, status: "planned" }))
+      .select("id");
+    expect(error?.message).toMatch(/three touches/);
+
+    const { data: after } = await admin()
+      .from("scheduled_sends")
+      .select("id")
+      .eq("lead_id", lead.id);
+    expect(after ?? []).toHaveLength(0);
+  }, 180_000);
+
+  it("still records a fourth email that already went out", async () => {
+    const org = await makeOrg("three-touch-history");
+    const mailboxId = await makeMailbox(org.id);
+    const templateId = await makeTemplate(org.id, 3);
+    const lead = await makeLead(org.id);
+
+    const { data, error } = await admin()
+      .from("scheduled_sends")
+      .insert(sendRow({ orgId: org.id, leadId: lead.id, mailboxId, templateId, step: 4, status: "sent", daysAgo: 30 }))
+      .select("id");
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(1);
+  }, 180_000);
+
+  it("refuses an active step-4 template", async () => {
+    const org = await makeOrg("three-touch-template");
+
+    const { error } = await admin()
+      .from("templates")
+      .insert({
+        org_id: org.id,
+        name: "T4 anything",
+        step_number: 4,
+        subject: CLEAN_SUBJECT,
+        body: CLEAN_BODY,
+        is_active: true,
+      })
+      .select("id");
+    expect(error?.message).toMatch(/templates_live_steps/);
+
+    const { data: after } = await admin()
+      .from("templates")
+      .select("id")
+      .eq("org_id", org.id)
+      .eq("step_number", 4);
+    expect(after ?? []).toHaveLength(0);
+  }, 180_000);
+
+  it("books nothing after the third touch", async () => {
+    const org = await makeOrg("three-touch-plan");
+    const mailboxId = await makeMailbox(org.id);
+    const templateIds = [await makeTemplate(org.id, 1), await makeTemplate(org.id, 2), await makeTemplate(org.id, 3)];
+    const lead = await makeLead(org.id);
+
+    const { error } = await admin()
+      .from("scheduled_sends")
+      .insert(
+        [1, 2, 3].map((step) =>
+          sendRow({
+            orgId: org.id,
+            leadId: lead.id,
+            mailboxId,
+            templateId: templateIds[step - 1]!,
+            step,
+            status: "sent",
+            daysAgo: 40 - step * 10,
+          }),
+        ),
+      );
+    if (error) throw new Error(`history: ${error.message}`);
+
+    const response = await planSends(cronRequest("plan-sends", org.id));
+    expect(response.status).toBe(200);
+
+    const { data: rows } = await admin()
+      .from("scheduled_sends")
+      .select("step_number, status")
+      .eq("lead_id", lead.id);
+    expect((rows ?? []).filter((r) => r.status !== "sent")).toEqual([]);
+  }, 180_000);
+});
+
 describe("claiming", () => {
   it("counts caps in the mailbox timezone, not the prospect's", async () => {
     // The two zones are 25 hours apart, so their dates never coincide. If the

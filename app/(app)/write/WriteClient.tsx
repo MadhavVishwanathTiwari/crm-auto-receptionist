@@ -14,6 +14,7 @@ import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 
 // A plain module, never through the "use server" actions file.
 import { brokenLinks } from "@/lib/gmail/body";
+import { MAX_STEP } from "@/lib/scheduler/slots";
 import { renderTemplate, type TemplateValues } from "@/lib/templates/render";
 import { formatYours } from "@/lib/time/format";
 import { placeholderWords } from "@/lib/write/placeholders";
@@ -498,7 +499,7 @@ export function WriteClient({
                 <h2 className="min-w-0 truncate text-xl font-semibold text-ink">
                   {draft.company ?? draft.workEmail}
                 </h2>
-                <Badge tone="neutral">touch {draft.step} of 4</Badge>
+                <Badge tone="neutral">touch {draft.step} of {MAX_STEP}</Badge>
                 {draft.replacesSendId && !draft.replacesWasWritten && (
                   <Badge tone="warn">replaces a queued template email</Badge>
                 )}
