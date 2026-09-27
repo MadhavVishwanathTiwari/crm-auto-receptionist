@@ -44,6 +44,28 @@ export type DecideResult =
     }
   | { ok: false; reason: string; retryable: boolean };
 
+// `input_tokens` is only the part of the prompt after the cache breakpoint. The
+// system prompt sits behind `cache_control`, so its tokens are reported as
+// cache creation or cache read instead, and recording `input_tokens` alone put
+// 3 in every row whatever the prompt cost.
+export function totalInputTokens(
+  usage:
+    | {
+        input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
+        cache_read_input_tokens?: number | null;
+      }
+    | null
+    | undefined,
+): number | null {
+  if (!usage || usage.input_tokens == null) return null;
+  return (
+    usage.input_tokens +
+    (usage.cache_creation_input_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0)
+  );
+}
+
 export async function decideReply(input: DecideInput): Promise<DecideResult> {
   let response;
 
@@ -131,7 +153,7 @@ export async function decideReply(input: DecideInput): Promise<DecideResult> {
     ok: true,
     decision,
     model: response.model ?? REPLY_MODEL,
-    inputTokens: response.usage?.input_tokens ?? null,
+    inputTokens: totalInputTokens(response.usage),
     outputTokens: response.usage?.output_tokens ?? null,
   };
 }
