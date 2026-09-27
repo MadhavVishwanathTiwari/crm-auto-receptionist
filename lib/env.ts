@@ -73,6 +73,6 @@ export function serverEnv() {
     // the Google pair: the app runs, and every other job runs, without it. The
     // ai-replies route says so in its report rather than throwing, and
     // org_settings.ai_reply_mode is off by default anyway.
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+    openrouterKey: process.env.OPENROUTER_KEY ?? "",
   };
 }

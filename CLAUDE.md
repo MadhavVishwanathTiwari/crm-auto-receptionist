@@ -1015,10 +1015,18 @@ thread and decides whether there is anything worth saying.
   in somebody's name. `ai_replies` has no insert or update policy for
   `authenticated` at all — there is no approve-and-send button, and a row an
   operator could edit stops being a record of what happened.
-- **`ANTHROPIC_API_KEY`** is server-only, not `required` (the app and every other
-  job run without it), and is in `FORBIDDEN_NAMES` in the bundle check. The one
-  model call is `lib/ai/reply/decide.ts` — `claude-opus-5`, adaptive thinking,
-  structured output through `zodOutputFormat`. **No `fallbacks` parameter, on
+- **`OPENROUTER_KEY`** is server-only, not `required` (the app and every other
+  job run without it), and is in `FORBIDDEN_NAMES` in the bundle check.
+  OpenRouter speaks the Anthropic Messages API at `https://openrouter.ai/api`
+  for every model it serves, so `lib/ai/client.ts` is the Anthropic SDK with a
+  bearer token and a different base URL. The one model call is
+  `lib/ai/reply/decide.ts` — `openai/gpt-6-sol`, adaptive thinking, structured
+  output through `zodOutputFormat`. **Reliability first, price second**: sol was
+  the only one of four that decided sixteen hard replies identically on two runs
+  and invented nothing, at ~$0.004 a decision. Cheaper models broke the schema
+  or made promises in the operator's name; Sonnet 5 cost twice as much and
+  offered things we do not sell. `client.ts` records the comparison; re-run it
+  before swapping the model. **No `fallbacks` parameter, on
   purpose:** on a refusal the right move for an email going out in somebody's
   name is to stop and tell a person, not to re-run it on another model and send
   whatever comes back. A refusal, a truncation, or an answer that will not parse

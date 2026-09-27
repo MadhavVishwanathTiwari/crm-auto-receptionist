@@ -33,7 +33,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
 
-import { anthropicIsConfigured } from "@/lib/ai/client";
+import { modelIsConfigured } from "@/lib/ai/client";
 import { decideReply } from "@/lib/ai/reply/decide";
 import { checkDraft } from "@/lib/ai/reply/guard";
 import type { KbEntry, ReplyLead } from "@/lib/ai/reply/prompt";
@@ -773,8 +773,8 @@ async function runOrg(
   // Before anything costs anything.
   if (settings.ai_reply_mode === "off") return report;
 
-  if (!anthropicIsConfigured()) {
-    report.error = "ANTHROPIC_API_KEY is not set, so nothing can be written.";
+  if (!modelIsConfigured()) {
+    report.error = "OPENROUTER_KEY is not set, so nothing can be written.";
     return report;
   }
 

@@ -3,7 +3,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
-import { getAnthropic } from "@/lib/ai/client";
+import { getModelClient, REPLY_MODEL } from "@/lib/ai/client";
 
 import {
   buildSystemPrompt,
@@ -28,8 +28,6 @@ import type { TranscriptEntry } from "@/lib/gmail/threadState";
 // somebody's name is to stop and tell a person, not to quietly re-run the same
 // request on a different model and send whatever comes back.
 
-export const REPLY_MODEL = "claude-opus-5";
-
 export interface DecideInput {
   system: SystemPromptInput;
   lead: ReplyLead;
@@ -50,7 +48,7 @@ export async function decideReply(input: DecideInput): Promise<DecideResult> {
   let response;
 
   try {
-    response = await getAnthropic().messages.parse({
+    response = await getModelClient().messages.parse({
       model: REPLY_MODEL,
       max_tokens: 4000,
       thinking: { type: "adaptive" },

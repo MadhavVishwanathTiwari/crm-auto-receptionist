@@ -34,14 +34,14 @@ vi.mock("@/lib/gmail/token", () => ({
 vi.mock("@/lib/notify/push", () => ({ pushAlert: vi.fn(async () => true) }));
 
 vi.mock("@/lib/ai/client", () => ({
-  anthropicIsConfigured: () => true,
-  getAnthropic: () => {
+  REPLY_MODEL: "openai/gpt-6-sol",
+  modelIsConfigured: () => true,
+  getModelClient: () => {
     throw new Error("the model client must never be reached in a test");
   },
 }));
 
 vi.mock("@/lib/ai/reply/decide", () => ({
-  REPLY_MODEL: "claude-opus-5",
   decideReply: vi.fn(async () => {
     model.calls += 1;
     if (model.failure) {
@@ -50,7 +50,7 @@ vi.mock("@/lib/ai/reply/decide", () => ({
     return {
       ok: true as const,
       decision: model.answer,
-      model: "claude-opus-5",
+      model: "openai/gpt-6-sol",
       inputTokens: 1200,
       outputTokens: 90,
     };
