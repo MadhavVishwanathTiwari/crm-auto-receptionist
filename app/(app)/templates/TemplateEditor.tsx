@@ -306,26 +306,39 @@ export function TemplateEditor({
                     {row.subject}
                   </TD>
                   <TD>
-                    <Badge tone={row.is_active ? "ok" : "muted"}>
-                      {row.is_active ? "active" : "draft"}
-                    </Badge>
+                    {row.step_number > MAX_STEP ? (
+                      // Kept because sends point at it; the sequence is
+                      // MAX_STEP touches and the database refuses to activate
+                      // a step past it (templates_live_steps, 0055).
+                      <span title={`The sequence is ${MAX_STEP} touches. Kept because sent emails point at it.`}>
+                        <Badge tone="muted">retired</Badge>
+                      </span>
+                    ) : (
+                      <Badge tone={row.is_active ? "ok" : "muted"}>
+                        {row.is_active ? "active" : "draft"}
+                      </Badge>
+                    )}
                   </TD>
                   <TD className="text-right">
-                    <button
-                      type="button"
-                      onClick={() => edit(row)}
-                      className={BUTTON_QUIET}
-                    >
-                      edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => toggleActive(row)}
-                      className={BUTTON_QUIET}
-                    >
-                      {row.is_active ? "deactivate" : "activate"}
-                    </button>
+                    {row.step_number <= MAX_STEP && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => edit(row)}
+                          className={BUTTON_QUIET}
+                        >
+                          edit
+                        </button>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => toggleActive(row)}
+                          className={BUTTON_QUIET}
+                        >
+                          {row.is_active ? "deactivate" : "activate"}
+                        </button>
+                      </>
+                    )}
                     {isAdmin && (
                       <button
                         type="button"
