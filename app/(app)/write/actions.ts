@@ -73,6 +73,8 @@ export async function queueWrittenEmail(input: {
   body: string;
   /** Which template it was started from, if any. Provenance only. */
   templateId?: string | null;
+  /** The assistant's draft it started as (0056), if any. Provenance only. */
+  aiDraftId?: string | null;
 }): Promise<QueueResult> {
   const context = await getOrgContext();
   if (!context) return { ok: false, error: "Not signed in." };
@@ -216,6 +218,20 @@ export async function queueWrittenEmail(input: {
     | { id: string }
     | null
     | undefined;
+
+  // The email is booked whatever happens here. This only records that it
+  // started as the assistant's draft, so a failure is logged, not shown as a
+  // failed send: telling somebody their email did not go when it did is how
+  // the same lead gets written to twice.
+  if (input.aiDraftId && row?.id) {
+    const { error: attachError } = await supabase.rpc("attach_ai_draft", {
+      p_draft_id: input.aiDraftId,
+      p_send_id: row.id,
+    });
+    if (attachError) {
+      console.error(`write: recording draft ${input.aiDraftId} as sent failed: ${attachError.message}`);
+    }
+  }
 
   revalidatePath("/write");
   revalidatePath("/queue");

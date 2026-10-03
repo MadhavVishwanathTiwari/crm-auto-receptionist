@@ -114,7 +114,8 @@ export default async function WritePage({
   // finished stays claimed and live, and those are the oldest, so the
   // .limit(300) this used to have filled up with them over time and the newest
   // claims dropped off the worklist without a word.
-  const { data: leadRows, error } = await selectAll<LeadRow>(() =>
+  const [{ data: leadRows, error }, { data: aiDraftRows }] = await Promise.all([
+    selectAll<LeadRow>(() =>
     supabase
       .from("leads")
       // One string literal on purpose; see the note in leads/page.tsx.
@@ -128,10 +129,37 @@ export default async function WritePage({
       .is("terminal_outcome", null)
       .not("timezone", "is", null)
       .not("work_email", "is", null),
+    ),
+    // First emails the assistant wrote for me and nobody has sent yet (0056).
+    // Unused drafts only, so this stays a handful of rows.
+    supabase
+      .from("ai_outbound")
+      .select("id, lead_id, subject, body, reason")
+      .eq("outcome", "drafted")
+      .is("scheduled_send_id", null)
+      .in("owner_id", myAccounts),
+  ]);
+
+  const aiDrafts = new Map(
+    (aiDraftRows ?? []).map((row) => [
+      row.lead_id as string,
+      {
+        id: row.id as string,
+        subject: row.subject as string,
+        body: row.body as string,
+        reason: row.reason as string,
+      },
+    ]),
   );
 
-  // Oldest claim first, as before. Sorted here because selectAll pages by id.
-  const leads = [...leadRows].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Oldest claim first, as before, except that a lead the assistant has
+  // already written to goes to the top: its email is ready to read and send,
+  // and a draft at position 140 is a draft nobody reads.
+  const leads = [...leadRows].sort(
+    (a, b) =>
+      Number(aiDrafts.has(b.id)) - Number(aiDrafts.has(a.id)) ||
+      a.created_at.localeCompare(b.created_at),
+  );
 
   // Which of them the worklist offers, decided before the evidence read so that
   // read names at most WORKLIST_LIMIT leads: PostgREST puts `in` values in the
@@ -334,6 +362,8 @@ export default async function WritePage({
       replacesWasWritten: step.replaces?.composed_body != null,
       existingSubject: step.replaces?.composed_subject ?? null,
       existingBody: step.replaces?.composed_body ?? null,
+      // Only for a touch it can still be: a first email, nothing booked yet.
+      aiDraft: step.step === 1 && !step.replaces ? (aiDrafts.get(lead.id) ?? null) : null,
       replySubject: replySubjectFor(sends),
       slot: kept
         ? {

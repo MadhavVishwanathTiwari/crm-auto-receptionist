@@ -71,13 +71,13 @@ export default async function SettingsPage() {
     supabase
       .from("org_settings")
       .select(
-        "dry_run, operator_timezone, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, first_touch_weekdays, followup_weekdays, max_lookahead_days, slot_grace_minutes, stall_minutes, send_gap_min_minutes, send_gap_max_minutes, ai_reply_mode, ai_reply_delay_minutes, ai_reply_daily_cap, booking_url",
+        "dry_run, operator_timezone, morning_start_hour, morning_end_hour, afternoon_start_hour, afternoon_end_hour, first_touch_weekdays, followup_weekdays, max_lookahead_days, slot_grace_minutes, stall_minutes, send_gap_min_minutes, send_gap_max_minutes, ai_reply_mode, ai_reply_delay_minutes, ai_reply_daily_cap, booking_url, ai_outbound_mode, ai_outbound_daily, ai_outbound_mailbox_id",
       )
       .eq("org_id", orgId)
       .maybeSingle(),
     supabase
       .from("mailboxes")
-      .select("email, display_name, is_sendable, disconnected_at, timezone"),
+      .select("id, email, display_name, is_sendable, disconnected_at, timezone"),
     supabase.from("templates").select("name, step_number, is_active, requires_demo"),
     // Every lead, in pages: PostgREST stops at 1000 rows per response, and
     // "what is still between you and the first email" is a count.
@@ -135,6 +135,9 @@ export default async function SettingsPage() {
     (step) => !activeSteps.has(step),
   );
   const aiMode = settings?.ai_reply_mode ?? "off";
+  const outboundMode = settings?.ai_outbound_mode ?? "off";
+  const outboundMailbox =
+    mailboxes.find((m) => m.id === settings?.ai_outbound_mailbox_id) ?? null;
 
   // Ordered the way they block: no mailbox stops everything, no template stops
   // planning, no ready lead means there is nothing to plan, and dry run is last
@@ -205,6 +208,20 @@ export default async function SettingsPage() {
       href: "/knowledge",
       linkLabel: "set it up",
     },
+    {
+      ok: outboundMode === "off" || Boolean(outboundMailbox),
+      label: "Writing first emails",
+      detail:
+        outboundMode === "off"
+          ? "Off. Unclaimed leads wait for one of you to pick them up."
+          : !outboundMailbox
+            ? "On, but no mailbox is chosen for it to write as, so the job refuses to run."
+            : outboundMode === "draft"
+              ? `Drafts: up to ${settings?.ai_outbound_daily ?? 5} a day, claimed for ${outboundMailbox.display_name ?? outboundMailbox.email} and waiting on Write. Nothing is booked until somebody sends one.`
+              : `Live: up to ${settings?.ai_outbound_daily ?? 5} a day, written as ${outboundMailbox.display_name ?? outboundMailbox.email} and booked by the planner with nobody reading them first.`,
+      href: "/knowledge",
+      linkLabel: "see what it wrote",
+    },
   ];
 
   const blocking = checks.filter((check) => !check.ok).length;
@@ -238,7 +255,13 @@ export default async function SettingsPage() {
           )}
 
           {settings ? (
-            <SettingsForm settings={settings} canEdit={role === "admin"} />
+            <SettingsForm
+              settings={settings}
+              canEdit={role === "admin"}
+              mailboxes={mailboxes
+                .filter((m) => m.is_sendable)
+                .map((m) => ({ id: m.id, email: m.email, displayName: m.display_name }))}
+            />
           ) : (
             !settingsError && (
               <p className={PANEL + " text-danger"}>

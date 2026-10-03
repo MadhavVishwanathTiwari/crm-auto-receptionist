@@ -23,6 +23,9 @@ export interface OrgSettingsRow {
   ai_reply_delay_minutes: number;
   ai_reply_daily_cap: number;
   booking_url: string | null;
+  ai_outbound_mode: "off" | "draft" | "send";
+  ai_outbound_daily: number;
+  ai_outbound_mailbox_id: string | null;
 }
 
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -52,6 +55,9 @@ function toInput(row: OrgSettingsRow): OrgSettingsInput {
     aiReplyDelayMinutes: row.ai_reply_delay_minutes,
     aiReplyDailyCap: row.ai_reply_daily_cap,
     bookingUrl: row.booking_url ?? "",
+    aiOutboundMode: row.ai_outbound_mode,
+    aiOutboundDaily: row.ai_outbound_daily,
+    aiOutboundMailboxId: row.ai_outbound_mailbox_id ?? "",
   };
 }
 
@@ -156,9 +162,12 @@ function Weekdays({
 export function SettingsForm({
   settings,
   canEdit,
+  mailboxes,
 }: {
   settings: OrgSettingsRow;
   canEdit: boolean;
+  /** Sendable mailboxes, for the one the assistant writes as. */
+  mailboxes: { id: string; email: string; displayName: string | null }[];
 }) {
   const [form, setForm] = useState<OrgSettingsInput>(toInput(settings));
   const [error, setError] = useState<string | null>(null);
@@ -303,6 +312,89 @@ export function SettingsForm({
               The one link it is allowed to send. Required before it can answer.
             </span>
           </label>
+        </div>
+      </div>
+
+      <div className={PANEL}>
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-xl font-semibold text-ink">Writing first emails</h2>
+          <span
+            className={
+              form.aiOutboundMode === "send"
+                ? "text-ok"
+                : form.aiOutboundMode === "draft"
+                  ? "text-info"
+                  : "text-ink-3"
+            }
+          >
+            {form.aiOutboundMode === "send"
+              ? "live: it writes and the planner books them"
+              : form.aiOutboundMode === "draft"
+                ? "draft: it writes, you send from Write"
+                : "off: nothing is read and nothing is spent"}
+          </span>
+        </div>
+
+        <p className="mt-2 text-ink-2">
+          A few times a day the assistant takes a lead nobody has claimed,
+          reads the business&rsquo;s own website, and writes the first email,
+          signed as the mailbox&rsquo;s display name. It claims the lead for
+          that mailbox&rsquo;s owner. In draft mode the email waits on their
+          Write screen, filled in, and nothing is booked until they send it. It
+          passes on leads that are not worth an email, and follow-ups come from
+          the templates as usual. Everything it wrote or passed on is on{" "}
+          <a href="/knowledge" className="underline">
+            Knowledge
+          </a>
+          .
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-start gap-6">
+          <label className="flex flex-col gap-1">
+            <span className="text-ink-3">Mode</span>
+            <select
+              value={form.aiOutboundMode}
+              disabled={!canEdit}
+              onChange={(e) =>
+                set("aiOutboundMode", e.target.value as "off" | "draft" | "send")
+              }
+              className={INPUT + " w-40"}
+            >
+              <option value="off">Off</option>
+              <option value="draft">Drafts</option>
+              <option value="send">Send</option>
+            </select>
+            <span className="text-ink-3">
+              Send skips your read entirely. Edit a week of drafts first.
+            </span>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-ink-3">Writes as</span>
+            <select
+              value={form.aiOutboundMailboxId}
+              disabled={!canEdit}
+              onChange={(e) => set("aiOutboundMailboxId", e.target.value)}
+              className={INPUT + " w-72"}
+            >
+              <option value="">Nobody</option>
+              {mailboxes.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.displayName ? `${m.displayName} <${m.email}>` : m.email}
+                </option>
+              ))}
+            </select>
+            <span className="text-ink-3">
+              The sending account. Its display name is the sign-off.
+            </span>
+          </label>
+
+          <Number_
+            label="A day"
+            hint="Emails written per day, in your zone. Leads it passes on do not count."
+            value={form.aiOutboundDaily}
+            onChange={(v) => set("aiOutboundDaily", v)}
+          />
         </div>
       </div>
 

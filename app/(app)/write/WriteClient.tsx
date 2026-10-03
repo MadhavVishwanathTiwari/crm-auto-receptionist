@@ -65,6 +65,11 @@ export interface Draft {
   existingSubject: string | null;
   existingBody: string | null;
   /**
+   * The first email the assistant wrote for this lead (0056), waiting on a
+   * person. It fills the composer like anything else you could have typed.
+   */
+  aiDraft: { id: string; subject: string; body: string; reason: string } | null;
+  /**
    * A follow-up's subject, fixed: "Re:" and its thread's. The dispatcher sends
    * this whatever is typed, because Gmail starts a new thread on any other.
    */
@@ -105,6 +110,8 @@ interface Editing {
   subject: string;
   body: string;
   templateId: string | null;
+  /** Set while the text is still the assistant's draft, edited or not. */
+  aiDraftId?: string | null;
 }
 
 function leftovers(text: string): string[] {
@@ -170,6 +177,13 @@ export function WriteClient({
           body: draft.existingBody,
           templateId: null,
         };
+      } else if (draft.aiDraft) {
+        seeded[draft.leadId] = {
+          subject: draft.aiDraft.subject,
+          body: draft.aiDraft.body,
+          templateId: null,
+          aiDraftId: draft.aiDraft.id,
+        };
       }
     }
     return seeded;
@@ -223,6 +237,21 @@ export function WriteClient({
       subject: renderTemplate(template.subject, draft.values).text,
       body: renderTemplate(template.body, draft.values).text,
       templateId: template.id,
+      // A template's words replace the assistant's, so it is not their draft.
+      aiDraftId: null,
+    });
+    bodyRef.current?.focus();
+  }
+
+  /** Puts the assistant's draft back after a starter replaced it. */
+  function restoreAiDraft() {
+    if (!draft?.aiDraft) return;
+    setError(null);
+    setEditing(draft.leadId, {
+      subject: draft.aiDraft.subject,
+      body: draft.aiDraft.body,
+      templateId: null,
+      aiDraftId: draft.aiDraft.id,
     });
     bodyRef.current?.focus();
   }
@@ -296,6 +325,7 @@ export function WriteClient({
           subject: subjectLine,
           body: editing.body,
           templateId: editing.templateId,
+          aiDraftId: editing.aiDraftId ?? null,
         });
         if (!result.ok) {
           setError(result.error ?? "That did not go through.");
@@ -506,7 +536,16 @@ export function WriteClient({
                 {draft.replacesWasWritten && (
                   <Badge tone="info">editing what you queued</Badge>
                 )}
+                {editing.aiDraftId && (
+                  <Badge tone="info">the assistant&rsquo;s draft: read it before you send</Badge>
+                )}
               </div>
+              {editing.aiDraftId && draft.aiDraft && (
+                <p className="mt-1 text-ink-3">
+                  <span className="text-ink-2">Why this one: </span>
+                  {draft.aiDraft.reason}
+                </p>
+              )}
               <div className="tabular mt-1 truncate text-ink-2">
                 <span className="text-ink-3">To </span>
                 {draft.contactName ? `${draft.contactName}, ` : ""}
@@ -514,9 +553,14 @@ export function WriteClient({
               </div>
             </header>
 
-            {starters.length > 0 && (
+            {(starters.length > 0 || draft.aiDraft) && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
                 <span className="text-ink-3">Start from:</span>
+                {draft.aiDraft && (
+                  <Button size="sm" onClick={restoreAiDraft}>
+                    The assistant&rsquo;s draft
+                  </Button>
+                )}
                 {starters.map((template) => (
                   <Button
                     key={template.id}

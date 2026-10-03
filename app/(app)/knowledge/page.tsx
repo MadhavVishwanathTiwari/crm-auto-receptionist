@@ -1,7 +1,12 @@
 import { requireOrgContext } from "@/lib/org";
 import { selectAll, selectUpTo } from "@/lib/supabase/paginate";
 
-import { KnowledgeClient, type AiReplyRow, type KbRow } from "./KnowledgeClient";
+import {
+  KnowledgeClient,
+  type AiOutboundRow,
+  type AiReplyRow,
+  type KbRow,
+} from "./KnowledgeClient";
 
 import { LoadError } from "@/components/ui/LoadError";
 import { Page, PageBody, PageHeader } from "@/components/ui/PageShell";
@@ -14,7 +19,7 @@ const RECENT_LIMIT = 50;
 export default async function KnowledgePage() {
   const { supabase, role } = await requireOrgContext();
 
-  const [settingsResult, entriesResult, repliesResult] = await Promise.all([
+  const [settingsResult, entriesResult, repliesResult, outboundResult] = await Promise.all([
     supabase
       .from("org_settings")
       .select("business_context, ai_reply_mode, booking_url")
@@ -40,6 +45,20 @@ export default async function KnowledgePage() {
           .order("created_at", { ascending: false }),
       RECENT_LIMIT,
     ),
+
+    selectUpTo<
+      Omit<AiOutboundRow, "company_name"> & { leads: { company_name: string | null } | null }
+    >(
+      () =>
+        supabase
+          .from("ai_outbound")
+          .select(
+            "id, lead_id, outcome, reason, subject, body, scheduled_send_id, edited, " +
+              "created_at, leads(company_name)",
+          )
+          .order("created_at", { ascending: false }),
+      RECENT_LIMIT,
+    ),
   ]);
 
   const settings = settingsResult.data as
@@ -50,6 +69,7 @@ export default async function KnowledgePage() {
     settingsResult.error?.message ??
     entriesResult.error?.message ??
     repliesResult.error?.message ??
+    outboundResult.error?.message ??
     null;
 
   if (failure) {
@@ -83,6 +103,11 @@ export default async function KnowledgePage() {
     error: row.error,
   }));
 
+  const outbound: AiOutboundRow[] = outboundResult.data.map(({ leads, ...row }) => ({
+    ...row,
+    company_name: leads?.company_name ?? null,
+  }));
+
   const mode = settings?.ai_reply_mode ?? "off";
 
   return (
@@ -106,6 +131,7 @@ export default async function KnowledgePage() {
           mode={mode}
           entries={entries}
           replies={replies}
+          outbound={outbound}
           canEdit={role === "admin"}
         />
       </PageBody>

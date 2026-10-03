@@ -32,6 +32,11 @@ export interface OrgSettingsInput {
   aiReplyDelayMinutes: number;
   aiReplyDailyCap: number;
   bookingUrl: string;
+  /** off | draft | send. The assistant that writes first emails (0056). */
+  aiOutboundMode: "off" | "draft" | "send";
+  aiOutboundDaily: number;
+  /** Empty for none. */
+  aiOutboundMailboxId: string;
 }
 
 const HOUR = (value: number) => Number.isInteger(value) && value >= 0 && value <= 23;
@@ -154,6 +159,21 @@ export async function updateOrgSettings(
     };
   }
 
+  // Mirrors org_settings_ai_outbound_daily.
+  if (
+    !Number.isInteger(input.aiOutboundDaily) ||
+    input.aiOutboundDaily < 0 ||
+    input.aiOutboundDaily > 50
+  ) {
+    return { ok: false, error: "First emails a day is a whole number from 0 to 50." };
+  }
+  if (input.aiOutboundMode !== "off" && !input.aiOutboundMailboxId) {
+    return {
+      ok: false,
+      error: "Choose the mailbox it writes as before turning it on: that is whose name the email is signed with.",
+    };
+  }
+
   // Nothing older than the moment it was switched on is ever answered, so
   // enabling it does not reply to a day of backlog in one tick.
   const enabledAt =
@@ -181,6 +201,9 @@ export async function updateOrgSettings(
       ai_reply_delay_minutes: input.aiReplyDelayMinutes,
       ai_reply_daily_cap: input.aiReplyDailyCap,
       booking_url: bookingUrl || null,
+      ai_outbound_mode: input.aiOutboundMode,
+      ai_outbound_daily: input.aiOutboundDaily,
+      ai_outbound_mailbox_id: input.aiOutboundMailboxId || null,
       ...(enabledAt ? { ai_reply_enabled_at: enabledAt } : {}),
     })
     .eq("org_id", context.orgId)

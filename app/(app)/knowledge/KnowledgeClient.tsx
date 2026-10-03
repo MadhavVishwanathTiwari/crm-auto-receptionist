@@ -47,6 +47,20 @@ export interface AiReplyRow {
   error: string | null;
 }
 
+/** One lead the outbound assistant looked at (0056). */
+export interface AiOutboundRow {
+  id: string;
+  lead_id: string;
+  company_name: string | null;
+  outcome: string;
+  reason: string;
+  subject: string | null;
+  body: string | null;
+  scheduled_send_id: string | null;
+  edited: boolean | null;
+  created_at: string;
+}
+
 /**
  * What each outcome is worth looking at for.
  *
@@ -61,7 +75,59 @@ const OUTCOME_TONE: Record<string, Tone> = {
   failed: "danger",
   stalled: "warn",
   sending: "warn",
+  queued: "ok",
 };
+
+function OutboundLine({ row, zone }: { row: AiOutboundRow; zone: string | null }) {
+  const [open, setOpen] = useState(false);
+  const body = row.body?.trim();
+
+  return (
+    <li className="border-b border-line px-4 py-2 last:border-0">
+      <div className="flex items-baseline gap-3">
+        <Badge tone={OUTCOME_TONE[row.outcome] ?? "neutral"}>{row.outcome}</Badge>
+
+        <Link
+          href={{ pathname: "/leads", query: { lead: row.lead_id } }}
+          className="shrink-0 font-medium text-ink hover:text-accent"
+        >
+          {row.company_name ?? "a lead"}
+        </Link>
+
+        <span className="min-w-0 flex-1 truncate text-ink-2">{row.reason}</span>
+
+        {row.outcome === "drafted" &&
+          (row.scheduled_send_id ? (
+            <Badge tone="ok">{row.edited ? "sent, after edits" : "sent as written"}</Badge>
+          ) : (
+            <Link
+              href={{ pathname: "/write", query: { lead: row.lead_id } }}
+              className="shrink-0 text-accent hover:underline"
+            >
+              on Write
+            </Link>
+          ))}
+
+        <span className="tabular shrink-0 text-ink-3">
+          {formatYours(row.created_at, zone, "datetime")}
+        </span>
+
+        {body && (
+          <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)}>
+            {open ? "Hide" : "Read"}
+          </Button>
+        )}
+      </div>
+
+      {open && body && (
+        <div className="mt-2 rounded-md border border-line bg-surface-2 p-3">
+          {row.subject && <p className="mb-2 font-medium text-ink">{row.subject}</p>}
+          <p className="whitespace-pre-wrap text-ink-2">{body}</p>
+        </div>
+      )}
+    </li>
+  );
+}
 
 function KbEditor({
   entry,
@@ -258,6 +324,7 @@ export function KnowledgeClient({
   mode,
   entries,
   replies,
+  outbound,
   canEdit,
 }: {
   businessContext: string;
@@ -265,6 +332,7 @@ export function KnowledgeClient({
   mode: string;
   entries: KbRow[];
   replies: AiReplyRow[];
+  outbound: AiOutboundRow[];
   canEdit: boolean;
 }) {
   const { zone } = useViewerZone();
@@ -287,7 +355,7 @@ export function KnowledgeClient({
       <Card>
         <CardHeader
           title="About the business"
-          subtitle="Read on every reply. Who we are, what we sell, and how you want it said."
+          subtitle="Read on every reply and every first email it writes. Who we are, what we sell, and how you want it said."
         />
         <CardBody className="space-y-3">
           <Textarea
@@ -372,6 +440,28 @@ export function KnowledgeClient({
           <ul>
             {replies.map((reply) => (
               <ReplyLine key={reply.id} reply={reply} zone={zone} />
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="First emails it wrote"
+          subtitle="The last 50 leads it looked at. A skip is a lead it left for you, and the reason says why."
+        />
+        {outbound.length === 0 ? (
+          <CardBody>
+            <EmptyState
+              compact
+              title="It has not written anything yet"
+              body="Turn on Writing first emails on Settings, and what it writes or passes on shows up here."
+            />
+          </CardBody>
+        ) : (
+          <ul>
+            {outbound.map((row) => (
+              <OutboundLine key={row.id} row={row} zone={zone} />
             ))}
           </ul>
         )}

@@ -63,6 +63,13 @@ export const JOBS = [
     cadence: "*/2 * * * *",
   },
   {
+    name: "ai-outbound",
+    label: "Write first emails",
+    blurb:
+      "Reads an unclaimed lead's website and writes its first email, up to the daily number. Does nothing at all while the mode is off.",
+    cadence: "*/30 * * * *",
+  },
+  {
     name: "reconcile-mailboxes",
     label: "Catch up Sent folders",
     blurb:

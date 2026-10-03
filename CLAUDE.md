@@ -832,7 +832,7 @@ scheduled by `0020`: `resolve-timezones` hourly, `plan-sends` every 15 minutes,
 run, so `?limit=` now only caps how many mailboxes one run serves),
 `poll-replies` every 5 since `0054` (it was 10, and the AI replier's
 five-minute promise cannot be kept behind a ten-minute poll), `ai-replies`
-every 2 since `0054`, and `reconcile-mailboxes` once a night at 23:30 UTC
+every 2 since `0054`, `ai-outbound` every 30 since `0056`, and `reconcile-mailboxes` once a night at 23:30 UTC
 since `0044` (`?days=` widens its three-day lookback, up to 14).
 
 ```bash
@@ -1057,6 +1057,64 @@ thread and decides whether there is anything worth saying.
   name is to stop and tell a person, not to re-run it on another model and send
   whatever comes back. A refusal, a truncation, or an answer that will not parse
   all resolve to a row and an alert.
+
+## The assistant that writes first emails (`0056`)
+
+The other end of the thread from the reply assistant. Every 30 minutes,
+`ai-outbound` takes an **unclaimed** lead, reads its website, and writes the T1
+an operator would have, up to `org_settings.ai_outbound_daily` (5) a day in
+the operator's zone. Same model, same client, same no-`fallbacks` rule as
+`ai-replies`.
+
+- **It is just another writer, so there is no new send machinery.** Its email
+  is a `scheduled_sends` row with `composed_body`, exactly what `/write` makes.
+  Suppression, caps, threading, stall reaping, the reply halt and `dry_run`
+  apply unchanged, and T2/T3 come from the templates like any lead's.
+- **Unclaimed leads only, and it claims them** for the owner of
+  `ai_outbound_mailbox_id`, inside `record_ai_outbound()` under a row lock that
+  re-checks everything the model call took time over. Claiming is what makes
+  every existing rule hold: `0032` routing sends from the owner's mailbox,
+  `/write` shows the owner the lead, `queue_composed_send()` accepts their
+  Ctrl+Enter. Leads somebody already claimed are theirs to write.
+- **Off, draft, send** on `ai_outbound_mode`, the same enum as replies.
+  `draft` books nothing: the lead sits at the top of the owner's `/write` with
+  the composer pre-filled and the assistant's one-line reason above it, and the
+  send goes through `queue_composed_send()` as the operator's own, because by
+  then it is. `attach_ai_draft()` then records that it started as the
+  assistant's and whether it was edited (`/knowledge` shows both). `send`
+  writes a **`blocked`** step-1 row and lets the planner book it within 15
+  minutes. The planner already rolls a blocked written row forward keeping its
+  words, so the capacity arithmetic stays in `book.ts` alone.
+- **Authorship:** `scheduled_sends.ai_outbound_id` marks the words as the
+  assistant's. In send mode `composed_by` is null (nobody wrote them); for an
+  approved draft it is the operator (they chose to send them). The `queued`
+  event in send mode has no actor.
+- **It signs as the mailbox's display name, not as an assistant.** That was
+  the ask, and it is the opposite of the reply assistant, which says what it
+  is. Send mode therefore means nobody reads an email in a person's name before
+  it goes; leave it on draft until a week of drafts went out unedited.
+- **The guard is the template linter plus more** (`lib/ai/outbound/guard.ts`):
+  every `lintTemplate()` rule, no link or web address at all (the demo is
+  T2's), no email address, no phone number, no `{{variable}}`, no `Re:`
+  subject, under 1000 characters, and the sender's name on the last line. A
+  refused draft gets ONE retry told exactly what failed; a second refusal is
+  a `failed` row, never a draft. The linter binds hand-written email nowhere,
+  but this is closer to a template than to a person.
+- **The website is read in TypeScript, not by a model tool**
+  (`lib/ai/outbound/website.ts`): one page, 10s, 600 KB, http(s) on a real
+  hostname only (`fetchableUrl()` refuses IP literals, localhost, `.local`,
+  `.internal`, odd ports, credentials, every redirect hop re-checked), because
+  `leads.website` is imported data and a fetch of whatever a CSV says is an
+  SSRF. A browser user-agent, because small-business hosts 403 anything that
+  names itself. A site it cannot read is a skip: it never writes blind.
+- **Every decision is a row and a lead is considered once**
+  (`unique (org_id, lead_id)`). Skips do not count toward the five, so a fuse
+  of four attempts per email per day caps the model spend on a pool of
+  non-fits. Only a transient model failure writes nothing and ends the run.
+- On 3 Oct 2026, against six real leads: three sites unreadable (a 403 and two
+  timeouts under parallel load), three drafts that each opened on something
+  from the site (24/7 water damage, leaky chimneys, a mold page's "call us"),
+  passed every rule first time, at ~3k tokens in and ~700 out.
 
 ## Where the tests run
 
